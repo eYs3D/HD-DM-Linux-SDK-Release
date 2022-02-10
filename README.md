@@ -1,5 +1,5 @@
 # HD-DM-Linux-SDK-Release
-## I.EtronDI Enviroment Setting (Ubuntu x86_64)
+## I.EtronDI Enviroment Setting (Ubuntu 18.04 x86_64)
 Please run below command:
 ```sh 
 cd Buid_Environment
