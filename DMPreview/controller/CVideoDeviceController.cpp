@@ -28,7 +28,7 @@ m_pIMUDataController(nullptr)
     if(m_pVideoDeviceModel->IMUSupport()){
         m_pIMUDataController = new CIMUDataController(m_pVideoDeviceModel);
         m_pVideoDeviceModel->ConfigIMU();
-    }    
+    }
     m_pDepthAccuracyController = new CDepthAccuracyController(this);
     m_pDepthFilterOptions = new DepthFilterOptions(this);
     m_pDepthFilterOptions->SetDefaultValue();
@@ -38,7 +38,13 @@ m_pIMUDataController(nullptr)
 
     if(m_pModeConfigOptions->GetModeCount() != 0){
         GetPreviewOptions()->EnableModeConfig(true);
-        SelectModeConfigIndex(GetModeConfigOptions()->GetCurrentIndex());
+        const int videoModePredefined = m_pVideoDeviceModel->DefaultVideoMode();
+        bool isVideoModePredefined = videoModePredefined > 0;
+        const int listIndex = isVideoModePredefined ?
+                    GetModeConfigOptions()->FindArrayIndexWithVideoMode(videoModePredefined):
+                    GetModeConfigOptions()->GetCurrentIndex();
+
+        SelectModeConfigIndex(listIndex);
 
         if (GetPreviewOptions()->IsStreamEnable(CVideoDeviceModel::STREAM_COLOR)){
             UpdateStreamOptionForCombineMode(GetPreviewOptions()->GetStreamIndex(CVideoDeviceModel::STREAM_COLOR));
@@ -494,7 +500,7 @@ int CVideoDeviceController::AdjustZRange()
 
 int CVideoDeviceController::UpdateStreamOptionForCombineMode(int nIndex)
 {
-    if(!GetVideoDeviceModel()->IsColorWithDepthDevice()) return APC_NotSupport;    
+    if(!GetVideoDeviceModel()->IsColorWithDepthDevice()) return APC_NotSupport;
 
     int nDepthStreamIndex = GetVideoDeviceModel()->GetDepthIndexFromCombineStream(nIndex);
     GetPreviewOptions()->EnableStream(CVideoDeviceModel::STREAM_DEPTH, nDepthStreamIndex != EOF);
@@ -503,7 +509,7 @@ int CVideoDeviceController::UpdateStreamOptionForCombineMode(int nIndex)
     }
 
     int nColorStreamIndex = GetVideoDeviceModel()->GetColorIndexFromCombineStream(nIndex);
-    GetPreviewOptions()->EnableStream(CVideoDeviceModel::STREAM_COLOR, nColorStreamIndex != EOF);    
+    GetPreviewOptions()->EnableStream(CVideoDeviceModel::STREAM_COLOR, nColorStreamIndex != EOF);
     GetPreviewOptions()->SelectStreamIndex(CVideoDeviceModel::STREAM_COLOR, nIndex);
 
     return APC_OK;
@@ -525,6 +531,8 @@ int CVideoDeviceController::UpdateSpecificDepthPosition(int x, int y)
 
         pDepthImageDataModel->SetSpecificPixel(x, y);
     }
+
+    return APC_OK;
 }
 
 int CVideoDeviceController::StartIMUSyncWithFrame()

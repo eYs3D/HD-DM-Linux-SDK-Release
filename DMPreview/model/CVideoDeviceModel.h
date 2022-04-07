@@ -342,6 +342,7 @@ public:
     virtual int FrameGrabberDataTransform(std::vector<unsigned char>& bufDepth, int &widthDepth, int &heightDepth,
                                           std::vector<unsigned char>& bufColor, int &widthColor, int &heightColor,
                                           int &serialNumber){ return APC_OK; }
+    virtual int DefaultVideoMode() { return 0; }
 protected:
 
     STATE m_state;

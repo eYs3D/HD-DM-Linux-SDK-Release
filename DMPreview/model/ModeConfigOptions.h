@@ -25,6 +25,14 @@ public:
         if(EOF == m_nCurrentIndex) return empty;
         return m_modeConfigs[m_nCurrentIndex];
     }
+    int FindArrayIndexWithVideoMode(int videoMode) {
+        for (int index = 0; index < m_modeConfigs.size(); index++) {
+            if (videoMode == m_modeConfigs[index].iMode) {
+                return index;
+            }
+        }
+        return -1;
+    }
 
 private:
     std::vector< ModeConfig::MODE_CONFIG > m_modeConfigs;

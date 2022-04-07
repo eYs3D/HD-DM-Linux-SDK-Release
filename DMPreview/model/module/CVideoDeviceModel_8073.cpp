@@ -57,18 +57,22 @@ void CVideoDeviceModel_8073::SetVideoDeviceController(CVideoDeviceController *pV
 int CVideoDeviceModel_8073::StartStreamingTask(){
     CVideoDeviceModel::StartStreamingTask();
 
-    m_cameraPropertyModel[0]->SetCameraPropertyValue(CCameraPropertyModel::AUTO_EXPOSURE, 0);
-    m_cameraPropertyModel[0]->SetCameraPropertySupport(CCameraPropertyModel::AUTO_EXPOSURE, true);
+    if (IsInterleaveMode()) {
+        m_cameraPropertyModel[0]->SetCameraPropertyValue(CCameraPropertyModel::AUTO_EXPOSURE, 0);
+        m_cameraPropertyModel[0]->SetCameraPropertySupport(CCameraPropertyModel::AUTO_EXPOSURE, true);
 
-    m_cameraPropertyModel[0]->SetCameraPropertyValue(CCameraPropertyModel::EXPOSURE_TIME, -10);
-    m_cameraPropertyModel[0]->SetCameraPropertySupport(CCameraPropertyModel::EXPOSURE_TIME, true);
+        m_cameraPropertyModel[0]->SetCameraPropertyValue(CCameraPropertyModel::EXPOSURE_TIME, -10);
+        m_cameraPropertyModel[0]->SetCameraPropertySupport(CCameraPropertyModel::EXPOSURE_TIME, true);
 
-    m_bPrevLowLightValue = m_cameraPropertyModel[0]->GetCameraProperty(CCameraPropertyModel::LOW_LIGHT_COMPENSATION).nValue;
-    m_cameraPropertyModel[0]->SetCameraPropertyValue(CCameraPropertyModel::LOW_LIGHT_COMPENSATION, 0);
-    m_cameraPropertyModel[0]->SetCameraPropertySupport(CCameraPropertyModel::LOW_LIGHT_COMPENSATION, true);
+        m_bPrevLowLightValue = m_cameraPropertyModel[0]->GetCameraProperty(CCameraPropertyModel::LOW_LIGHT_COMPENSATION).nValue;
+        m_cameraPropertyModel[0]->SetCameraPropertyValue(CCameraPropertyModel::LOW_LIGHT_COMPENSATION, 0);
+        m_cameraPropertyModel[0]->SetCameraPropertySupport(CCameraPropertyModel::LOW_LIGHT_COMPENSATION, true);
+    }
 
     if(m_pVideoDeviceController){
         m_pVideoDeviceController->GetPreviewOptions()->SetIRLevel(60);
     }
+
+    return APC_OK;
 }
 // ------ PM / FAE requested function for POC version for robotic application

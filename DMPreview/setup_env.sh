@@ -11,6 +11,10 @@ sudo apt-get install meshlab -y
 sudo apt-get install doxygen
 sudo apt-get install libdc1394-22 libdc1394-22-dev
 sudo apt install ocl-icd-opencl-dev
+#sudo apt install zlib1g
+#sudo apt install zlib1g-dev
+#sudo apt-get install libzip-dev
+#sudo apt-get install libssl-dev
 
 
 echo

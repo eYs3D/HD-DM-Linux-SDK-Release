@@ -65,7 +65,7 @@
 
 //s:[eys3D] 20200615 implement ZD table
 #define COLOR_PALETTE_MAX_COUNT 16384
-#define ONLY_PRINT_OVER_DIFF 1
+//#define ONLY_PRINT_OVER_DIFF 0
 #define COLOR_STR "COLOR"
 #define DEPTH_STR "DEPTH"
 static int g_v4l2_buffer_quque_size =  32;
@@ -179,7 +179,7 @@ static int init_device(void);
 static void *test_color_time_stamp(void *arg);
 static void *test_depth_time_stamp(void *arg);
 static void *test_color_depth_time_stamp(void *arg);
-static int open_device_default(bool two_open, int fps, WORD videoMode);
+static int open_device_default(bool two_open, int colorWidth, int colorHeight, int depthWidth, int depthHeight,int fps, WORD videoMode);
 static int open_device(void);
 static void get_color_image(void);
 static void get_depth_image(void);
@@ -203,13 +203,15 @@ static void Read5X();
 static void Write5X();
 static void Read24X();
 static void Write24X();
+static void PointCloudFPS();
+static void ResetUNPData();
 //e:[eys3D] 20200610 definition functions
 static void test_file_saving(APCImageType::Value type);
 static int TransformDepthDataType(int *nDepthDataType, bool bRectifyData);
 static unsigned int gCameraPID = 0xffff;
 
 #define _ENABLE_INTERACTIVE_UI_ 1
-//#define _ENABLE_PROFILE_UI_ 1
+#define _ENABLE_PROFILE_UI_ 1
 //#define _ENABLE_FILESAVING_DEMO_UI_ 1
 //#define _ENABLE_FILESAVING_DEMO_POINT_CLOUD_UI_ 1
 #define DEFAULT_SAVING_FRAME_COUNT 150
@@ -242,6 +244,8 @@ int main(void)
         printf("27. Write5X\n");
         printf("28. Read24X\n");
         printf("29. Write24X\n");
+        printf("30. Reset UNPData\n");
+        printf("31. Point Cloud FPS Demo\n");
 #endif
 #if defined(_ENABLE_PROFILE_UI_)
         printf("12. test color+depth (1280X720@60, APC_DEPTH_DATA_11_BITS)\n");
@@ -252,6 +256,7 @@ int main(void)
         printf("17. test color       (1280X720@30, APC_DEPTH_DATA_11_BITS)\n");
         printf("18. test color+depth (1280X720@30, APC_DEPTH_DATA_11_BITS)(thread)\n");
         printf("19. test depth       (1280X720@30, APC_DEPTH_DATA_11_BITS)\n");
+        printf("32. test color+depth (1104x848@60, APC_DEPTH_DATA_14_BITS)(thread)\n");
 #endif
 #if defined(_ENABLE_FILESAVING_DEMO_UI_)
         printf("20. save file demo   (1280X720@30, APC_DEPTH_DATA_14_BITS)\n");
@@ -308,6 +313,86 @@ int main(void)
         case 11:
             setIRValue();
             break;
+#if defined(_ENABLE_PROFILE_UI_)
+        case 12:
+            init_device();
+            open_device_default(true, 1280, 720, 1280, 720, 60, APC_DEPTH_DATA_11_BITS);
+            test_color_time_stamp(NULL);
+            test_depth_time_stamp(NULL);
+            close_device();
+            release_device();
+            break;
+        case 13:
+            init_device();
+            open_device_default(true, 1280, 720, 1280, 720, 60, APC_DEPTH_DATA_11_BITS);
+            test_color_time_stamp(NULL);
+            close_device();
+            release_device();
+            break;
+        case 14:
+            init_device();
+            open_device_default(true, 1280, 720, 1280, 720, 60, APC_DEPTH_DATA_11_BITS);
+            test_color_depth_time_stamp(NULL);
+            close_device();
+            release_device();
+            break;
+        case 15:
+            init_device();
+            open_device_default(true, 1280, 720, 1280, 720, 60, APC_DEPTH_DATA_11_BITS);
+            test_depth_time_stamp(NULL);
+            close_device();
+            release_device();
+            break;
+        case 16:
+            init_device();
+            open_device_default(true, 1280, 720, 1280, 720, 30, APC_DEPTH_DATA_11_BITS);
+            test_color_time_stamp(NULL);
+            test_depth_time_stamp(NULL);
+            close_device();
+            release_device();
+            break;
+        case 17:
+            init_device();
+            open_device_default(true, 1280, 720, 1280, 720, 30, APC_DEPTH_DATA_11_BITS);
+            test_color_time_stamp(NULL);
+            close_device();
+            release_device();
+            break;
+        case 18:
+            init_device();
+            open_device_default(true, 1280, 720, 1280, 720, 30, APC_DEPTH_DATA_11_BITS);
+            test_color_depth_time_stamp(NULL);
+            close_device();
+            release_device();
+            break;
+        case 19:
+            init_device();
+            open_device_default(true, 1280, 720, 1280, 720, 30, APC_DEPTH_DATA_11_BITS);
+            test_depth_time_stamp(NULL);
+            close_device();
+            release_device();
+            break;
+#endif
+#if defined(_ENABLE_FILESAVING_DEMO_UI_)
+        case 20:
+            init_device();
+            open_device_default(true, 1280, 720, 1280, 720, 30, APC_DEPTH_DATA_14_BITS /* Distance mm*/);
+            test_file_saving(APCImageType::Value::COLOR_YUY2);
+            close_device();
+            release_device();
+            printf("Sync the filesytem !! Please wait a minute !!\n");
+            sync();
+        break;
+#endif
+#if defined(_ENABLE_FILESAVING_DEMO_POINT_CLOUD_UI_)
+        case 21:
+            init_device();
+            open_device_default(true, 30, APC_DEPTH_DATA_14_BITS /* Distance mm*/);
+            get_point_cloud();
+            close_device();
+            release_device();
+        break;
+#endif
         case 22:
             Read3X();
             break;
@@ -332,83 +417,16 @@ int main(void)
         case 29:
             Write24X();
             break;
-#endif
-#if defined(_ENABLE_PROFILE_UI_)
-        case 12:
-            init_device();
-            open_device_default(true, 60, APC_DEPTH_DATA_11_BITS);
-            test_color_time_stamp(NULL);
-            test_depth_time_stamp(NULL);
-            close_device();
-            release_device();
+        case 30:
+            ResetUNPData();
             break;
-        case 13:
-            init_device();
-            open_device_default(true, 60, APC_DEPTH_DATA_11_BITS);
-            test_color_time_stamp(NULL);
-            close_device();
-            release_device();
+        case 31:
+            PointCloudFPS();
             break;
-        case 14:
+        case 32:
             init_device();
-            open_device_default(true, 60, APC_DEPTH_DATA_11_BITS);
+            open_device_default(true, 1104, 848, 1104, 848, 30, APC_DEPTH_DATA_14_BITS);
             test_color_depth_time_stamp(NULL);
-            close_device();
-            release_device();
-            break;
-        case 15:
-            init_device();
-            open_device_default(true, 60, APC_DEPTH_DATA_11_BITS);
-            test_depth_time_stamp(NULL);
-            close_device();
-            release_device();
-            break;
-        case 16:
-            init_device();
-            open_device_default(true, 30, APC_DEPTH_DATA_11_BITS);
-            test_color_time_stamp(NULL);
-            test_depth_time_stamp(NULL);
-            close_device();
-            release_device();
-            break;
-        case 17:
-            init_device();
-            open_device_default(true, 30, APC_DEPTH_DATA_11_BITS);
-            test_color_time_stamp(NULL);
-            close_device();
-            release_device();
-            break;
-        case 18:
-            init_device();
-            open_device_default(true, 30, APC_DEPTH_DATA_11_BITS);
-            test_color_depth_time_stamp(NULL);
-            close_device();
-            release_device();
-            break;
-        case 19:
-            init_device();
-            open_device_default(true, 30, APC_DEPTH_DATA_11_BITS);
-            test_depth_time_stamp(NULL);
-            close_device();
-            release_device();
-            break;
-#endif
-#if defined(_ENABLE_FILESAVING_DEMO_UI_)
-        case 20:
-            init_device();
-            open_device_default(true, 30, APC_DEPTH_DATA_14_BITS /* Distance mm*/);
-            test_file_saving(APCImageType::Value::COLOR_YUY2);
-            close_device();
-            release_device();
-            printf("Sync the filesytem !! Please wait a minute !!\n");
-            sync();
-            break;
-#endif
-#if defined(_ENABLE_FILESAVING_DEMO_POINT_CLOUD_UI_)
-        case 21:
-            init_device();
-            open_device_default(true, 30, APC_DEPTH_DATA_14_BITS /* Distance mm*/);
-            get_point_cloud();
             close_device();
             release_device();
             break;
@@ -425,6 +443,9 @@ int main(void)
 	return 0;
 }
 
+static void ResetUNPData() {
+    int ret = APC_ResetUNPData(EYSD, &gsDevSelInfo);
+}
 
 int GetDateTime(char * psDateTime){
     time_t timep; 
@@ -569,10 +590,8 @@ static void *test_color_time_stamp(void *arg)
             if (frame_rate_count == (max_calc_frame_count -1)) {              
                 float fltotal_time = 0.0;
                 fltotal_time = ((cur_tv_sec - first_tv_sec)*1000000+cur_tv_usec)-first_tv_usec;
-#if defined(ONLY_PRINT_OVER_DIFF)
                 CT_DEBUG("[%s] %lu usec per %ufs (fps = %6f)\n", pre_str,
                        (unsigned long)fltotal_time, max_calc_frame_count, (1000000 * max_calc_frame_count)/fltotal_time);
-#endif
                 frame_rate_count = 0;
                 mCount ++;
             } else {
@@ -715,10 +734,8 @@ static void *test_depth_time_stamp(void *arg)
             if (frame_rate_count == (max_calc_frame_count -1)) {              
                 float fltotal_time = 0.0;
                 fltotal_time = ((cur_tv_sec - first_tv_sec)*1000000+cur_tv_usec)-first_tv_usec;
-#if defined(ONLY_PRINT_OVER_DIFF)
                 CT_DEBUG("[%s] %lu usec per %ufs (fps = %6f)\n", pre_str,
                        (unsigned long)fltotal_time, max_calc_frame_count, (1000000 * max_calc_frame_count)/fltotal_time);
-#endif
                 frame_rate_count = 0;
                 mCount ++;
             } else {
@@ -1105,7 +1122,7 @@ static int init_device(void)
 }
 
 
-static int open_device_default(bool two_open, int fps, WORD videoMode)
+static int open_device_default(bool two_open, int colorWidth, int colorHeight, int depthWidth, int depthHeight, int fps, WORD videoMode)
 {
     int dtc = 0, ret;
     char input[64];
@@ -1137,12 +1154,11 @@ static int open_device_default(bool two_open, int fps, WORD videoMode)
                 CT_DEBUG("setup Blocking Failed\n");
         }
         gColorFormat = bIsMJPEG;
-        gColorWidth = 1280;
-        gColorHeight = 720;
-        gActualFps = fps;
+        gColorWidth = colorWidth;
+        gColorHeight = colorHeight;
         dtc = DEPTH_IMG_NON_TRANSFER; // DEPTH_IMG_NON_TRANSFER: non transfer, DEPTH_IMG_GRAY_TRANSFER: gray, DEPTH_IMG_COLORFUL_TRANSFER: colorful
-        gDepthWidth = 1280;
-        gDepthHeight = 720;
+        gDepthWidth = depthWidth;
+        gDepthHeight = depthHeight;
         gActualFps = fps; 
         gDepth_Transfer_ctrl = (DEPTH_TRANSFER_CTRL)dtc;
         
@@ -2218,6 +2234,234 @@ static void Read24X()
     delete[] data;
 }
 
+static void *pfunc_thread_point_cloud_fps(void *arg){
+    PointCloudInfo pointCloudInfo = {0};
+    getPointCloudInfo(EYSD, &g_DevSelInfo, &pointCloudInfo, gDepthDataType, gDepthHeight);
+    if(gColorImgBuf == NULL) {
+        gColorImgBuf = (unsigned char*) calloc(2 * gColorWidth * gColorHeight , sizeof(unsigned char));
+    }
+    if(gColorImgBuf == NULL) {
+        CT_DEBUG("alloc ColorImgBuf fail..\n");
+        return NULL;
+    }
+
+    int m_BufferSize = 0;
+    if(gDepthImgBuf == NULL) {
+        if(gDepthDataType == APC_DEPTH_DATA_8_BITS || gDepthDataType == APC_DEPTH_DATA_8_BITS_RAW) {
+            m_BufferSize = 2 * gDepthWidth  * 2 * gDepthHeight;
+            gDepthImgBuf = (unsigned char*)calloc(m_BufferSize, sizeof(unsigned char));
+        } else {
+            m_BufferSize = gDepthWidth * gDepthHeight * 2;
+            gDepthImgBuf = (unsigned char*)calloc(m_BufferSize, sizeof(unsigned char));
+        }
+    }
+
+    if(gDepthImgBuf == NULL) {
+        CT_DEBUG("alloc for gDepthImageBuf fail..\n");
+        return NULL;
+    }
+
+    constexpr unsigned kMaxCount = 10000;
+    BYTE* rgbBuffer = new BYTE[gColorWidth * gColorHeight * 3];
+    BYTE* rgbOutBuffer = new BYTE[gColorWidth * gColorHeight * 3];
+    float* xyzOutBuffer = new float[gColorWidth * gDepthHeight * 3];
+
+    long long pointCloudCalculationStartTime = 0;
+    long long pointCloudCalculationEndTime = 0;
+
+    int64_t cur_color_tv_sec = 0;
+    int64_t cur_color_tv_usec = 0;
+    int64_t first_color_tv_sec= 0;
+    int64_t first_color_tv_usec = 0;
+    int64_t prv_color_tv_sec = -1;
+    int64_t prv_color_tv_usec = -1;
+    int cur_color_serial_num = -1;
+    int pre_color_serial_num = -1;
+    int64_t color_diff = 0;
+    int s_color_diff = 0;
+
+    int64_t cur_depth_tv_sec = 0;
+    int64_t cur_depth_tv_usec = 0;
+    int64_t first_depth_tv_sec= 0;
+    int64_t first_depth_tv_usec = 0;
+    int64_t prv_depth_tv_sec = -1;
+    int64_t prv_depth_tv_usec = -1;
+    int cur_depth_serial_num = -1;
+    int pre_depth_serial_num = -1;
+    int64_t depth_diff = 0;
+    int s_depth_diff = 0;
+
+    uint64_t frame_rate_count = 0;
+    uint64_t frame_depth_rate_count = 0;
+    long long start_time = calcByGetTimeOfDay();
+    int pointCloudFail = APC_Init_Fail;
+    int64_t fist_pcl_time_us = 0;
+    int64_t kPointCloudCountInteval = 100;
+    for (unsigned mCount = 0, pointCloudCount = 0; mCount < kMaxCount; mCount++) {
+        // 000. Get Color Frame
+        APC_GetColorImageWithTimestamp(EYSD, &gsDevSelInfo, gColorImgBuf, &gColorImgSize, &cur_color_serial_num, 0,
+                                       &cur_color_tv_sec, &cur_color_tv_usec);
+        if (frame_rate_count == 0) {
+            first_color_tv_sec  = cur_color_tv_sec;
+            first_color_tv_usec = cur_color_tv_usec;
+        } else {
+            color_diff = ((cur_color_tv_sec - prv_color_tv_sec)*1000000+cur_color_tv_usec)-prv_color_tv_usec;
+            s_color_diff = cur_color_serial_num - pre_color_serial_num;
+
+            if (gActualFps == 60) {
+                if (color_diff > (16666)) {
+//                    CT_DEBUG("[%s]SN: [%03d],  SN_DIFF: [%03d],  TS: [%lu],  TS_DIFF: [%lu] \n", pre_str,
+//                    (int)cur_color_serial_num, s_color_diff, (cur_color_tv_sec * 1000000 + cur_color_tv_usec), diff);
+                }
+            } else  if (gActualFps == 30) {
+//                if (color_diff > (33333)) {
+//                    CT_DEBUG("[%s]SN: [%03d],  SN_DIFF: [%03d],  TS: [%lu],  TS_DIFF: [%lu] \n", "ColorImage",
+//                    (int)cur_color_serial_num, s_color_diff, (cur_color_tv_sec * 1000000 + cur_color_tv_usec), color_diff);
+//                }
+            }
+
+            if (s_color_diff > 1) {
+                CT_DEBUG("[%s][%03lu] SN: [%03d],  SN_DIFF: [%03d],  TS: [%lu],  TS_DIFF: [%lu] \n", "ColorImage",
+                         frame_rate_count,
+                         (int)cur_color_serial_num, s_color_diff,
+                         (cur_color_tv_sec * 1000000 + cur_color_tv_usec), color_diff);
+            }
+
+        }
+
+        prv_color_tv_sec = cur_color_tv_sec;
+        prv_color_tv_usec = cur_color_tv_usec;
+        pre_color_serial_num = cur_color_serial_num;
+        // 001. Decode Color Frame YUY2 to RGB
+        APC_ColorFormat_to_BGR24(EYSD, &gsDevSelInfo, rgbBuffer, gColorImgBuf, gColorImgSize, gColorWidth, gColorHeight,
+                                 APCImageType::Value::COLOR_YUY2);
+        // 002. Get Depth Frame
+        APC_GetDepthImageWithTimestamp(EYSD, &gsDevSelInfo, gDepthImgBuf, &gDepthImgSize, &cur_depth_serial_num, 0,
+                                       &cur_depth_tv_sec, &cur_depth_tv_usec);
+        if (frame_rate_count == 0) {
+            first_depth_tv_sec  = cur_depth_tv_sec;
+            first_depth_tv_usec = cur_depth_tv_usec;
+        } else {
+            depth_diff = ((cur_depth_tv_sec - prv_depth_tv_sec)*1000000+cur_depth_tv_usec)-prv_depth_tv_usec;
+            s_depth_diff = cur_depth_serial_num - pre_depth_serial_num;
+
+            if (gActualFps == 60) {
+                if (depth_diff > (16666)) {
+//                    CT_DEBUG("[%s]SN: [%03d],  SN_DIFF: [%03d],  TS: [%lu],  TS_DIFF: [%lu] \n", "depthImage",
+//                      (int)cur_depth_serial_num, s_depth_diff, (cur_depth_tv_sec * 1000000 + cur_depth_tv_usec), depth_diff);
+                }
+
+            } else  if (gActualFps == 30) {
+                if (depth_diff > (33333)) {
+//                    CT_DEBUG("[%s]SN: [%03d],  SN_DIFF: [%03d],  TS: [%lu],  TS_DIFF: [%lu] \n", "depthImage",
+//                    (int)cur_depth_serial_num, s_depth_diff, (cur_depth_tv_sec * 1000000 + cur_depth_tv_usec), depth_diff);
+                }
+            }
+
+            if (s_depth_diff > 1) {
+                CT_DEBUG("[%s][%03lu] SN: [%03d],  SN_DIFF: [%03d],  TS: [%lu],  TS_DIFF: [%lu] \n", "depthImage",
+                         frame_depth_rate_count, (int) cur_depth_serial_num, s_depth_diff,
+                         (cur_depth_tv_sec * 1000000 + cur_depth_tv_usec), depth_diff);
+            }
+
+        }
+
+        prv_depth_tv_sec = cur_depth_tv_sec;
+        prv_depth_tv_usec = cur_depth_tv_usec;
+        pre_depth_serial_num = cur_depth_serial_num;
+        pointCloudCalculationStartTime = calcByGetTimeOfDay();
+        // Point Cloud Count 100
+        if (pointCloudCount == 0) {
+            fist_pcl_time_us = pointCloudCalculationStartTime;
+        }
+
+        // Point Cloud start from first API is about to call
+        if (start_time == 0) {
+            start_time = calcByGetTimeOfDay();
+        }
+
+        // 003. Get Point Cloud Buffers
+        pointCloudFail = APC_GetPointCloud(EYSD, &gsDevSelInfo, rgbBuffer, gColorWidth, gColorHeight, gDepthImgBuf, gDepthWidth, gDepthHeight,
+                          &pointCloudInfo, rgbOutBuffer, xyzOutBuffer, (float) g_maxNear, (float) g_maxFar);
+        if (pointCloudFail) {
+            CT_DEBUG("Point Cloud failed at Count:[%d] Status[%d]\n", mCount, pointCloudFail);
+        } else {
+            // Successfully
+            pointCloudCount++;
+        }
+
+        pointCloudCalculationEndTime = calcByGetTimeOfDay();
+        CT_DEBUG("[%d] APC_GetPointCloud cSN:%d dSN:%d costs %lld uSec\n", pointCloudCount, cur_color_serial_num, cur_depth_serial_num,
+                 pointCloudCalculationEndTime - pointCloudCalculationStartTime);
+
+        if (pointCloudCount % kPointCloudCountInteval == 0) {
+            float pcl_total_time = pointCloudCalculationEndTime - fist_pcl_time_us;
+            CT_DEBUG("[%s] %lu usec per %u frames (fps = %6f)\n", "Point Cloud", (unsigned long) pcl_total_time, kPointCloudCountInteval,
+                     (1000000 * kPointCloudCountInteval) / pcl_total_time);
+            pointCloudCount = 0;
+            fist_pcl_time_us = 0;
+        }
+
+        if (frame_rate_count == (kMaxCount -1)) {
+            float fltotal_time = 0.0;
+            fltotal_time = ((cur_color_tv_sec - first_color_tv_sec)*1000000+cur_color_tv_usec)-first_color_tv_usec;
+            CT_DEBUG("[%s] %lu usec per %ufs (fps = %6f)\n", "ColorImage",
+                     (unsigned long)fltotal_time, kMaxCount, (1000000 * kMaxCount)/fltotal_time);
+            frame_rate_count = 0;
+//            mCount ++;
+        } else {
+            frame_rate_count++;
+        }
+
+        if (frame_depth_rate_count == (kMaxCount -1)) {
+            float fltotal_time = 0.0;
+            fltotal_time = ((cur_depth_tv_sec - first_depth_tv_sec)*1000000+cur_depth_tv_usec)-first_depth_tv_usec;
+            CT_DEBUG("[%s] %lu usec per %ufs (fps = %6f)\n", "DepthImage",
+                     (unsigned long)fltotal_time, kMaxCount, (1000000 * kMaxCount)/fltotal_time);
+            frame_depth_rate_count = 0;
+            //mCount ++;
+        } else {
+            frame_depth_rate_count++;
+        }
+    }
+
+    long long end_time = calcByGetTimeOfDay();
+
+    if (end_time - start_time > 0) {
+        float averageFPS = kMaxCount / ((end_time - start_time) / 1000000);
+        CT_DEBUG("Average Point Cloud FPS=[%f] cost:%lld total frames:%d\n", averageFPS, end_time - start_time, kMaxCount);
+    }
+
+    if(gColorImgBuf != NULL){
+        CT_DEBUG("free gColorImgBuf : %p\n", gColorImgBuf);
+        free(gColorImgBuf);
+        gColorImgBuf = NULL;
+    }
+
+    if(gDepthImgBuf != NULL){
+        CT_DEBUG("free gDepthImgBuf : %p\n", gDepthImgBuf);
+        free(gDepthImgBuf);
+        gDepthImgBuf = NULL;
+    }
+
+    delete [] rgbBuffer;
+    delete [] rgbOutBuffer;
+    delete [] xyzOutBuffer;
+
+}
+static void PointCloudFPS()
+{
+    pthread_t pcl_fps_tid;
+    pthread_attr_t point_cloud_thread_attr;
+    struct sched_param point_cloud_thread_param;
+
+    pthread_attr_init(&point_cloud_thread_attr);
+    pthread_attr_getschedparam (&point_cloud_thread_attr, &point_cloud_thread_param);
+    point_cloud_thread_param.sched_priority = sched_get_priority_max(SCHED_FIFO) -1;
+    pthread_attr_setschedparam(&point_cloud_thread_attr, &point_cloud_thread_param);
+    pthread_create(&pcl_fps_tid, &point_cloud_thread_attr, pfunc_thread_point_cloud_fps, NULL);
+    pthread_join(pcl_fps_tid, NULL);
+}
 static void Write24X()
 {
     int index;

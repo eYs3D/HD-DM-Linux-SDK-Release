@@ -308,6 +308,18 @@ int  APC_GetFWRegister(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, unsigned shor
 */
 int  APC_SetFWRegister(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, unsigned short address, unsigned short nValue,  int flag);
 
+/*! \fn int APC_SetRootCipher(
+        void *pHandleEYSD,
+        PDEVSELINFO pDevSelInfo,
+        const char* cipher)
+    \brief enter root cipher
+    \param void *pHandleEYSD	handle
+    \param PDEVSELINFO pDevSelInfo	pointer of device select index
+    \param const char* cipher	cipher string
+    \return success: APC_OK, others: see eSPDI_def.h
+*/
+int APC_SetRootCipher(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, const char* cipher);
+
 /*! \fn int APC_GetHWRegister(
         void *pHandleEYSD,
         PDEVSELINFO pDevSelInfo,
@@ -395,6 +407,39 @@ int APC_GetMultiBytesHWRegister(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, unsi
     \return success: APC_OK, others: see eSPDI_def.h
 */
 int APC_SetMultiBytesHWRegister(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, unsigned short address, unsigned char *Data, int size, int flag);
+
+
+/*! \fn int APC_GetAETarget(
+        void *pHandleEYSD,
+        PDEVSELINFO pDevSelInfo,
+        float *EV)
+    \brief set hardware register    \brief set hardware register
+    \param void *pHandleEYSD	handle
+    \param PDEVSELINFO pDevSelInfo	pointer of device select index
+    \param float *EV	-2.0EV - +3.0EV in 1/3EV step intervals, \n
+        ie [index, EV] => \n
+                         [-6, -2.00EV] \n
+                         [-5, -1.67EV] \n
+                         [-4, -1.33EV] \n
+                         [-3, -1.00EV] \n
+                         [-2, -0.67EV] \n
+                         [-1, -0.33EV] \n
+                         [0, 0.00EV] \n
+                         [1, 0.33EV] \n
+                         [2, 0.67EV] \n
+                         [3, 1.00EV] \n
+                         [4, 1.33EV] \n
+                         [5, 1.67EV] \n
+                         [6, 2.00EV] \n
+                         [7, 2.33EV] \n
+                         [8, 2.67EV] \n
+                         [9, 3.00EV] \n
+    \return success: APC_OK, others: see eSPDI_def.h
+*/
+int APC_GetAETarget(
+    void *pHandleEYSD,
+    PDEVSELINFO pDevSelInfo,
+    unsigned short *EV);
 
 
 /*! \fn int APC_SetAETarget(
@@ -522,6 +567,19 @@ int  APC_GetSerialNumber (void *pHandleEYSD, PDEVSELINFO pDevSelInfo, unsigned c
     \return success: APC_OK, others: see eSPDI_def.h
 */
 int  APC_SetSerialNumber (void *pHandleEYSD, PDEVSELINFO pDevSelInfo, unsigned char* pData, int nLen);
+
+/*! \fn int APC_ResetUNPData(
+        void *pHandleEYSD,
+        PDEVSELINFO pDevSelInfo)
+    \brief Reset the UNProtection area's datum
+    \param void *pHandleEYSD	handle
+    \param PDEVSELINFO pDevSelInfo	pointer of device select index
+    \return success: APC_OK, others: see eSPDI_def.h
+*/
+int APC_ResetUNPData(
+    void *pHandleEYSD,
+    PDEVSELINFO pDevSelInfo
+    );
 
 /*! \fn int APC_GetYOffset(
         void *pHandleEYSD,

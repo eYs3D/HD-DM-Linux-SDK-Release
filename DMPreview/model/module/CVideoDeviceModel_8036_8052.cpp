@@ -47,4 +47,6 @@ int CVideoDeviceModel_8036_8052::StartStreamingTask()
             CreateStreamTask(STREAM_DEPTH);
         }
     }
+
+    return ret;
 }

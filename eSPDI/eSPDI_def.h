@@ -245,7 +245,23 @@ typedef enum {
 #define APC_USER_DATA_FILE_ID_0				200
 #define APC_USER_DATA_FILE_SIZE_0			1024
 #define APC_USER_DATA_FILE_SIZE_1			4096
+#define APC_BACKUP_USER_DATA_FILE_ID        201
+#define APC_BACKUP_USER_DATA_SIZE           1024
 // for Flash Read/Write -
+
+/*
+    The group 1 is the factory settings which are calibrated before shipment.
+    The group 2 is the factory settings after post calibration.
+    FW Register 0xF6 is the offset.
+    The default offset is set as 5 which means 10 divided by 2 groups.
+*/
+#define APC_MD5_CHECKSUM_SIZE				32
+#define APC_USER_SETTING_OFFSET				5
+#define APC_USER_SETTING_RANGE				10
+#define FW_PROTECT_STRUCT_LEN_OF_STI        17
+#define FW_UNPROTECT_STRUCT_LEN_OF_STI      11
+#define FW_UNKNOWN_STRUCT_LEN_OF_STI        255
+#define FW_UNKNOWN_UNPAREASTARTSEC          (-1)
 
 // for device information +
 typedef struct tagDEVINFORMATION {
@@ -344,7 +360,8 @@ typedef enum {
     FW_PLUGIN,
     BOOTLOADER_ONLY,
     FW_ONLY,
-    PLUGIN_ONLY
+    PLUGIN_ONLY,
+    UNP
 } FLASH_DATA_TYPE;
 // for total and fw+plugin read/write -
 
@@ -542,6 +559,7 @@ typedef struct eSPCtrl_RectLogData {
 			float			RECT_AvgErr;/**< Reprojection error */
 			unsigned short	nLineBuffers;/**< Linebuffer for Hardware limitation < 60 */
             float ReProjectMat[16];
+            float K6Ratio; //Ratio for distortion K6
 		};
 	};
 } eSPCtrl_RectLogData;

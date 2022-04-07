@@ -134,7 +134,8 @@ HEADERS += \
     utility/IMU/IMU_Filter/Quaternion1.h \
     utility/IMU/IMU_Calibration/CIMUCalibration.h \
     manager/CFrameSyncManager.h \
-    model/module/CVideoDeviceModel_Grap.h
+    model/module/CVideoDeviceModel_Grap.h \
+    model/module/CVideoDeviceModel_8073.h
 
 SOURCES += \
     view/mainwindow.cpp \
@@ -216,7 +217,8 @@ SOURCES += \
     utility/IMU/IMU_Filter/Quaternion1.c \
     utility/IMU/IMU_Calibration/CIMUCalibration.cpp \
     manager/CFrameSyncManager.cpp \
-    model/module/CVideoDeviceModel_Grap.cpp
+    model/module/CVideoDeviceModel_Grap.cpp \
+    model/module/CVideoDeviceModel_8073.cpp
 
 RESOURCES += \
     resource/resource.qrc

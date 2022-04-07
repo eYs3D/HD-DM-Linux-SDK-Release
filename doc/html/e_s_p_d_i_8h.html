@@ -23,7 +23,7 @@
   <td id="projectlogo"><img alt="Logo" src="eYs3D_logo.png"/></td>
   <td id="projectalign" style="padding-left: 0.5em;">
    <div id="projectname">eYs3D Linux SDK
-   &#160;<span id="projectnumber">5.0.1.11</span>
+   &#160;<span id="projectnumber">5.0.1.14</span>
    </div>
   </td>
  </tr>
@@ -149,6 +149,9 @@ int&#160;</td><td class="memItemRight" valign="bottom"><b>APC_SetPixelFormat</b>
 <tr class="memitem:ab7ee0aa5efbf2643c2ed60f3d297fac1"><td class="memItemLeft" align="right" valign="top">int&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="e_s_p_d_i_8h.html#ab7ee0aa5efbf2643c2ed60f3d297fac1">APC_SetFWRegister</a> (void *pHandleEYSD, <a class="el" href="structtag_d_e_v_s_e_l.html">PDEVSELINFO</a> pDevSelInfo, unsigned short address, unsigned short nValue, int flag)</td></tr>
 <tr class="memdesc:ab7ee0aa5efbf2643c2ed60f3d297fac1"><td class="mdescLeft">&#160;</td><td class="mdescRight">set firmware register value  <a href="#ab7ee0aa5efbf2643c2ed60f3d297fac1">More...</a><br /></td></tr>
 <tr class="separator:ab7ee0aa5efbf2643c2ed60f3d297fac1"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ab07e43c571c9524d3e2da7a9636bc4d2"><td class="memItemLeft" align="right" valign="top">int&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="e_s_p_d_i_8h.html#ab07e43c571c9524d3e2da7a9636bc4d2">APC_SetRootCipher</a> (void *pHandleEYSD, <a class="el" href="structtag_d_e_v_s_e_l.html">PDEVSELINFO</a> pDevSelInfo, const char *cipher)</td></tr>
+<tr class="memdesc:ab07e43c571c9524d3e2da7a9636bc4d2"><td class="mdescLeft">&#160;</td><td class="mdescRight">enter root cipher  <a href="#ab07e43c571c9524d3e2da7a9636bc4d2">More...</a><br /></td></tr>
+<tr class="separator:ab07e43c571c9524d3e2da7a9636bc4d2"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ad47dd05fe99d320c85172a653d6c6d23"><td class="memItemLeft" align="right" valign="top">int&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="e_s_p_d_i_8h.html#ad47dd05fe99d320c85172a653d6c6d23">APC_GetHWRegister</a> (void *pHandleEYSD, <a class="el" href="structtag_d_e_v_s_e_l.html">PDEVSELINFO</a> pDevSelInfo, unsigned short address, unsigned short *pValue, int flag)</td></tr>
 <tr class="memdesc:ad47dd05fe99d320c85172a653d6c6d23"><td class="mdescLeft">&#160;</td><td class="mdescRight">get hardware register value  <a href="#ad47dd05fe99d320c85172a653d6c6d23">More...</a><br /></td></tr>
 <tr class="separator:ad47dd05fe99d320c85172a653d6c6d23"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -161,6 +164,9 @@ int&#160;</td><td class="memItemRight" valign="bottom"><b>APC_SetPixelFormat</b>
 <tr class="memitem:a0722345ea3e43ec7f54c7d4b701b3144"><td class="memItemLeft" align="right" valign="top">int&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="e_s_p_d_i_8h.html#a0722345ea3e43ec7f54c7d4b701b3144">APC_SetMultiBytesHWRegister</a> (void *pHandleEYSD, <a class="el" href="structtag_d_e_v_s_e_l.html">PDEVSELINFO</a> pDevSelInfo, unsigned short address, unsigned char *Data, int size, int flag)</td></tr>
 <tr class="memdesc:a0722345ea3e43ec7f54c7d4b701b3144"><td class="mdescLeft">&#160;</td><td class="mdescRight">set hardware register  <a href="#a0722345ea3e43ec7f54c7d4b701b3144">More...</a><br /></td></tr>
 <tr class="separator:a0722345ea3e43ec7f54c7d4b701b3144"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:afc1eb2c5dfbd43c8878e53924dc29cfc"><td class="memItemLeft" align="right" valign="top"><a id="afc1eb2c5dfbd43c8878e53924dc29cfc"></a>
+int&#160;</td><td class="memItemRight" valign="bottom"><b>APC_GetAETarget</b> (void *pHandleEYSD, <a class="el" href="structtag_d_e_v_s_e_l.html">PDEVSELINFO</a> pDevSelInfo, unsigned short *EV)</td></tr>
+<tr class="separator:afc1eb2c5dfbd43c8878e53924dc29cfc"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a6a48610f9699bbe6094f1515f50c44bc"><td class="memItemLeft" align="right" valign="top">int&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="e_s_p_d_i_8h.html#a6a48610f9699bbe6094f1515f50c44bc">APC_SetAETarget</a> (void *pHandleEYSD, <a class="el" href="structtag_d_e_v_s_e_l.html">PDEVSELINFO</a> pDevSelInfo, int index, float *EV)</td></tr>
 <tr class="memdesc:a6a48610f9699bbe6094f1515f50c44bc"><td class="mdescLeft">&#160;</td><td class="mdescRight">set hardware register  <a href="#a6a48610f9699bbe6094f1515f50c44bc">More...</a><br /></td></tr>
 <tr class="separator:a6a48610f9699bbe6094f1515f50c44bc"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -182,6 +188,9 @@ int&#160;</td><td class="memItemRight" valign="bottom"><b>APC_SetPixelFormat</b>
 <tr class="memitem:a9e051b33c43f02d0531eaf71516bc579"><td class="memItemLeft" align="right" valign="top">int&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="e_s_p_d_i_8h.html#a9e051b33c43f02d0531eaf71516bc579">APC_SetSerialNumber</a> (void *pHandleEYSD, <a class="el" href="structtag_d_e_v_s_e_l.html">PDEVSELINFO</a> pDevSelInfo, unsigned char *pData, int nLen)</td></tr>
 <tr class="memdesc:a9e051b33c43f02d0531eaf71516bc579"><td class="mdescLeft">&#160;</td><td class="mdescRight">set serial number to device  <a href="#a9e051b33c43f02d0531eaf71516bc579">More...</a><br /></td></tr>
 <tr class="separator:a9e051b33c43f02d0531eaf71516bc579"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a73d5191da7b54f48eec02fe032d1962b"><td class="memItemLeft" align="right" valign="top">int&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="e_s_p_d_i_8h.html#a73d5191da7b54f48eec02fe032d1962b">APC_ResetUNPData</a> (void *pHandleEYSD, <a class="el" href="structtag_d_e_v_s_e_l.html">PDEVSELINFO</a> pDevSelInfo)</td></tr>
+<tr class="memdesc:a73d5191da7b54f48eec02fe032d1962b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reset the UNProtection area's datum.  <a href="#a73d5191da7b54f48eec02fe032d1962b">More...</a><br /></td></tr>
+<tr class="separator:a73d5191da7b54f48eec02fe032d1962b"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a67592a7cc13d23de5099d68fd295b11c"><td class="memItemLeft" align="right" valign="top">int&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="e_s_p_d_i_8h.html#a67592a7cc13d23de5099d68fd295b11c">APC_GetYOffset</a> (void *pHandleEYSD, <a class="el" href="structtag_d_e_v_s_e_l.html">PDEVSELINFO</a> pDevSelInfo, BYTE *buffer, int BufferLength, int *pActualLength, int index)</td></tr>
 <tr class="memdesc:a67592a7cc13d23de5099d68fd295b11c"><td class="mdescLeft">&#160;</td><td class="mdescRight">get Y offset (file ID 30+) value  <a href="#a67592a7cc13d23de5099d68fd295b11c">More...</a><br /></td></tr>
 <tr class="separator:a67592a7cc13d23de5099d68fd295b11c"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -6973,6 +6982,44 @@ int&#160;</td><td class="memItemRight" valign="bottom"><b>APC_ColorFormat_to_BGR
 
 </div>
 </div>
+<a id="a73d5191da7b54f48eec02fe032d1962b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a73d5191da7b54f48eec02fe032d1962b">&#9670;&nbsp;</a></span>APC_ResetUNPData()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">int APC_ResetUNPData </td>
+          <td>(</td>
+          <td class="paramtype">void *&#160;</td>
+          <td class="paramname"><em>pHandleEYSD</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="structtag_d_e_v_s_e_l.html">PDEVSELINFO</a>&#160;</td>
+          <td class="paramname"><em>pDevSelInfo</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Reset the UNProtection area's datum. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">void</td><td>*pHandleEYSD handle </td></tr>
+    <tr><td class="paramname">PDEVSELINFO</td><td>pDevSelInfo pointer of device select index </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>success: APC_OK, others: see <a class="el" href="e_s_p_d_i__def_8h.html" title="error/data type definitions ">eSPDI_def.h</a> </dd></dl>
+
+</div>
+</div>
 <a id="ad48eab33c569c39387c0f4275516764a"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ad48eab33c569c39387c0f4275516764a">&#9670;&nbsp;</a></span>APC_ResizeImgToHalf()</h2>
 
@@ -8552,6 +8599,51 @@ int&#160;</td><td class="memItemRight" valign="bottom"><b>APC_ColorFormat_to_BGR
     <tr><td class="paramname">int</td><td>BufferLength bufer length, must be 1024 </td></tr>
     <tr><td class="paramname">int</td><td>*pActualLength always return 1024 </td></tr>
     <tr><td class="paramname">int</td><td>index index(from 0 ~ 9) to identify rectify table for corresponding depth </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>success: APC_OK, others: see <a class="el" href="e_s_p_d_i__def_8h.html" title="error/data type definitions ">eSPDI_def.h</a> </dd></dl>
+
+</div>
+</div>
+<a id="ab07e43c571c9524d3e2da7a9636bc4d2"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab07e43c571c9524d3e2da7a9636bc4d2">&#9670;&nbsp;</a></span>APC_SetRootCipher()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">int APC_SetRootCipher </td>
+          <td>(</td>
+          <td class="paramtype">void *&#160;</td>
+          <td class="paramname"><em>pHandleEYSD</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="structtag_d_e_v_s_e_l.html">PDEVSELINFO</a>&#160;</td>
+          <td class="paramname"><em>pDevSelInfo</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const char *&#160;</td>
+          <td class="paramname"><em>cipher</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>enter root cipher </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">void</td><td>*pHandleEYSD handle </td></tr>
+    <tr><td class="paramname">PDEVSELINFO</td><td>pDevSelInfo pointer of device select index </td></tr>
+    <tr><td class="paramname">const</td><td>char* cipher cipher string </td></tr>
   </table>
   </dd>
 </dl>

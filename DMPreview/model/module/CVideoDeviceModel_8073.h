@@ -14,7 +14,7 @@ public:
     virtual int ExtendIR(bool bEnable){ return APC_NotSupport; }
     virtual int StartStreamingTask();
     virtual void SetVideoDeviceController(CVideoDeviceController *pVideoDeviceController);
-
+    virtual int DefaultVideoMode(){ return 11; }
 protected:
     CVideoDeviceModel_8073(DEVSELINFO *pDeviceSelfInfo);
 };
