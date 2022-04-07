@@ -18,6 +18,7 @@
 #include "CVideoDeviceModel_Nora.h"
 #include "CVideoDeviceModel_8062.h"
 #include "CVideoDeviceModel_8036.h"
+#include "CVideoDeviceModel_8073.h"
 #include "CVideoDeviceModel_Grap.h"
 
 CVideoDeviceModel *CVideoDeviceModelFactory::CreateVideoDeviceModel(DEVSELINFO *pDeviceSelfInfo)
@@ -54,6 +55,8 @@ CVideoDeviceModel *CVideoDeviceModelFactory::CreateVideoDeviceModel(DEVSELINFO *
             pModel = new CVideoDeviceModel_8060(pDeviceSelfInfo); break;
         case APC_PID_8062:
             pModel = new CVideoDeviceModel_8062(pDeviceSelfInfo); break;
+        case APC_PID_IVY:
+            pModel = new CVideoDeviceModel_8073(pDeviceSelfInfo); break;
         case APC_PID_GRAP:
             pModel = new CVideoDeviceModel_Grap(pDeviceSelfInfo); break;
         case APC_PID_HYPATIA:

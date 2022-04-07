@@ -290,6 +290,7 @@ typedef struct tagDEVINFORMATION {
 #define APC_PID_HYPATIA 0x0160
 #define APC_PID_HYPATIA2 0x0173
 #define APC_PID_8062    0x0162
+#define APC_PID_IVY     0x0177
 #define APC_PID_GRAP    0x0179
 #define APC_PID_GRAP_K  0x0183
 #define APC_PID_GRAP_SLAVE   0x0279
@@ -472,6 +473,15 @@ typedef enum
 #define PU_PROPERTY_ID_WHITE_BALANCE_CTRL 			10
 #define PU_PROPERTY_ID_WHITE_BALANCE_AUTO_CTRL 	    11
 
+//Auto-Exposure Mode Control
+#define AE_MOD_MANUAL_MODE							0x01
+#define AE_MOD_AUTO_MODE							0x02
+#define AE_MOD_SHUTTER_PRIORITY_MODE				0x04
+#define AE_MOD_APERTURE_PRIORITY_MODE				0x08
+
+// White Balance Temperature, Auto Control
+#define PU_PROPERTY_ID_AWB_DISABLE 	    			0
+#define PU_PROPERTY_ID_AWB_ENABLE 	    			1
 // for Rectify Log +
 
 typedef struct eSPCtrl_RectLogData {

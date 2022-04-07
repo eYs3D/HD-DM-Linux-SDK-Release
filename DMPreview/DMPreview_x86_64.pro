@@ -138,7 +138,8 @@ HEADERS += \
     utility/IMU/IMU_Calibration/CIMUCalibration.h \
     utility/thermal/v4l2.h \
     manager/CFrameSyncManager.h \
-    model/module/CVideoDeviceModel_Grap.h
+    model/module/CVideoDeviceModel_Grap.h \
+    model/module/CVideoDeviceModel_8073.h
 
 SOURCES += \
     view/mainwindow.cpp \
@@ -222,7 +223,8 @@ SOURCES += \
     utility/IMU/IMU_Calibration/CIMUCalibration.cpp \
     utility/thermal/v4l2.cpp \
     manager/CFrameSyncManager.cpp \
-    model/module/CVideoDeviceModel_Grap.cpp
+    model/module/CVideoDeviceModel_Grap.cpp \
+    model/module/CVideoDeviceModel_8073.cpp
 
 RESOURCES += \
     resource/resource.qrc
