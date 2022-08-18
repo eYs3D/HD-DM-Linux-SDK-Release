@@ -251,9 +251,9 @@ int CIMUDataController::IMUCallback(IMUData *pImuData, int status)
         int nIMUDataByte = pModel->GetIMUDataOutputByte(pModel->GetDataFormat());
         const char *frameCountFormat = CVideoDeviceModel::SERIAL_COUNT == m_pVideoDeviceModel->GetSerialNumberType() ?
                                        "(Serial Count)" : "";
-
+        CIMUModel::TYPE kIMUType = pModel->GetType();
         QMutexLocker locker(&m_imuInfoMutex);
-        if (CIMUModel::IMU_9_AXIS == pModel->GetType()){
+        if (CIMUModel::IMU_9_AXIS == kIMUType){
             QVector3D eulerAngles = QQuaternion(m_imuData._quaternion[0],
                                     m_imuData._quaternion[1],
                                     m_imuData._quaternion[2],
@@ -267,12 +267,12 @@ int CIMUDataController::IMUCallback(IMUData *pImuData, int status)
             float g = sqrt((m_imuData._accelX * m_imuData._accelX) +
                            (m_imuData._accelY * m_imuData._accelY) +
                            (m_imuData._accelZ * m_imuData._accelZ));
-            m_sIMUData.sprintf("Frame count%s:%d\nTime:%2d:%2d:%2d:%4d\nAccel X:%1.3f Y:%1.3f Z:%1.3f Total:%1.3f\nGyro X:%4.2f Y:%4.2f Z:%4.2f\nCompass X:%.2f Y:%.2f Z:%.2f\n",
-                                frameCountFormat, m_imuData._frameCount,
-                                m_imuData._hour, m_imuData._min, m_imuData._sec, m_imuData._subSecond,
-                                m_imuData._accelX, m_imuData._accelY, m_imuData._accelZ, g,
-                                m_imuData._gyroScopeX, m_imuData._gyroScopeY, m_imuData._gyroScopeZ,
-                                m_imuData._compassX, m_imuData._compassY, m_imuData._compassZ);
+            m_sIMUData.sprintf("Frame count%s:%d\nTime:%2d:%2d:%2d:%4d\nAccel X:%+-4.3f \t Y:%+-4.3f \t Z:%+-4.3f Total:%+-4.3f\nGyro X:%+-4.3f \t Y:%+-4.3f \t Z:%+-4.3f\n",
+                               frameCountFormat, m_imuData._frameCount,
+                               m_imuData._hour, m_imuData._min, m_imuData._sec, m_imuData._subSecond,
+                               m_imuData._accelX, m_imuData._accelY, m_imuData._accelZ, g,
+                               m_imuData._gyroScopeX, m_imuData._gyroScopeY, m_imuData._gyroScopeZ);
+
         }else if (58 == nIMUDataByte){
             m_sIMUData.sprintf("Frame count%s:%d\nTime:%2d:%2d:%2d:%4d\nAccel X:%4.3f Y:%4.3f Z:%4.3f\nGyro X:%4.0f Y:%4.0f Z:%4.0f\nCompass X:%.2f Y:%.2f Z:%.2f\nCompass_TBC X:%.2f Y:%.2f Z:%.2f\nAccuracy_FLAG: %d",
                                 frameCountFormat, m_imuData._frameCount,

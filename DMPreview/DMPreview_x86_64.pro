@@ -42,7 +42,7 @@ QMAKE_LFLAGS += '-Wl,-rpath,\'\$$ORIGIN/../eSPDI\''
 
 QMAKE_CXXFLAGS_WARN_ON += -Wno-unused-parameter
 QMAKE_CXXFLAGS_WARN_ON += -Wno-reorder
-
+QMAKE_CXXFLAGS += -ffast-math
 FORMS += \
     view/mainwindow.ui \
     view/CVideoDeviceDialog.ui \
@@ -139,7 +139,11 @@ HEADERS += \
     utility/thermal/v4l2.h \
     manager/CFrameSyncManager.h \
     model/module/CVideoDeviceModel_Grap.h \
-    model/module/CVideoDeviceModel_8073.h
+    model/module/CVideoDeviceModel_8073.h \
+    model/module/CVideoDeviceModel_8063.h \
+    model/module/CVideoDeviceModel_8076.h \
+    model/module/CVideoDeviceModel_Iris.h \
+    model/module/CVideoDeviceModel_Grap.h
 
 SOURCES += \
     view/mainwindow.cpp \
@@ -224,6 +228,9 @@ SOURCES += \
     utility/thermal/v4l2.cpp \
     manager/CFrameSyncManager.cpp \
     model/module/CVideoDeviceModel_Grap.cpp \
+    model/module/CVideoDeviceModel_8063.cpp \
+    model/module/CVideoDeviceModel_8076.cpp \
+    model/module/CVideoDeviceModel_Iris.cpp \
     model/module/CVideoDeviceModel_8073.cpp
 
 RESOURCES += \

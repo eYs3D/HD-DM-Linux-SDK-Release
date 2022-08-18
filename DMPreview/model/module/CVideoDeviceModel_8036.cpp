@@ -51,10 +51,16 @@ int CVideoDeviceModel_8036::TransformDepthDataType(int nDepthDataType, bool bRec
     if (!depthStreamInfo.empty()){
         int nDepthIndex = m_pVideoDeviceController->GetPreviewOptions()->GetStreamIndex(STREAM_DEPTH);
         if (640 == depthStreamInfo[nDepthIndex].nWidth && 360 == depthStreamInfo[nDepthIndex].nHeight){
-            depthDataType += APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET;
+            char FWVersion[128];
+            int nActualLength = 0;
+            char *FindFwVer;
+            if (APC_OK == APC_GetFwVersion(CEYSDDeviceManager::GetInstance()->GetEYSD(), m_deviceSelInfo[0], FWVersion, 256, &nActualLength)) {
+                FindFwVer = strstr(FWVersion, "MIPITX-SLAVE");
+                if (!FindFwVer)
+                    depthDataType += APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET;
+            }
         }
     }
 
     return depthDataType;
-
 }

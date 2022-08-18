@@ -5,9 +5,10 @@
 #include <QMouseEvent>
 #include <QWheelEvent>
 #include <math.h>
+#if !defined(Q_PROCESSOR_ARM)
 #include <GL/gl.h>
 #include <GL/glext.h>
-
+#endif
 CPointCloudViewerWidget::CPointCloudViewerWidget(CVideoDeviceController *pVideoDeviceController,
                                                  QWidget *parent):
 QOpenGLWidget(parent),

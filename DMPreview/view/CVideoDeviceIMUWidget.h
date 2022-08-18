@@ -47,7 +47,7 @@ private slots:
     void on_pushButton_imu_data_3d_reset_clicked();
 
 private:
-
+    void Update3DModuleWidget();
     void UpdateFrameSync();
     void UpdateInformation();
     void UpdateIMUData();

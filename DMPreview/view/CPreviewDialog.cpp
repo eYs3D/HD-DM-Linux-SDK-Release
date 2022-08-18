@@ -136,7 +136,6 @@ void CPreviewDialog::ResizePreviewDialog()
     if (0 == nWidth || 0 == nHeight) return;
 
     if (size().width() != m_nPreferWidth && size().height() != m_nPreferHeight){
-
         if (m_nPreferWidth > 0 && m_nPreferHeight > 0){
             float fWScale = (float)m_nPreferWidth / nWidth;
             float fHScale = (float)m_nPreferHeight / nHeight;
@@ -151,7 +150,7 @@ void CPreviewDialog::ResizePreviewDialog()
                 nHeight = m_nPreferHeight;
             }
 
-        }        
+        }
         RUN_ON_UI_THREAD(
         resize(nWidth, nHeight);
         );

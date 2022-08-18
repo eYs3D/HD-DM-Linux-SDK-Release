@@ -74,6 +74,7 @@ public:
          //+[Thermal device]
         STREAM_THERMAL,
         //-[Thermal device]
+        STREAM_BOTH,
         STREAM_TYPE_COUNT
     };
 
@@ -120,7 +121,7 @@ public:
     };
 
 public:
-
+    virtual int GetCurrentTemperature(float &temperature) { return APC_NotSupport; }
     virtual bool EqualModel(CVideoDeviceModel *pModel);
 
     virtual void SetVideoDeviceController(CVideoDeviceController *pVideoDeviceController){
@@ -285,6 +286,7 @@ protected:
     virtual int AddCameraPropertyModels();
 
     virtual int GetImage(STREAM_TYPE type);
+    virtual int Get2Image(STREAM_TYPE type);
     virtual int GetColorImage();
     virtual int GetDepthImage();
     virtual int FirstSuccessGetImageCallback(STREAM_TYPE type);
@@ -374,6 +376,8 @@ protected:
 
     FrameGrabber *m_pFrameGrabber;
     eSPCtrl_RectLogData m_rectifyLogData;
+    eSPCtrl_RectLogData mSlaveDeviceRectifyLogData = {{{0}}};
+
     PointCloudInfo m_pointCloudInfo;
     std::vector<float> m_pointCloudDepth;
     std::vector<BYTE> m_pointCloudColor;

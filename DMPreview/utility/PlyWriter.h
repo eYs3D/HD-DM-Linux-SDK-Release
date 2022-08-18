@@ -24,7 +24,10 @@ public:
 	static int EYSDFrameTo3DMultiSensorPlyFilterFloat(int depthWidth, int depthHeight, std::vector<float>& dFloatArray, int colorWidth, int colorHeight, std::vector<unsigned char>& colorArray, eSPCtrl_RectLogData* rectLogDataL, eSPCtrl_RectLogData*rectLogDataK, APCImageType::Value depthType, std::vector<CloudPoint>& output, bool clipping, float zNear, float zFar, bool removeINF, bool isDownSampleK, float scale_ratio, int degreeOfRectifyLogK);
 	static int EYSDFrameTo3DCylinder(int depthWidth, int depthHeight, std::vector<unsigned char>& dArray, int colorWidth, int colorHeight, std::vector<unsigned char>& colorArray, eSPCtrl_RectLogData* rectLogData, APCImageType::Value depthType, std::vector<CloudPoint>& output, bool clipping, float zNear, float zFar, bool removeINF, float scale_ratio);
 	static int EYSDFrameTo3DCylinder(int depthWidth, int depthHeight, std::vector<unsigned char>& dArray, int colorWidth, int colorHeight, std::vector<unsigned char>& colorArray, eSPCtrl_RectLogData* rectLogDataL, eSPCtrl_RectLogData*rectLogDataK, APCImageType::Value depthType, std::vector<CloudPoint>& output, bool clipping, float zNear, float zFar, bool removeINF, float scale_ratio);
-    static std::string generateHeader(bool binary,int size);
+    static int EYSDFrameTo3D_8063(int depthWidth, int depthHeight, std::vector<unsigned char>& dArray, int colorWidth, int colorHeight, std::vector<unsigned char>& colorArray,
+                                       eSPCtrl_RectLogData* rectLogDataL, eSPCtrl_RectLogData* rectLogDataK, APCImageType::Value depthType, std::vector<CloudPoint>& output, bool clipping,
+                                       float zNear,float zFar,bool removeINF = true, bool useDepthResolution = true, float scale_ratio = 1.0f);
+	static std::string generateHeader(bool binary,int size);
 //private:
 	static void resampleImage(int srcWidth, int srcHeight, unsigned char* srcBuf, int dstWidth, int dstHeight, unsigned char* dstBuf, int bytePerPixel);  
 	//static void resampleImage_float(int srcWidth, int srcHeight, float* srcBuf, int dstWidth, int dstHeight, float* dstBuf);

@@ -12,6 +12,8 @@ public:
 
     friend class CVideoDeviceModelFactory;
 
+    virtual int PreparePointCloudInfo();
+
 protected:
     CVideoDeviceModel_8052(DEVSELINFO *pDeviceSelfInfo);
 };

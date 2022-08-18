@@ -46,7 +46,7 @@ void CEYSDDeviceManager::EnableSDKLog(bool bEnable)
 }
 
 int CEYSDDeviceManager::Reconnect()
-{        
+{
     for (CVideoDeviceModel *pModel : m_videoDeviceModels){
         pModel->ChangeState(CVideoDeviceModel::RECONNECTING);
     }
@@ -117,8 +117,16 @@ int CEYSDDeviceManager::FindDevices(std::vector<CVideoDeviceModel *> &devices)
 
     devices.clear();
     int nDevCount = APC_GetDeviceNumber(m_pEYSD);
-    for (int i = 0 ; i < nDevCount ; ++i){
-        DEVSELINFO devSelInfo;
+    int nDevSimpleCount = APC_GetSimpleDeviceNumber(m_pEYSD);
+    DEVSELINFO devSelInfo;
+    for (int i = 0; i < nDevCount; i++){
+        devSelInfo.index = i;
+        CVideoDeviceModel *pDeviceModel = CVideoDeviceModelFactory::CreateVideoDeviceModel(&devSelInfo);
+        if (nullptr != pDeviceModel){
+            devices.push_back(std::move(pDeviceModel));
+        }
+    }
+    for (int i = SIMPLE_DEV_START_IDX; i < (SIMPLE_DEV_START_IDX + nDevSimpleCount); i++){
         devSelInfo.index = i;
         CVideoDeviceModel *pDeviceModel = CVideoDeviceModelFactory::CreateVideoDeviceModel(&devSelInfo);
         if (nullptr != pDeviceModel){

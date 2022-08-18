@@ -112,14 +112,6 @@ bool APC_IsMLBaseLine(void *pHandleEYSD, PDEVSELINFO pDevSelInfo);
 */
 int APC_DoFusion(unsigned char **pDepthBufList, double *pDepthMerge, unsigned char *pDepthMergeFlag, int nDWidth, int nDHeight, double fFocus, double *pBaseline, double *pWRNear, double *pWRFar, double *pWRFusion, int nMergeNum, bool bdepth2Byte11bit, int method);
 
-/*! \fn int APC_GetDeviceNumber(
-        void *pHandleEYSD)
-    \brief get EYSD USB device numbers
-    \param void *pHandleEYSD	handle
-    \return number of EYSD device
-*/
-int  APC_GetDeviceNumber(void *pHandleEYSD);
-
 /*! \fn int APC_GetDeviceInfo(
         void *pHandleEYSD,
         PDEVSELINFO pDevSelInfo,
@@ -1687,6 +1679,8 @@ int  APC_GetCTRangeAndStep(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, int nId, 
 */
 int  APC_GetPURangeAndStep(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, int nId, int *pMax, int *pMin, int *pStep, int *pDefault, int *pFlags);
 
+int APC_GetCTPUSupportList(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, unsigned char CtPuId, unsigned short int *pValue);
+
 // for AEAWB Control -		
 
 // for depth data type selection +
@@ -2832,4 +2826,47 @@ int APC_PostProcess(void *pPostProcessHandle, unsigned char *pDepthData);
     \return success: APC_OK, others: see eSPDI_def.h
  */
 int APC_ReleasePostProcess(void *pPostProcessHandle);
+
+/*! \fn int APC_SetRootCipher(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, const char* cipher)
+    \brief Set the correct root to do un-protect flash when writing parameters of camera.
+    \param void *pHandleEYSD	 the pointer to the initilized EYSD SDK instance
+    \param PDEVSELINFO pDevSelInfo	pointer of device select index
+    \param const char* cipher  root
+    \return success: APC_OK, others: see eSPDI_def.h
+*/
+int APC_SetRootCipher(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, const char* cipher);
+
+/*! \fn int APC_GetDeviceNumber(void *pHandleEYSD)
+    \brief Get the number of composite camera devices (ex: USB camera device) .
+    \param void *pHandleEYSD	handle
+    \return number of composite camera devices
+*/
+int  APC_GetDeviceNumber(void *pHandleEYSD);
+
+/*! \fn int APC_GetSimpleDeviceNumber(void *pHandleEYSD)
+    \brief Get the number of simple camera devices (ex: MIPI camera device) .
+    \param void *pHandleEYSD	 the pointer to the initilized EYSD SDK instance
+    \return number of simple camera devices
+*/
+int APC_GetSimpleDeviceNumber(void *pHandleEYSD);
+
+
+/*! \fn PDEVSELINFO APC_GetSimpleDevSelectIndex(void *pHandleEYSD, int index)
+    \brief Get the pointer of PDEVSELINFO for simple camera device
+    \param void *pHandleEYSD	the pointer to the initilized EYSD SDK instance
+    \param int  index           device select index
+    \return the device select index for simple camera device
+*/
+int APC_GetSimpleDevSelectIndex(void *pHandleEYSD, int index);
+
+
+/*! \fn PDEVSELINFO APC_GetCompositeDevSelectIndex(void *pHandleEYSD, int index)
+    \brief Get the pointer of PDEVSELINFO for composite camera device
+    \param void *pHandleEYSD    the pointer to the initilized EYSD SDK instance
+    \param int  index           device select index
+    \return the device select index for composite camera device
+*/
+int APC_GetCompositeDevSelectIndex(void *pHandleEYSD, int index);
+
+
 #endif // LIB_ESPDI_H

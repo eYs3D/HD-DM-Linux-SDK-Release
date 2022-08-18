@@ -66,6 +66,9 @@ void CVideoDevicePreviewWidget::UpdateUSBPort()
         case USB_PORT_TYPE_3_0:
             ui->label_usb_type->setText("USB 3.0 Gen 1");
             break;
+        case MIPI_PORT_TYPE:
+            ui->label_usb_type->setText("MIPI port");
+            break;
         default:
             ui->label_usb_type->setText("unknown USB port");
             break;

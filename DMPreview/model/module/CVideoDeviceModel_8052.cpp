@@ -7,6 +7,13 @@ CVideoDeviceModel_8036_8052(pDeviceSelfInfo)
 
 }
 
+int CVideoDeviceModel_8052::PreparePointCloudInfo()
+{
+    GetRectifyLogData(0, 0, &m_rectifyLogData);
+    GetPointCloudInfo(&m_rectifyLogData, m_pointCloudInfo, GetColorImageData(), GetDepthImageData());
+    return APC_OK;
+}
+
 int CVideoDeviceModel_8052::TransformDepthDataType(int nDepthDataType, bool bRectifyData)
 {
     int depthDataType = CVideoDeviceModel::TransformDepthDataType(nDepthDataType, bRectifyData);

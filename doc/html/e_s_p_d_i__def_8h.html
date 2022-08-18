@@ -23,7 +23,7 @@
   <td id="projectlogo"><img alt="Logo" src="eYs3D_logo.png"/></td>
   <td id="projectalign" style="padding-left: 0.5em;">
    <div id="projectname">eYs3D Linux SDK
-   &#160;<span id="projectnumber">5.0.1.14</span>
+   &#160;<span id="projectnumber">5.0.1.19</span>
    </div>
   </td>
  </tr>
@@ -116,6 +116,15 @@ Classes</h2></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a name="define-members"></a>
 Macros</h2></td></tr>
+<tr class="memitem:a1de12de053b304ad4fe31463bb612012"><td class="memItemLeft" align="right" valign="top"><a id="a1de12de053b304ad4fe31463bb612012"></a>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>MAX_DEV_COUNT</b>&#160;&#160;&#160;20</td></tr>
+<tr class="separator:a1de12de053b304ad4fe31463bb612012"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a76f523decf79e83f5ccbfb111d3bf7f0"><td class="memItemLeft" align="right" valign="top"><a id="a76f523decf79e83f5ccbfb111d3bf7f0"></a>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>MAX_TOTAL_DEV_CONT</b>&#160;&#160;&#160;(MAX_DEV_COUNT * 2 + MAX_DEV_COUNT)</td></tr>
+<tr class="separator:a76f523decf79e83f5ccbfb111d3bf7f0"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a4642a4966e102bb2df8e02bce4038f41"><td class="memItemLeft" align="right" valign="top"><a id="a4642a4966e102bb2df8e02bce4038f41"></a>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>SIMPLE_DEV_START_IDX</b>&#160;&#160;&#160;(MAX_TOTAL_DEV_CONT - (MAX_DEV_COUNT))</td></tr>
+<tr class="separator:a4642a4966e102bb2df8e02bce4038f41"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a7d9e1f98b376e5b9d518898f364fe352"><td class="memItemLeft" align="right" valign="top"><a id="a7d9e1f98b376e5b9d518898f364fe352"></a>
 #define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_OK</b>&#160;&#160;&#160;0</td></tr>
 <tr class="separator:a7d9e1f98b376e5b9d518898f364fe352"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -408,43 +417,43 @@ Macros</h2></td></tr>
 #define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET</b>&#160;&#160;&#160;16</td></tr>
 <tr class="separator:a8477961bb5002d548d3792ee107b3231"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ab73623871a7017b9e8dc4d3d9440f3f0"><td class="memItemLeft" align="right" valign="top"><a id="ab73623871a7017b9e8dc4d3d9440f3f0"></a>
-#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_DEPTH_DATA_ILM_OFF_RAW</b>&#160;&#160;&#160;APC_DEPTH_DATA_OFF_RAW + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET /* raw (depth off, only raw color) */</td></tr>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_DEPTH_DATA_ILM_OFF_RAW</b>&#160;&#160;&#160;(APC_DEPTH_DATA_OFF_RAW + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* raw (depth off, only raw color) */</td></tr>
 <tr class="separator:ab73623871a7017b9e8dc4d3d9440f3f0"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:afc66bd89a930c612104b89b166c5c4d0"><td class="memItemLeft" align="right" valign="top"><a id="afc66bd89a930c612104b89b166c5c4d0"></a>
-#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_DEPTH_DATA_ILM_DEFAULT</b>&#160;&#160;&#160;APC_DEPTH_DATA_DEFAULT + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET /* raw (depth off, only raw color) */</td></tr>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_DEPTH_DATA_ILM_DEFAULT</b>&#160;&#160;&#160;(APC_DEPTH_DATA_DEFAULT + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* raw (depth off, only raw color) */</td></tr>
 <tr class="separator:afc66bd89a930c612104b89b166c5c4d0"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a0131412e89e4035c604c705b20ad94a0"><td class="memItemLeft" align="right" valign="top"><a id="a0131412e89e4035c604c705b20ad94a0"></a>
-#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_DEPTH_DATA_ILM_8_BITS</b>&#160;&#160;&#160;APC_DEPTH_DATA_8_BITS + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET /* rectify, 1 byte per pixel */</td></tr>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_DEPTH_DATA_ILM_8_BITS</b>&#160;&#160;&#160;(APC_DEPTH_DATA_8_BITS + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* rectify, 1 byte per pixel */</td></tr>
 <tr class="separator:a0131412e89e4035c604c705b20ad94a0"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ac2a91c2d60fd8c327aaa209a2c68a362"><td class="memItemLeft" align="right" valign="top"><a id="ac2a91c2d60fd8c327aaa209a2c68a362"></a>
-#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_DEPTH_DATA_ILM_14_BITS</b>&#160;&#160;&#160;APC_DEPTH_DATA_14_BITS + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET /* rectify, 2 byte per pixel */</td></tr>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_DEPTH_DATA_ILM_14_BITS</b>&#160;&#160;&#160;(APC_DEPTH_DATA_14_BITS + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* rectify, 2 byte per pixel */</td></tr>
 <tr class="separator:ac2a91c2d60fd8c327aaa209a2c68a362"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ac1300da9557a373a9a77809721bb735a"><td class="memItemLeft" align="right" valign="top"><a id="ac1300da9557a373a9a77809721bb735a"></a>
-#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_DEPTH_DATA_ILM_8_BITS_x80</b>&#160;&#160;&#160;APC_DEPTH_DATA_8_BITS_x80 + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET /* rectify, 2 byte per pixel but using 1 byte only */</td></tr>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_DEPTH_DATA_ILM_8_BITS_x80</b>&#160;&#160;&#160;(APC_DEPTH_DATA_8_BITS_x80 + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* rectify, 2 byte per pixel but using 1 byte only */</td></tr>
 <tr class="separator:ac1300da9557a373a9a77809721bb735a"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:abed6609563f6caf14dc621d8a1415541"><td class="memItemLeft" align="right" valign="top"><a id="abed6609563f6caf14dc621d8a1415541"></a>
-#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_DEPTH_DATA_ILM_11_BITS</b>&#160;&#160;&#160;APC_DEPTH_DATA_11_BITS + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET /* rectify, 2 byte per pixel but using 11 bit only */</td></tr>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_DEPTH_DATA_ILM_11_BITS</b>&#160;&#160;&#160;(APC_DEPTH_DATA_11_BITS + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* rectify, 2 byte per pixel but using 11 bit only */</td></tr>
 <tr class="separator:abed6609563f6caf14dc621d8a1415541"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a5afdab48b90f84dc81082e58c97fc73f"><td class="memItemLeft" align="right" valign="top"><a id="a5afdab48b90f84dc81082e58c97fc73f"></a>
-#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_DEPTH_DATA_ILM_OFF_RECTIFY</b>&#160;&#160;&#160;APC_DEPTH_DATA_OFF_RECTIFY + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET /* rectify (depth off, only rectify color) */</td></tr>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_DEPTH_DATA_ILM_OFF_RECTIFY</b>&#160;&#160;&#160;(APC_DEPTH_DATA_OFF_RECTIFY + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* rectify (depth off, only rectify color) */</td></tr>
 <tr class="separator:a5afdab48b90f84dc81082e58c97fc73f"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a29ee6f9a9dc387e4f221fd05a72703f3"><td class="memItemLeft" align="right" valign="top"><a id="a29ee6f9a9dc387e4f221fd05a72703f3"></a>
-#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_DEPTH_DATA_ILM_8_BITS_RAW</b>&#160;&#160;&#160;APC_DEPTH_DATA_8_BITS_RAW + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET /* raw */</td></tr>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_DEPTH_DATA_ILM_8_BITS_RAW</b>&#160;&#160;&#160;(APC_DEPTH_DATA_8_BITS_RAW + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* raw */</td></tr>
 <tr class="separator:a29ee6f9a9dc387e4f221fd05a72703f3"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a026bee54125af34cf9f9d754ee999854"><td class="memItemLeft" align="right" valign="top"><a id="a026bee54125af34cf9f9d754ee999854"></a>
-#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_DEPTH_DATA_ILM_14_BITS_RAW</b>&#160;&#160;&#160;APC_DEPTH_DATA_14_BITS_RAW + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET /* raw */</td></tr>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_DEPTH_DATA_ILM_14_BITS_RAW</b>&#160;&#160;&#160;(APC_DEPTH_DATA_14_BITS_RAW + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* raw */</td></tr>
 <tr class="separator:a026bee54125af34cf9f9d754ee999854"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a9e31fb5502b8737ca48e8990ebfb4f22"><td class="memItemLeft" align="right" valign="top"><a id="a9e31fb5502b8737ca48e8990ebfb4f22"></a>
-#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_DEPTH_DATA_ILM_8_BITS_x80_RAW</b>&#160;&#160;&#160;APC_DEPTH_DATA_8_BITS_x80_RAW + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET /* raw */</td></tr>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_DEPTH_DATA_ILM_8_BITS_x80_RAW</b>&#160;&#160;&#160;(APC_DEPTH_DATA_8_BITS_x80_RAW + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* raw */</td></tr>
 <tr class="separator:a9e31fb5502b8737ca48e8990ebfb4f22"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a98f3471d4d4d1608772299d9ed959bcc"><td class="memItemLeft" align="right" valign="top"><a id="a98f3471d4d4d1608772299d9ed959bcc"></a>
-#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_DEPTH_DATA_ILM_11_BITS_RAW</b>&#160;&#160;&#160;APC_DEPTH_DATA_11_BITS_RAW + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET /* raw */</td></tr>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_DEPTH_DATA_ILM_11_BITS_RAW</b>&#160;&#160;&#160;(APC_DEPTH_DATA_11_BITS_RAW + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* raw */</td></tr>
 <tr class="separator:a98f3471d4d4d1608772299d9ed959bcc"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:aa2f229ceabd96bb6c10cab54ef1465f2"><td class="memItemLeft" align="right" valign="top"><a id="aa2f229ceabd96bb6c10cab54ef1465f2"></a>
-#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_DEPTH_DATA_ILM_14_BITS_COMBINED_RECTIFY</b>&#160;&#160;&#160;APC_DEPTH_DATA_14_BITS_COMBINED_RECTIFY + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET</td></tr>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_DEPTH_DATA_ILM_14_BITS_COMBINED_RECTIFY</b>&#160;&#160;&#160;(APC_DEPTH_DATA_14_BITS_COMBINED_RECTIFY + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET)</td></tr>
 <tr class="separator:aa2f229ceabd96bb6c10cab54ef1465f2"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:af73ea1817a35696064a8d30254057539"><td class="memItemLeft" align="right" valign="top"><a id="af73ea1817a35696064a8d30254057539"></a>
-#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_DEPTH_DATA_ILM_11_BITS_COMBINED_RECTIFY</b>&#160;&#160;&#160;APC_DEPTH_DATA_11_BITS_COMBINED_RECTIFY + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET</td></tr>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_DEPTH_DATA_ILM_11_BITS_COMBINED_RECTIFY</b>&#160;&#160;&#160;(APC_DEPTH_DATA_11_BITS_COMBINED_RECTIFY + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET)</td></tr>
 <tr class="separator:af73ea1817a35696064a8d30254057539"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a196883665783aaf9a2099c2c3f639613"><td class="memItemLeft" align="right" valign="top"><a id="a196883665783aaf9a2099c2c3f639613"></a>
 #define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET</b>&#160;&#160;&#160;32</td></tr>
@@ -578,27 +587,6 @@ Macros</h2></td></tr>
 <tr class="memitem:a8dd8b4ecf73c33fad476fe72a3e188a8"><td class="memItemLeft" align="right" valign="top"><a id="a8dd8b4ecf73c33fad476fe72a3e188a8"></a>
 #define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_BACKUP_USER_DATA_SIZE</b>&#160;&#160;&#160;1024</td></tr>
 <tr class="separator:a8dd8b4ecf73c33fad476fe72a3e188a8"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a9d652e76c072034ef0456c46df6e7b76"><td class="memItemLeft" align="right" valign="top"><a id="a9d652e76c072034ef0456c46df6e7b76"></a>
-#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_MD5_CHECKSUM_SIZE</b>&#160;&#160;&#160;32</td></tr>
-<tr class="separator:a9d652e76c072034ef0456c46df6e7b76"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a060e4699dd1915c2106d7e32f21ae400"><td class="memItemLeft" align="right" valign="top"><a id="a060e4699dd1915c2106d7e32f21ae400"></a>
-#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_USER_SETTING_OFFSET</b>&#160;&#160;&#160;5</td></tr>
-<tr class="separator:a060e4699dd1915c2106d7e32f21ae400"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:aa0c1e0b46b2d152f69f85bc5d27e8a76"><td class="memItemLeft" align="right" valign="top"><a id="aa0c1e0b46b2d152f69f85bc5d27e8a76"></a>
-#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_USER_SETTING_RANGE</b>&#160;&#160;&#160;10</td></tr>
-<tr class="separator:aa0c1e0b46b2d152f69f85bc5d27e8a76"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ac72dc9d430aff894b85f6bdf58f58c72"><td class="memItemLeft" align="right" valign="top"><a id="ac72dc9d430aff894b85f6bdf58f58c72"></a>
-#define&#160;</td><td class="memItemRight" valign="bottom"><b>FW_PROTECT_STRUCT_LEN_OF_STI</b>&#160;&#160;&#160;17</td></tr>
-<tr class="separator:ac72dc9d430aff894b85f6bdf58f58c72"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ac64a5038e7af0a1bef5e648a97feaf61"><td class="memItemLeft" align="right" valign="top"><a id="ac64a5038e7af0a1bef5e648a97feaf61"></a>
-#define&#160;</td><td class="memItemRight" valign="bottom"><b>FW_UNPROTECT_STRUCT_LEN_OF_STI</b>&#160;&#160;&#160;11</td></tr>
-<tr class="separator:ac64a5038e7af0a1bef5e648a97feaf61"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a7a20eb11d3a8f1d7e42d920c75990096"><td class="memItemLeft" align="right" valign="top"><a id="a7a20eb11d3a8f1d7e42d920c75990096"></a>
-#define&#160;</td><td class="memItemRight" valign="bottom"><b>FW_UNKNOWN_STRUCT_LEN_OF_STI</b>&#160;&#160;&#160;255</td></tr>
-<tr class="separator:a7a20eb11d3a8f1d7e42d920c75990096"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a06df498aa8e185ce6f7126f35105bc0e"><td class="memItemLeft" align="right" valign="top"><a id="a06df498aa8e185ce6f7126f35105bc0e"></a>
-#define&#160;</td><td class="memItemRight" valign="bottom"><b>FW_UNKNOWN_UNPAREASTARTSEC</b>&#160;&#160;&#160;(-1)</td></tr>
-<tr class="separator:a06df498aa8e185ce6f7126f35105bc0e"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a7df6b49a0d996839a60bd01b95148a08"><td class="memItemLeft" align="right" valign="top"><a id="a7df6b49a0d996839a60bd01b95148a08"></a>
 #define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_PID_8029</b>&#160;&#160;&#160;0x0568</td></tr>
 <tr class="separator:a7df6b49a0d996839a60bd01b95148a08"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -698,6 +686,18 @@ Macros</h2></td></tr>
 <tr class="memitem:a8118c7e07c8c1adf48e5eafc363bf7f1"><td class="memItemLeft" align="right" valign="top"><a id="a8118c7e07c8c1adf48e5eafc363bf7f1"></a>
 #define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_PID_8062</b>&#160;&#160;&#160;0x0162</td></tr>
 <tr class="separator:a8118c7e07c8c1adf48e5eafc363bf7f1"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a10b1f5b4f0f67eb898779a88c70843bc"><td class="memItemLeft" align="right" valign="top"><a id="a10b1f5b4f0f67eb898779a88c70843bc"></a>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_PID_8063</b>&#160;&#160;&#160;0x0164</td></tr>
+<tr class="separator:a10b1f5b4f0f67eb898779a88c70843bc"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a725108017a30fdc08544f18dc42d3152"><td class="memItemLeft" align="right" valign="top"><a id="a725108017a30fdc08544f18dc42d3152"></a>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_PID_8063_K</b>&#160;&#160;&#160;0x0165</td></tr>
+<tr class="separator:a725108017a30fdc08544f18dc42d3152"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a9527e77bf821e45001798f9d41f97da8"><td class="memItemLeft" align="right" valign="top"><a id="a9527e77bf821e45001798f9d41f97da8"></a>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_PID_8076</b>&#160;&#160;&#160;0x0181</td></tr>
+<tr class="separator:a9527e77bf821e45001798f9d41f97da8"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a96a60a48038a714b662099500cba3c0e"><td class="memItemLeft" align="right" valign="top"><a id="a96a60a48038a714b662099500cba3c0e"></a>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_PID_IRIS</b>&#160;&#160;&#160;0x0184</td></tr>
+<tr class="separator:a96a60a48038a714b662099500cba3c0e"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a9b1c331a1b3647df1ed316d03b88b8c5"><td class="memItemLeft" align="right" valign="top"><a id="a9b1c331a1b3647df1ed316d03b88b8c5"></a>
 #define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_PID_IVY</b>&#160;&#160;&#160;0x0177</td></tr>
 <tr class="separator:a9b1c331a1b3647df1ed316d03b88b8c5"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -713,27 +713,42 @@ Macros</h2></td></tr>
 <tr class="memitem:a0338c6167125f20ff7c640d2c7b0d213"><td class="memItemLeft" align="right" valign="top"><a id="a0338c6167125f20ff7c640d2c7b0d213"></a>
 #define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_PID_GRAP_SLAVE_K</b>&#160;&#160;&#160;0x0283</td></tr>
 <tr class="separator:a0338c6167125f20ff7c640d2c7b0d213"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ab693df9a1fcacc5b574d2fbde004b4a1"><td class="memItemLeft" align="right" valign="top"><a id="ab693df9a1fcacc5b574d2fbde004b4a1"></a>
-#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_PID_SANDRA</b>&#160;&#160;&#160;0x0167</td></tr>
-<tr class="separator:ab693df9a1fcacc5b574d2fbde004b4a1"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a76480a4c4bdbce6f161e840abb0e7c73"><td class="memItemLeft" align="right" valign="top"><a id="a76480a4c4bdbce6f161e840abb0e7c73"></a>
-#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_PID_NORA</b>&#160;&#160;&#160;0x0168</td></tr>
-<tr class="separator:a76480a4c4bdbce6f161e840abb0e7c73"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a7b5d613fd7be220e25d6eec3bf0794b4"><td class="memItemLeft" align="right" valign="top"><a id="a7b5d613fd7be220e25d6eec3bf0794b4"></a>
-#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_PID_HELEN</b>&#160;&#160;&#160;0x0171</td></tr>
-<tr class="separator:a7b5d613fd7be220e25d6eec3bf0794b4"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:aa15f0247d2d868b969e6c573f1447e0c"><td class="memItemLeft" align="right" valign="top"><a id="aa15f0247d2d868b969e6c573f1447e0c"></a>
 #define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_PID_GRAP_THERMAL</b>&#160;&#160;&#160;0xf9f9</td></tr>
 <tr class="separator:aa15f0247d2d868b969e6c573f1447e0c"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a2ed4a8b588473d7ce88210e2bbb6fd6a"><td class="memItemLeft" align="right" valign="top"><a id="a2ed4a8b588473d7ce88210e2bbb6fd6a"></a>
 #define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_PID_GRAP_THERMAL2</b>&#160;&#160;&#160;0xf8f8</td></tr>
 <tr class="separator:a2ed4a8b588473d7ce88210e2bbb6fd6a"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a41ac7113cc5401e3e03f7b2afc5e159e"><td class="memItemLeft" align="right" valign="top"><a id="a41ac7113cc5401e3e03f7b2afc5e159e"></a>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_PID_MIPI_8036</b>&#160;&#160;&#160;(APC_PID_8036 | 0xf000)</td></tr>
+<tr class="separator:a41ac7113cc5401e3e03f7b2afc5e159e"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a76480a4c4bdbce6f161e840abb0e7c73"><td class="memItemLeft" align="right" valign="top"><a id="a76480a4c4bdbce6f161e840abb0e7c73"></a>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_PID_NORA</b>&#160;&#160;&#160;0x0168</td></tr>
+<tr class="separator:a76480a4c4bdbce6f161e840abb0e7c73"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a7b5d613fd7be220e25d6eec3bf0794b4"><td class="memItemLeft" align="right" valign="top"><a id="a7b5d613fd7be220e25d6eec3bf0794b4"></a>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_PID_HELEN</b>&#160;&#160;&#160;0x0171</td></tr>
+<tr class="separator:a7b5d613fd7be220e25d6eec3bf0794b4"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ab693df9a1fcacc5b574d2fbde004b4a1"><td class="memItemLeft" align="right" valign="top"><a id="ab693df9a1fcacc5b574d2fbde004b4a1"></a>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_PID_SANDRA</b>&#160;&#160;&#160;0x0167</td></tr>
+<tr class="separator:ab693df9a1fcacc5b574d2fbde004b4a1"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a0ee7dd86bed900e076a4d4169912fc31"><td class="memItemLeft" align="right" valign="top"><a id="a0ee7dd86bed900e076a4d4169912fc31"></a>
 #define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_VID_GRAP_THERMAL</b>&#160;&#160;&#160;0x04b4</td></tr>
 <tr class="separator:a0ee7dd86bed900e076a4d4169912fc31"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ac6643498383aa3e0ae285180e4e86113"><td class="memItemLeft" align="right" valign="top"><a id="ac6643498383aa3e0ae285180e4e86113"></a>
 #define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_VID_2170</b>&#160;&#160;&#160;0x0110</td></tr>
 <tr class="separator:ac6643498383aa3e0ae285180e4e86113"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a4f7607b2fbd01adbbbdab96f644739c5"><td class="memItemLeft" align="right" valign="top"><a id="a4f7607b2fbd01adbbbdab96f644739c5"></a>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_VID_EEVER</b>&#160;&#160;&#160;0x1e4e</td></tr>
+<tr class="separator:a4f7607b2fbd01adbbbdab96f644739c5"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ad8642d7b863c58d3476bde8f5f0afee6"><td class="memItemLeft" align="right" valign="top"><a id="ad8642d7b863c58d3476bde8f5f0afee6"></a>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>APC_VID_EYS3D</b>&#160;&#160;&#160;0x3438</td></tr>
+<tr class="separator:ad8642d7b863c58d3476bde8f5f0afee6"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:aeff37c70f88995e9aa5f5392127298cb"><td class="memItemLeft" align="right" valign="top"><a id="aeff37c70f88995e9aa5f5392127298cb"></a>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>CT_PROPERTY_ID</b>&#160;&#160;&#160;1</td></tr>
+<tr class="separator:aeff37c70f88995e9aa5f5392127298cb"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a1b0acb3e74c6308da275ecd9a463bf8f"><td class="memItemLeft" align="right" valign="top"><a id="a1b0acb3e74c6308da275ecd9a463bf8f"></a>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>PU_PROPERTY_ID</b>&#160;&#160;&#160;3</td></tr>
+<tr class="separator:a1b0acb3e74c6308da275ecd9a463bf8f"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a99d858cca206de12d46a8310744750ea"><td class="memItemLeft" align="right" valign="top"><a id="a99d858cca206de12d46a8310744750ea"></a>
 #define&#160;</td><td class="memItemRight" valign="bottom"><b>CT_PROPERTY_ID_AUTO_EXPOSURE_MODE_CTRL</b>&#160;&#160;&#160;0</td></tr>
 <tr class="separator:a99d858cca206de12d46a8310744750ea"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -1117,6 +1132,7 @@ Enumerations</h2></td></tr>
 <tr class="separator:a4740e6d712d091586f22e8d0950ceed6"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:aec620528b46ea5dfb5c515b9680c3634"><td class="memItemLeft" align="right" valign="top"><a id="aec620528b46ea5dfb5c515b9680c3634"></a>enum &#160;</td><td class="memItemRight" valign="bottom"><b>USB_PORT_TYPE</b> { <b>USB_PORT_TYPE_2_0</b> = 2, 
 <b>USB_PORT_TYPE_3_0</b>, 
+<b>MIPI_PORT_TYPE</b>, 
 <b>USB_PORT_TYPE_UNKNOW</b>
  }</td></tr>
 <tr class="separator:aec620528b46ea5dfb5c515b9680c3634"><td class="memSeparator" colspan="2">&#160;</td></tr>

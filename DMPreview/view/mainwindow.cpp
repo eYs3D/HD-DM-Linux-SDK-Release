@@ -15,7 +15,7 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->setupUi(this);
     if (APC_OK != CEYSDDeviceManager::GetInstance()->UpdateDevice() ||
         CEYSDDeviceManager::GetInstance()->GetDeviceModels().empty()){
-        QMessageBox::critical(NULL, "Error", "EYSD Init Failed.", QMessageBox::Yes , QMessageBox::Yes);
+        QMessageBox::critical(NULL, "Error", "EYSD Init Failed.", QMessageBox::Yes, QMessageBox::Yes);
         exit(0);
     }
 
@@ -51,15 +51,15 @@ void MainWindow::UpdateListState()
     std::vector<CVideoDeviceModel *> models = CEYSDDeviceManager::GetInstance()->GetDeviceModels();
     if(models.size() != (size_t)ui->device_comboBox->count()) {
         ui->device_comboBox->clear();
-        for (size_t index = 0 ; index < models.size() ; ++index){
+        for (size_t index = 0 ; index < models.size() ; ++index) {
             ui->device_comboBox->addItem("EYSD Video Device");
         }
         ui->device_comboBox->setCurrentIndex(0);
     }
 
-    for(size_t i = 0 ; i < models.size() ; ++i){        
+    for(size_t i = 0 ; i < models.size() ; ++i) {        
         QString sState;
-        switch(models[i]->GetState()){
+        switch(models[i]->GetState()) {
             case CVideoDeviceModel::OPENED: sState = "(Opened)"; break;
             case CVideoDeviceModel::STREAMING: sState = "(Streaming)"; break;
             case CVideoDeviceModel::RECONNECTING: continue;

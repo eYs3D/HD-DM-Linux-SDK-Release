@@ -12,7 +12,7 @@ m_imuDataViewer(this)
 {
     ui->setupUi(this);
 
-    m_imuDataViewer.setVisible(true);
+    m_imuDataViewer.setVisible(false);
     ui->widget_imu_data_3d->layout()->addWidget(&m_imuDataViewer);
 
     AddUpdateTimer(10);
@@ -23,8 +23,16 @@ CVideoDeviceIMUWidget::~CVideoDeviceIMUWidget()
     delete ui;
 }
 
+void CVideoDeviceIMUWidget::Update3DModuleWidget()
+{
+    bool isEnableImu3dView = m_pIMUDataController->GetIMUModel()->GetType() == CIMUModel::IMU_9_AXIS;
+    m_imuDataViewer.setVisible(isEnableImu3dView);
+    ui->pushButton_imu_data_3d_reset->setVisible(isEnableImu3dView);
+}
+
 void CVideoDeviceIMUWidget::UpdateSelf()
 {
+    Update3DModuleWidget();
     UpdateFrameSync();
     UpdateInformation();
     UpdateIMUData();

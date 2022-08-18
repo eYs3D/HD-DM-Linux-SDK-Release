@@ -9,25 +9,14 @@ CVideoDeviceModel(pDeviceSelfInfo)
 
 int CVideoDeviceModel_8036_8052::AdjustZDTableIndex(int &nIndex)
 {
-    if (!m_pVideoDeviceController->GetPreviewOptions()->IsStreamEnable(STREAM_DEPTH) ||
-        !m_pVideoDeviceController->GetPreviewOptions()->IsStreamEnable(STREAM_COLOR)){
-        return APC_OK;
-    }
-
-    std::vector<APC_STREAM_INFO> depthStreamInfo = GetStreamInfoList(STREAM_DEPTH);
-    int nDepthIndex = m_pVideoDeviceController->GetPreviewOptions()->GetStreamIndex(STREAM_DEPTH);
-
-    std::vector<APC_STREAM_INFO> colorStreamInfo = GetStreamInfoList(STREAM_COLOR);
-    int nColorIndex = m_pVideoDeviceController->GetPreviewOptions()->GetStreamIndex(STREAM_COLOR);
-
-    if (colorStreamInfo[nColorIndex].nHeight / depthStreamInfo[nDepthIndex].nHeight == 2){
-        nIndex = 0;
-    }
-
-    return APC_OK;
+    return 0; // Currently using scale down
 }
 
+#if defined(_MIPI_CAMERA_)
+#define BIG_RESOLUTION_BYTES (2560 * 720)
+#else
 #define BIG_RESOLUTION_BYTES (2000 * 720)
+#endif
 int CVideoDeviceModel_8036_8052::StartStreamingTask()
 {
     int ret =  CVideoDeviceModel::StartStreamingTask();

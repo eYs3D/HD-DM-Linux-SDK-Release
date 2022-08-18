@@ -761,6 +761,7 @@ int RegisterSettings::DM_Quality_Register_Setting(void* hEYSD, PDEVSELINFO pDevS
 
     switch (wPID) {
     case APC_PID_8036:
+    case APC_PID_MIPI_8036:
         modelName = "EX8036";
         break;
     case APC_PID_8037:
@@ -793,11 +794,20 @@ int RegisterSettings::DM_Quality_Register_Setting(void* hEYSD, PDEVSELINFO pDevS
     case APC_PID_8059:
         modelName = "YX8059";
         break;
+    case APC_PID_8076:
+        modelName = "YX8076";
+        break;
+    case APC_PID_IRIS:
+        modelName = "DEFAULT";
+        break;
     case APC_PID_SANDRA:
         modelName = "SANDRA";
         break;
     case APC_PID_NORA:
         modelName = "NORA";
+        break;
+    case APC_PID_IVY:
+        modelName = "IVY";
         break;
     default:
         modelName = NULL;

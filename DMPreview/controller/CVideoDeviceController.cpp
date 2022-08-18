@@ -296,6 +296,12 @@ int CVideoDeviceController::DoSnapShot(bool bAsync)
 
         if (!pColorData) continue;
 
+        // Trim SN data
+        constexpr size_t kSerialBytes = 16;
+        for (int i = 0; i < kSerialBytes; ++i) {
+            depthData.depthRawBuffer[i] = 0x0;
+        }
+
         std::vector<CloudPoint> cloudPoints = m_pVideoDeviceModel->GeneratePointCloud(
                                               depthData.depthType,
                                               depthData.depthRawBuffer,

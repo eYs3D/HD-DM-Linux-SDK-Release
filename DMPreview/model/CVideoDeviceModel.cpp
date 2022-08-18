@@ -8,6 +8,7 @@
 #include "RegisterSettings.h"
 #include "CImageDataModel.h"
 #include <libudev.h>
+#include <unistd.h>
 #include "CFrameSyncManager.h"
 
 CVideoDeviceModel::CVideoDeviceModel(DEVSELINFO *pDeviceSelfInfo):
@@ -127,7 +128,7 @@ int CVideoDeviceModel::Update()
 int CVideoDeviceModel::DataVerification()
 {
     for (DeviceInfo deviceInfo : m_deviceInfo){
-        ERROR_HANDLE(deviceInfo.deviceInfomation.nChipID != 0 &&
+        ERROR_HANDLE(/* deviceInfo.deviceInfomation.nChipID != 0 && */ // 8063 did not give chipId temporarily
                      deviceInfo.deviceInfomation.wPID != 0 &&
                      deviceInfo.deviceInfomation.wVID != 0 &&
                      deviceInfo.deviceInfomation.strDevName != 0 &&
@@ -141,7 +142,9 @@ int CVideoDeviceModel::DataVerification()
         }
     }
 
-    ERROR_HANDLE(true == (USB_PORT_TYPE_UNKNOW != m_usbPortType), "Get usb port type failed!!\n");
+    if (m_usbPortType != MIPI_PORT_TYPE) {
+        ERROR_HANDLE(true == (USB_PORT_TYPE_UNKNOW != m_usbPortType), "Get usb port type failed!!\n");
+    }
 
     return APC_OK;
 }
@@ -202,7 +205,6 @@ CVideoDeviceModel::DeviceInfo CVideoDeviceModel::GetDeviceInformation(DEVSELINFO
         deviceInfo.sFWVersion = pFWVersion;
     }
 
-
     unsigned char pSerialNumber[256] = {0};
     int  nSerialNumberLength;
     RETRY_APC_API(ret, APC_GetSerialNumber(pEYSDI, pDeviceSelfInfo, pSerialNumber, 256, &nSerialNumberLength));
@@ -255,7 +257,7 @@ CVideoDeviceModel::DeviceInfo CVideoDeviceModel::GetDeviceInformation(DEVSELINFO
     return deviceInfo;
 }
 
-int  CVideoDeviceModel::InitUsbType()
+int CVideoDeviceModel::InitUsbType()
 {
     int ret;
     RETRY_APC_API(ret, APC_GetDevicePortType(CEYSDDeviceManager::GetInstance()->GetEYSD(),
@@ -733,6 +735,7 @@ CVideoDeviceModel::ZDTableInfo *CVideoDeviceModel::GetZDTableInfo()
 {
     return &m_zdTableInfo;
 }
+#define DEBUG_RECTIFY_LOG (0)
 
 int CVideoDeviceModel::GetRectifyLogData(int nDevIndex, int nRectifyLogIndex, eSPCtrl_RectLogData *pRectifyLogData, STREAM_TYPE depthType)
 {
@@ -745,6 +748,37 @@ int CVideoDeviceModel::GetRectifyLogData(int nDevIndex, int nRectifyLogIndex, eS
                                                       m_deviceSelInfo[nDevIndex],
                                                       pRectifyLogData,
                                                       nRectifyLogIndex));
+    if (DEBUG_RECTIFY_LOG) {
+        fprintf(stderr, "rectify main CamMat2 %f %f %f %f %f %f %f %f %f \n",
+                pRectifyLogData->CamMat2[0],
+                pRectifyLogData->CamMat2[1],
+                pRectifyLogData->CamMat2[2],
+                pRectifyLogData->CamMat2[3],
+                pRectifyLogData->CamMat2[4],
+                pRectifyLogData->CamMat2[5],
+                pRectifyLogData->CamMat2[6],
+                pRectifyLogData->CamMat2[7],
+                pRectifyLogData->CamMat2[8]
+        );
+        fprintf(stderr, "rectify main RotaMat %f %f %f %f %f %f %f %f %f \n",
+                pRectifyLogData->RotaMat[0],
+                pRectifyLogData->RotaMat[1],
+                pRectifyLogData->RotaMat[2],
+                pRectifyLogData->RotaMat[3],
+                pRectifyLogData->RotaMat[4],
+                pRectifyLogData->RotaMat[5],
+                pRectifyLogData->RotaMat[6],
+                pRectifyLogData->RotaMat[7],
+                pRectifyLogData->RotaMat[8]
+        );
+
+        fprintf(stderr, "rectify main TranMat %f %f %f \n",
+                pRectifyLogData->TranMat[0],
+                pRectifyLogData->TranMat[1],
+                pRectifyLogData->TranMat[2]
+        );
+    }
+
     return ret;
 }
 
@@ -934,21 +968,33 @@ int CVideoDeviceModel::OpenDevice()
     int nFPS = bColorStream ? m_pVideoDeviceController->GetPreviewOptions()->GetStreamFPS(STREAM_COLOR) :
                bDepthStream ? m_pVideoDeviceController->GetPreviewOptions()->GetStreamFPS(STREAM_DEPTH) :
                0;
+    int ret = APC_NotSupport;
 
-    int ret = APC_OpenDevice2(CEYSDDeviceManager::GetInstance()->GetEYSD(),
-                                  m_deviceSelInfo[0],
-                                  m_imageData[STREAM_COLOR].nWidth, m_imageData[STREAM_COLOR].nHeight, m_imageData[STREAM_COLOR].bMJPG,
-                                  m_imageData[STREAM_DEPTH].nWidth, m_imageData[STREAM_DEPTH].nHeight,
-                                  DEPTH_IMG_NON_TRANSFER,
-                                  true, nullptr,
-                                  &nFPS,
-                                  IMAGE_SN_SYNC);
+    if (m_usbPortType == MIPI_PORT_TYPE) {
+        ret = APC_OpenDevice(CEYSDDeviceManager::GetInstance()->GetEYSD(),
+                              m_deviceSelInfo[0],
+                              m_imageData[STREAM_COLOR].nWidth, m_imageData[STREAM_COLOR].nHeight, m_imageData[STREAM_COLOR].bMJPG,
+                              m_imageData[STREAM_DEPTH].nWidth, m_imageData[STREAM_DEPTH].nHeight,
+                              DEPTH_IMG_NON_TRANSFER,
+                              true, nullptr,
+                              &nFPS,
+                              IMAGE_SN_SYNC);
+    } else {
+        ret = APC_OpenDevice2(CEYSDDeviceManager::GetInstance()->GetEYSD(),
+                             m_deviceSelInfo[0],
+                             m_imageData[STREAM_COLOR].nWidth, m_imageData[STREAM_COLOR].nHeight, m_imageData[STREAM_COLOR].bMJPG,
+                             m_imageData[STREAM_DEPTH].nWidth, m_imageData[STREAM_DEPTH].nHeight,
+                             DEPTH_IMG_NON_TRANSFER,
+                             true, nullptr,
+                             &nFPS,
+                             IMAGE_SN_SYNC);
+    }
 
-    if(APC_OK == ret){
-        if(bColorStream){
+    if (APC_OK == ret){
+        if (bColorStream) {
             m_pVideoDeviceController->GetPreviewOptions()->SetStreamFPS(STREAM_COLOR, nFPS);
-            if(bDepthStream) m_pVideoDeviceController->GetPreviewOptions()->SetStreamFPS(STREAM_DEPTH, nFPS);
-        }else{
+            if (bDepthStream) m_pVideoDeviceController->GetPreviewOptions()->SetStreamFPS(STREAM_DEPTH, nFPS);
+        } else {
             m_pVideoDeviceController->GetPreviewOptions()->SetStreamFPS(STREAM_DEPTH, nFPS);
         }
     }
@@ -961,30 +1007,36 @@ int CVideoDeviceModel::StartStreamingTask()
     bool bColorStream = m_pVideoDeviceController->GetPreviewOptions()->IsStreamEnable(STREAM_COLOR);
     bool bDepthStream = m_pVideoDeviceController->GetPreviewOptions()->IsStreamEnable(STREAM_DEPTH);
 
-    if (bColorStream){
-        CreateStreamTask(STREAM_COLOR);
-    }
-
-    if (bDepthStream){
-        auto AdjustRealDepthWidth = [](int &nWidth, APCImageType::Value type){
-            if (APCImageType::DEPTH_8BITS == type){
-                nWidth *= 2;
-            }
-        };
-        AdjustRealDepthWidth(m_imageData[STREAM_DEPTH].nWidth, m_imageData[STREAM_DEPTH].imageDataType);
-
-        CreateStreamTask(STREAM_DEPTH);
+    if (m_usbPortType == MIPI_PORT_TYPE) {
+        if (bColorStream && bDepthStream) {
+            CreateStreamTask(STREAM_BOTH);
+        } else if (bColorStream) {
+            CreateStreamTask(STREAM_COLOR);
+        }
+    } else {
+        if (bColorStream){
+            CreateStreamTask(STREAM_COLOR);
+        }
+        
+        if (bDepthStream){
+            auto AdjustRealDepthWidth = [](int &nWidth, APCImageType::Value type){
+                if (APCImageType::DEPTH_8BITS == type){
+                    nWidth *= 2;
+                }
+            };
+            AdjustRealDepthWidth(m_imageData[STREAM_DEPTH].nWidth, m_imageData[STREAM_DEPTH].imageDataType);
+        
+            CreateStreamTask(STREAM_DEPTH);
+        }
     }
 
     if (InterleaveModeSupport()){
-
         if (IsInterleaveMode()){
             m_bPrevLowLightValue = m_cameraPropertyModel[0]->GetCameraProperty(CCameraPropertyModel::LOW_LIGHT_COMPENSATION).nValue;
             m_cameraPropertyModel[0]->SetCameraPropertyValue(CCameraPropertyModel::LOW_LIGHT_COMPENSATION, 0);
             m_cameraPropertyModel[0]->SetCameraPropertySupport(CCameraPropertyModel::LOW_LIGHT_COMPENSATION, false);
         }
     }
-
 
     return APC_OK;
 }
@@ -1128,6 +1180,9 @@ int CVideoDeviceModel::DoImageGrabber(CTaskInfo::TYPE type)
             streamType = STREAM_THERMAL;
             break;
         //-[Thermal device]
+        case CTaskInfo::GRABBER_VIDEO_IMAGE_COLOR_WITH_DEPTH:
+            streamType = STREAM_BOTH;
+            break;
         default:
             return APC_NotSupport;
     }
@@ -1145,15 +1200,74 @@ int CVideoDeviceModel::DoImageGrabber(CTaskInfo::TYPE type)
 int CVideoDeviceModel::GetImage(STREAM_TYPE type)
 {
     int ret;
+
     switch (type){
         case STREAM_COLOR:
-            ret = GetColorImage();
+            if (m_usbPortType == MIPI_PORT_TYPE) {
+			    ret = Get2Image(type);
+            } else {
+                ret = GetColorImage();
+            }
             break;
         case STREAM_DEPTH:
             ret = GetDepthImage();
             break;
+        case STREAM_BOTH:
+            ret = Get2Image(type);
+            break;
         default:
             return APC_NotSupport;
+    }
+
+    return ret;
+}
+
+#if 0
+int max_calc_frame_count = 30;
+FILE *color_fp = NULL;
+#endif
+int CVideoDeviceModel::Get2Image(STREAM_TYPE type)
+{
+    QMutexLocker locker(&m_streamMutex[STREAM_COLOR]);
+    unsigned long int nColorImageSize = 0, nDepthImageSize = 0;
+    int nSerial = EOF;
+
+    int ret = APC_Get2Image(CEYSDDeviceManager::GetInstance()->GetEYSD(),
+							m_deviceSelInfo[0],
+                            &m_imageData[STREAM_COLOR].imageBuffer[0],
+                            &m_imageData[STREAM_DEPTH].imageBuffer[0],
+                            &nColorImageSize,
+                            &nDepthImageSize,
+                            &nSerial,
+                            &nSerial,
+                            m_imageData[STREAM_COLOR].depthDataType);
+
+    if (APC_OK != ret) {
+        printf("[%s][%d] Call APC_Get2Image() Error, %d\n", __func__, __LINE__, ret);
+        return ret;
+    }
+
+#if 0
+    printf("[%s][%d]Save image buffer as file...\n",  __func__, __LINE__);
+    if (max_calc_frame_count == 30) {
+        color_fp = fopen("DMPreview.yuv", "wb");
+        fseek(color_fp, 0, SEEK_SET);
+    }
+    if (max_calc_frame_count > 0) {
+        fwrite((uint8_t*)&m_imageData[STREAM_COLOR].imageBuffer[0], sizeof(uint8_t), nColorImageSize, color_fp);
+        max_calc_frame_count--;
+    } else if (max_calc_frame_count == 0) {
+        fclose(color_fp);
+        max_calc_frame_count--;
+    }
+#endif
+
+    ret = ProcessImage(STREAM_COLOR, nColorImageSize, nSerial);
+    if (APC_OK != ret) return ret;
+
+    if (type == STREAM_BOTH) { 
+        ret = ProcessImage(STREAM_DEPTH, nDepthImageSize, nSerial);
+        if (APC_OK != ret) return ret;
     }
 
     return ret;
@@ -1166,13 +1280,23 @@ int CVideoDeviceModel::GetColorImage()
     int nSerial = EOF;
 #if 1
     int ret = APC_GetColorImage(CEYSDDeviceManager::GetInstance()->GetEYSD(),
-                                    m_deviceSelInfo[0],
-                                    &m_imageData[STREAM_COLOR].imageBuffer[0],
-                                    &nImageSize,
-                                    &nSerial,
-                                    m_imageData[STREAM_COLOR].depthDataType);
+                                m_deviceSelInfo[0],
+                                &m_imageData[STREAM_COLOR].imageBuffer[0],
+                                &nImageSize,
+                                &nSerial,
+                                m_imageData[STREAM_COLOR].depthDataType);
 
-    if (APC_OK != ret) return ret;
+    if (APC_OK != ret) {
+        if (ret == APC_DEVICE_TIMEOUT) {
+        /*
+                When return the APC_DEVICE_TIMEOUT from SDK, this mean the device may busy state.
+                So, we must let process entry the sleep state. Otherwise, the CPU usage will very high.
+            */
+            printf("[%s][%d]Getting image is timeout!!\n",  __func__, __LINE__);
+            usleep(1 * 1000);
+        }
+        return ret;
+    }
 #else
     int64_t cur_tv_sec = 0;
     int64_t cur_tv_usec = 0;
@@ -1188,7 +1312,17 @@ int CVideoDeviceModel::GetColorImage()
                                              &nSerial,
                                              m_imageData[STREAM_COLOR].depthDataType,
                                              &cur_tv_sec, &cur_tv_usec);
-    if (APC_OK != ret) return ret;
+    if (APC_OK != ret)  {
+        if (ret == APC_DEVICE_TIMEOUT) {
+            /*
+                When return the APC_DEVICE_TIMEOUT from SDK, this mean the device may busy state.
+                So, we must let process entry the sleep state. Otherwise, the CPU usage will very high.
+            */
+            printf("[%s][%d]Getting image is timeout!!\n",  __func__, __LINE__);
+            usleep(1 * 1000);
+        }
+        return ret;
+    }
 
     if (frame_rate_count == 0) {
         prv_tv_sec  = cur_tv_sec;
@@ -1228,13 +1362,23 @@ int CVideoDeviceModel::GetDepthImage()
     int nSerial = EOF;
 #if 1
     int ret = APC_GetDepthImage(CEYSDDeviceManager::GetInstance()->GetEYSD(),
-                                    m_deviceSelInfo[0],
-                                    &m_imageData[STREAM_DEPTH].imageBuffer[0],
-                                    &nImageSize,
-                                    &nSerial,
-                                    m_imageData[STREAM_DEPTH].depthDataType);
+                                m_deviceSelInfo[0],
+                                &m_imageData[STREAM_DEPTH].imageBuffer[0],
+                                &nImageSize,
+                                &nSerial,
+                                m_imageData[STREAM_DEPTH].depthDataType);
 
-    if (APC_OK != ret) return ret;
+    if (APC_OK != ret) {
+        if (ret == APC_DEVICE_TIMEOUT) {
+        /*
+                When return the APC_DEVICE_TIMEOUT from SDK, this mean the device may busy state.
+                So, we must let process entry the sleep state. Otherwise, the CPU usage will very high.
+            */
+            printf("[%s][%d]Getting image is timeout!!\n",  __func__, __LINE__);
+            usleep(1 * 1000);
+        }
+        return ret;
+    }
 #else
     int64_t cur_tv_sec = 0;
     int64_t cur_tv_usec = 0;
@@ -1250,7 +1394,17 @@ int CVideoDeviceModel::GetDepthImage()
                                             &nSerial,
                                             m_imageData[STREAM_DEPTH].depthDataType,
                                             &cur_tv_sec, &cur_tv_usec);
-    if (APC_OK != ret) return ret;
+    if (APC_OK != ret)  {
+        if (ret == APC_DEVICE_TIMEOUT) {
+            /*
+                When return the APC_DEVICE_TIMEOUT from SDK, this mean the device may busy state.
+                So, we must let process entry the sleep state. Otherwise, the CPU usage will very high.
+            */
+            printf("[%s][%d]Getting image is timeout!!\n",  __func__, __LINE__);
+            usleep(1 * 1000);
+        }
+        return ret;
+    }
 
     if (frame_rate_count == 0) {
         prv_tv_sec  = cur_tv_sec;
@@ -1351,7 +1505,10 @@ int CVideoDeviceModel::ProcessImage(STREAM_TYPE streamType,
 
 int CVideoDeviceModel::UpdateFrameGrabberData(STREAM_TYPE streamType)
 {
-    bool bIsDpethOutput = PreviewOptions::POINT_CLOUDE_VIEWER_OUTPUT_DEPTH == m_pVideoDeviceController->GetPreviewOptions()->GetPointCloudViewOutputFormat();
+    const bool bIsDpethOutput = PreviewOptions::POINT_CLOUDE_VIEWER_OUTPUT_DEPTH == m_pVideoDeviceController->GetPreviewOptions()->GetPointCloudViewOutputFormat();
+    const bool bIsRGBStreamEnabled = m_pVideoDeviceController->GetPreviewOptions()->IsStreamEnable(STREAM_COLOR) ||
+            m_pVideoDeviceController->GetPreviewOptions()->IsStreamEnable(STREAM_KOLOR);
+
     switch(streamType){
         case STREAM_COLOR:
         case STREAM_KOLOR:
@@ -1392,6 +1549,7 @@ int CVideoDeviceModel::UpdateFrameGrabberData(STREAM_TYPE streamType)
             break;
         }
         case STREAM_DEPTH:
+        case STREAM_BOTH:
         {
             CImageDataModel *pDepthData = GetPreivewImageDataModel(STREAM_DEPTH);
             if (!pDepthData) return APC_NullPtr;
@@ -1401,6 +1559,15 @@ int CVideoDeviceModel::UpdateFrameGrabberData(STREAM_TYPE streamType)
             m_pFrameGrabber->SetFrameFormat(FrameGrabber::FRAME_POOL_INDEX_DEPTH,
                                             pDepthData->GetWidth(), pDepthData->GetHeight(),
                                             nBytesPerPixelDepth);
+            if (bIsDpethOutput && !bIsRGBStreamEnabled) { // Only Depth without doing case STREAM_COLOR
+                m_pFrameGrabber->SetFrameFormat(FrameGrabber::FRAME_POOL_INDEX_COLOR,
+                                                pDepthData->GetWidth(), pDepthData->GetHeight(),
+                                                3);
+                m_pFrameGrabber->UpdateFrameData(FrameGrabber::FRAME_POOL_INDEX_COLOR,
+                                                 pDepthData->GetSerialNumber(),
+                                                 &pDepthData->GetRGBData()[0],
+                                                 pDepthData->GetRGBData().size());
+            }
             m_pFrameGrabber->UpdateFrameData(FrameGrabber::FRAME_POOL_INDEX_DEPTH,
                                              pDepthData->GetSerialNumber(),
                                              &pDepthData->GetRawData()[0],
@@ -1431,6 +1598,7 @@ int CVideoDeviceModel::CreateStreamTask(STREAM_TYPE type)
         //+[Thermal device]
         case STREAM_THERMAL: taskType = CTaskInfo::GRABBER_VIDEO_IMAGE_THERMAL; break;
         //-[Thermal device]
+        case STREAM_BOTH: taskType = CTaskInfo::GRABBER_VIDEO_IMAGE_COLOR_WITH_DEPTH; break;
         default: return APC_NotSupport;
     }
 

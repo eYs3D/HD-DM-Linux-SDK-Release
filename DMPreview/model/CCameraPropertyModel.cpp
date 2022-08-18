@@ -3,6 +3,7 @@
 #include "CEYSDDeviceManager.h"
 #include "eSPDI.h"
 #include <math.h>
+#include <eSPDI_def.h>
 
 CCameraPropertyModel::CCameraPropertyModel(QString sDeviceName,
                                            CVideoDeviceModel *pVideoDeviceModel,
@@ -42,7 +43,6 @@ int CCameraPropertyModel::Reset()
 
 int CCameraPropertyModel::InitCameraProperty()
 {
-
     for (int i = 0 ; i < CAMERA_PROPERTY_COUNT ; i++){
         int nID;
         bool bIsCTProperty;
@@ -55,25 +55,29 @@ int CCameraPropertyModel::InitCameraProperty()
 
         void *pEYSDI = CEYSDDeviceManager::GetInstance()->GetEYSD();
         int ret;
-        if (bIsCTProperty){
+        USB_PORT_TYPE usbPortType;
+        if (bIsCTProperty) {
             RETRY_APC_API(ret, APC_GetCTRangeAndStep(pEYSDI, m_pDeviceSelfInfo, nID,
                                                            &item.nMax, &item.nMin, &item.nStep, &item.nDefault, &item.nFlags));
-        }else{
+        } else {
             RETRY_APC_API(ret, APC_GetPURangeAndStep(pEYSDI, m_pDeviceSelfInfo, nID,
                                                            &item.nMax, &item.nMin, &item.nStep, &item.nDefault, &item.nFlags));
         }
+        RETRY_APC_API(ret, APC_GetDevicePortType(pEYSDI, m_pDeviceSelfInfo, &usbPortType));
 
         if (APC_OK != ret) continue;
 
-        if(EXPOSURE_TIME == (CAMERA_PROPERTY)i){
-            item.nMax = log2(item.nMax / 10000.0);
-            item.nMin = log2(item.nMin  / 10000.0);
-            item.nDefault = log2(item.nDefault / 10000.0);
+        if (usbPortType == MIPI_PORT_TYPE) {
+            DataToInfo((CAMERA_PROPERTY)i, item.nMax);
+            DataToInfo((CAMERA_PROPERTY)i, item.nMin);
+            DataToInfo((CAMERA_PROPERTY)i, item.nDefault);
+        } else {
+            if(EXPOSURE_TIME == (CAMERA_PROPERTY)i){
+                item.nMax = log2(item.nMax / 10000.0);
+                item.nMin = log2(item.nMin  / 10000.0);
+                item.nDefault = log2(item.nDefault / 10000.0);
+            }
         }
-
-        DataToInfo((CAMERA_PROPERTY)i, item.nMax);
-        DataToInfo((CAMERA_PROPERTY)i, item.nMin);
-        DataToInfo((CAMERA_PROPERTY)i, item.nDefault);
 
         item.bValid = true;
 
@@ -101,11 +105,9 @@ int CCameraPropertyModel::UpdateCameraProperty(CAMERA_PROPERTY type)
     int ret;
     long int nValue;
     if (bIsCTProperty){
-        RETRY_APC_API(ret, APC_GetCTPropVal(pEYSDI, m_pDeviceSelfInfo, nID,
-                                                  &nValue));
-    }else{
-        RETRY_APC_API(ret, APC_GetPUPropVal(pEYSDI, m_pDeviceSelfInfo, nID,
-                                                  &nValue));
+        RETRY_APC_API(ret, APC_GetCTPropVal(pEYSDI, m_pDeviceSelfInfo, nID, &nValue));
+    } else {
+        RETRY_APC_API(ret, APC_GetPUPropVal(pEYSDI, m_pDeviceSelfInfo, nID, &nValue));
     }
 
     if(APC_OK == ret){
@@ -157,19 +159,28 @@ int CCameraPropertyModel::SetCameraPropertyValue(CAMERA_PROPERTY type, int nValu
     int nID;
     bool bIsCTProperty;
     GetCameraPropertyFlag(type, nID, bIsCTProperty);
+    long int nGetValue;
     InfoToData(type, nValue);
-
     void *pEYSDI = CEYSDDeviceManager::GetInstance()->GetEYSD();
-
     int ret;
+
+    printf("[%s][%d][%s] Set [nID, nValue] = [%d, %d(0x%08x)]\n", __func__, __LINE__, \
+        (bIsCTProperty)?"CT":"PU", nID, nValue, (unsigned long)nValue);
+
     if (bIsCTProperty){
         RETRY_APC_API(ret, APC_SetCTPropVal(pEYSDI, m_pDeviceSelfInfo, nID, nValue));
     }else{
         RETRY_APC_API(ret, APC_SetPUPropVal(pEYSDI, m_pDeviceSelfInfo, nID, nValue));
     }
 
-    printf("[%s][%d][%s][nID, nValue] = [%d, %d(0x%08x)]\n", __func__, __LINE__, \
-        (bIsCTProperty)?"CT":"PU", nID, nValue, (unsigned long)nValue);
+    if (bIsCTProperty){
+        RETRY_APC_API(ret, APC_GetCTPropVal(pEYSDI, m_pDeviceSelfInfo, nID, &nGetValue));
+    }else{
+        RETRY_APC_API(ret, APC_GetPUPropVal(pEYSDI, m_pDeviceSelfInfo, nID, &nGetValue));
+    }
+
+    printf("[%s][%d][%s] Get [nID, nValue] = [%d, %d(0x%08x)]\n", __func__, __LINE__, \
+        (bIsCTProperty)?"CT":"PU", nID, nGetValue, nGetValue);
 
     if (AUTO_EXPOSURE == type){
         SetCameraPropertyValue(EXPOSURE_TIME, m_cameraPropertyItems[EXPOSURE_TIME].nValue);
@@ -216,9 +227,17 @@ void CCameraPropertyModel::GetCameraPropertyFlag(CAMERA_PROPERTY type, int &nID,
 
 void CCameraPropertyModel::DataToInfo(CAMERA_PROPERTY type, int &nValue)
 {
+    void *pEYSDI = CEYSDDeviceManager::GetInstance()->GetEYSD();
+    int ret;
+    USB_PORT_TYPE usbPortType;
+    RETRY_APC_API(ret, APC_GetDevicePortType(pEYSDI, m_pDeviceSelfInfo, &usbPortType));
     switch(type){
         case AUTO_EXPOSURE:
-            nValue = (nValue == 3) ? 1 : 0;
+            if (usbPortType == MIPI_PORT_TYPE) {
+			    nValue = (nValue == AE_MOD_APERTURE_PRIORITY_MODE) ? 1 : 0; 
+            } else {
+                nValue = (nValue == 3) ? 1 : 0;
+            }
             break;
         case LIGHT_SOURCE:
             nValue = (1 == nValue) ? VALUE_50HZ : VALUE_60HZ;
@@ -234,9 +253,18 @@ void CCameraPropertyModel::DataToInfo(CAMERA_PROPERTY type, int &nValue)
 
 void CCameraPropertyModel::InfoToData(CAMERA_PROPERTY type, int &nValue)
 {
+    void *pEYSDI = CEYSDDeviceManager::GetInstance()->GetEYSD();
+    int ret;
+    USB_PORT_TYPE usbPortType;
+    RETRY_APC_API(ret, APC_GetDevicePortType(pEYSDI, m_pDeviceSelfInfo, &usbPortType));
     switch(type){
         case AUTO_EXPOSURE:
-            nValue = (1 == nValue) ? 3 : 1;
+            if (usbPortType == MIPI_PORT_TYPE) {
+    			nValue = (1 == nValue) ? AE_MOD_APERTURE_PRIORITY_MODE : AE_MOD_MANUAL_MODE;
+                
+            } else {
+                nValue = (1 == nValue) ? 3 : 1;
+            }
             break;
         case LIGHT_SOURCE:
             nValue = (VALUE_50HZ == nValue) ? 1 : 2;

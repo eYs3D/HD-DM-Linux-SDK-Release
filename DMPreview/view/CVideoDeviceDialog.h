@@ -50,6 +50,7 @@ public:
 
 private slots:
     void on_pushButton_rectify_read_clicked();
+    void on_pushButton_temperature_clicked();
 
 private:
 
@@ -64,6 +65,7 @@ private:
     void UpdateModuleInformation();
     void UpdateRectifyLog();
     void RelocateDialogPosition();
+    void UpdateThermalUI();
 
 private:
     CVideoDeviceController *m_pVideoDeviceController = nullptr;

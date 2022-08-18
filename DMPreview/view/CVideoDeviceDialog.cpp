@@ -333,6 +333,7 @@ void CVideoDeviceDialog::UpdateTabView()
     UpdateIMU();
     UpdateAudio();
     UpdateRegister();
+    UpdateThermalUI();
 }
 
 void CVideoDeviceDialog::UpdatePreview()
@@ -395,6 +396,26 @@ void CVideoDeviceDialog::UpdateDepthFilter()
     m_pDepthFilterWidget = new CVideoDeviceDepthFilterWidget(m_pVideoDeviceController,
                                                              this);
     ui->tabWidget->addTab(m_pDepthFilterWidget, "Depth Filter");
+}
+
+void CVideoDeviceDialog::UpdateThermalUI() {
+    float f = 0.0f;
+    if (APC_NotSupport == m_pVideoDeviceController->GetVideoDeviceModel()->GetCurrentTemperature(f)) {
+        ui->groupBox_temperature->hide();
+    } else {
+        qDebug() << "This module support read thermal sensor";
+    }
+}
+
+void CVideoDeviceDialog::on_pushButton_temperature_clicked() {
+    QString temperatureString;
+    float deviceTemperature = 0.0f;
+
+    m_pVideoDeviceController->GetVideoDeviceModel()->GetCurrentTemperature(deviceTemperature);
+    temperatureString = QString(std::to_string(deviceTemperature).c_str());
+    temperatureString.append("°C");
+
+    ui->label_temperature->setText(temperatureString);
 }
 
 void CVideoDeviceDialog::on_pushButton_rectify_read_clicked()

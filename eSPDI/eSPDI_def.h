@@ -13,6 +13,20 @@
 #ifndef LIB_ESPDI_DEF_H
 #define LIB_ESPDI_DEF_H
 
+#ifdef TINY_VERSION
+#define MAX_DEV_COUNT 6
+#else
+#ifdef X86_CONSOLE
+#define MAX_DEV_COUNT 200
+#else
+#define MAX_DEV_COUNT 20//200 //EthanWu-20200609: modify to 20
+#endif
+#endif
+//Composite devices +  Simple devices
+#define MAX_TOTAL_DEV_CONT          (MAX_DEV_COUNT * 2 + MAX_DEV_COUNT)
+//The start index of Simpe device in g_pVideoDev
+#define SIMPLE_DEV_START_IDX        (MAX_TOTAL_DEV_CONT - (MAX_DEV_COUNT))
+
 //define Error Code by Wolf 2015/08/07 +
 #define  APC_OK                        0
 #define  APC_NoDevice                 -1
@@ -50,7 +64,7 @@
 #define  APC_DEVICE_BUSY		     -33
 #define  APC_DEVICE_TIMEOUT		     -34
 #define  APC_IO_SELECT_EINTR	     -35
-#define APC_IO_SELECT_ERROR          -36
+#define  APC_IO_SELECT_ERROR         -36
 
 // for 3D Scanner +    
 #define  APC_ILLEGAL_ANGLE                -40
@@ -166,65 +180,65 @@ typedef enum {
 
 //Check the doc 'video_mode_setting_rul_0.4b.pdf' in http://redmine.etron.com.tw/redmine/issues/6408
 // For Depth Data Type
-#define APC_DEPTH_DATA_OFF_RAW			0 /* raw (depth off, only raw color) */
-#define APC_DEPTH_DATA_DEFAULT			APC_DEPTH_DATA_OFF_RAW /* raw (depth off, only gray raw color) */
-#define APC_DEPTH_DATA_8_BITS				1 /* rectify, 1 byte per pixel */
-#define APC_DEPTH_DATA_14_BITS				2 /* rectify, 2 byte per pixel */
-#define APC_DEPTH_DATA_8_BITS_x80			3 /* rectify, 2 byte per pixel but using 1 byte only */
-#define APC_DEPTH_DATA_11_BITS				4 /* rectify, 2 byte per pixel but using 11 bit only */
-#define APC_DEPTH_DATA_OFF_RECTIFY		5 /* rectify (depth off, only rectify raw color) */
-#define APC_DEPTH_DATA_8_BITS_RAW			6 /* raw */
-#define APC_DEPTH_DATA_14_BITS_RAW		7 /* raw */
-#define APC_DEPTH_DATA_8_BITS_x80_RAW	8 /* raw */
-#define APC_DEPTH_DATA_11_BITS_RAW		9 /* raw */
-#define APC_DEPTH_DATA_14_BITS_COMBINED_RECTIFY     11// 
-#define APC_DEPTH_DATA_11_BITS_COMBINED_RECTIFY     13// multi-baseline
-#define APC_DEPTH_DATA_OFF_BAYER_RAW     14
+#define APC_DEPTH_DATA_OFF_RAW			                        0 /* raw (depth off, only raw color) */
+#define APC_DEPTH_DATA_DEFAULT			                        APC_DEPTH_DATA_OFF_RAW /* raw (depth off, only gray raw color) */
+#define APC_DEPTH_DATA_8_BITS				                    1 /* rectify, 1 byte per pixel */
+#define APC_DEPTH_DATA_14_BITS				                    2 /* rectify, 2 byte per pixel */
+#define APC_DEPTH_DATA_8_BITS_x80			                    3 /* rectify, 2 byte per pixel but using 1 byte only */
+#define APC_DEPTH_DATA_11_BITS				                    4 /* rectify, 2 byte per pixel but using 11 bit only */
+#define APC_DEPTH_DATA_OFF_RECTIFY		                        5 /* rectify (depth off, only rectify raw color) */
+#define APC_DEPTH_DATA_8_BITS_RAW			                    6 /* raw */
+#define APC_DEPTH_DATA_14_BITS_RAW		                        7 /* raw */
+#define APC_DEPTH_DATA_8_BITS_x80_RAW	                        8 /* raw */
+#define APC_DEPTH_DATA_11_BITS_RAW		                        9 /* raw */
+#define APC_DEPTH_DATA_14_BITS_COMBINED_RECTIFY                 11// 
+#define APC_DEPTH_DATA_11_BITS_COMBINED_RECTIFY                 13// multi-baseline
+#define APC_DEPTH_DATA_OFF_BAYER_RAW                            14
 // For Interleave mode depth data type
-#define APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET 16
-#define APC_DEPTH_DATA_ILM_OFF_RAW			APC_DEPTH_DATA_OFF_RAW + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET /* raw (depth off, only raw color) */
-#define APC_DEPTH_DATA_ILM_DEFAULT			APC_DEPTH_DATA_DEFAULT + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET /* raw (depth off, only raw color) */
-#define APC_DEPTH_DATA_ILM_8_BITS			APC_DEPTH_DATA_8_BITS + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET /* rectify, 1 byte per pixel */
-#define APC_DEPTH_DATA_ILM_14_BITS			APC_DEPTH_DATA_14_BITS + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET /* rectify, 2 byte per pixel */
-#define APC_DEPTH_DATA_ILM_8_BITS_x80		APC_DEPTH_DATA_8_BITS_x80 + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET /* rectify, 2 byte per pixel but using 1 byte only */
-#define APC_DEPTH_DATA_ILM_11_BITS			APC_DEPTH_DATA_11_BITS + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET /* rectify, 2 byte per pixel but using 11 bit only */
-#define APC_DEPTH_DATA_ILM_OFF_RECTIFY		APC_DEPTH_DATA_OFF_RECTIFY + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET /* rectify (depth off, only rectify color) */
-#define APC_DEPTH_DATA_ILM_8_BITS_RAW		APC_DEPTH_DATA_8_BITS_RAW + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET /* raw */
-#define APC_DEPTH_DATA_ILM_14_BITS_RAW		APC_DEPTH_DATA_14_BITS_RAW + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET /* raw */
-#define APC_DEPTH_DATA_ILM_8_BITS_x80_RAW	APC_DEPTH_DATA_8_BITS_x80_RAW + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET /* raw */
-#define APC_DEPTH_DATA_ILM_11_BITS_RAW		APC_DEPTH_DATA_11_BITS_RAW + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET /* raw */
-#define APC_DEPTH_DATA_ILM_14_BITS_COMBINED_RECTIFY     APC_DEPTH_DATA_14_BITS_COMBINED_RECTIFY + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET//
-#define APC_DEPTH_DATA_ILM_11_BITS_COMBINED_RECTIFY     APC_DEPTH_DATA_11_BITS_COMBINED_RECTIFY + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET// multi-baseline
+#define APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET                   16
+#define APC_DEPTH_DATA_ILM_OFF_RAW			                    (APC_DEPTH_DATA_OFF_RAW + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* raw (depth off, only raw color) */
+#define APC_DEPTH_DATA_ILM_DEFAULT			                    (APC_DEPTH_DATA_DEFAULT + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* raw (depth off, only raw color) */
+#define APC_DEPTH_DATA_ILM_8_BITS			                    (APC_DEPTH_DATA_8_BITS + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* rectify, 1 byte per pixel */
+#define APC_DEPTH_DATA_ILM_14_BITS			                    (APC_DEPTH_DATA_14_BITS + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* rectify, 2 byte per pixel */
+#define APC_DEPTH_DATA_ILM_8_BITS_x80		                    (APC_DEPTH_DATA_8_BITS_x80 + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* rectify, 2 byte per pixel but using 1 byte only */
+#define APC_DEPTH_DATA_ILM_11_BITS			                    (APC_DEPTH_DATA_11_BITS + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* rectify, 2 byte per pixel but using 11 bit only */
+#define APC_DEPTH_DATA_ILM_OFF_RECTIFY		                    (APC_DEPTH_DATA_OFF_RECTIFY + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* rectify (depth off, only rectify color) */
+#define APC_DEPTH_DATA_ILM_8_BITS_RAW		                    (APC_DEPTH_DATA_8_BITS_RAW + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* raw */
+#define APC_DEPTH_DATA_ILM_14_BITS_RAW		                    (APC_DEPTH_DATA_14_BITS_RAW + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* raw */
+#define APC_DEPTH_DATA_ILM_8_BITS_x80_RAW	                    (APC_DEPTH_DATA_8_BITS_x80_RAW + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* raw */
+#define APC_DEPTH_DATA_ILM_11_BITS_RAW		                    (APC_DEPTH_DATA_11_BITS_RAW + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* raw */
+#define APC_DEPTH_DATA_ILM_14_BITS_COMBINED_RECTIFY             (APC_DEPTH_DATA_14_BITS_COMBINED_RECTIFY + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET)//
+#define APC_DEPTH_DATA_ILM_11_BITS_COMBINED_RECTIFY             (APC_DEPTH_DATA_11_BITS_COMBINED_RECTIFY + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET)// multi-baseline
  
-#define APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET 32
-#define APC_DEPTH_DATA_SCALE_DOWN_OFF_RAW			    (APC_DEPTH_DATA_OFF_RAW + APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET)/* raw (depth off, only raw color) */
-#define APC_DEPTH_DATA_SCALE_DOWN_DEFAULT			    (APC_DEPTH_DATA_DEFAULT + APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET)  /* raw (depth off, only raw color) */
-#define APC_DEPTH_DATA_SCALE_DOWN_8_BITS				(APC_DEPTH_DATA_8_BITS + APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET)/* rectify, 1 byte per pixel */
-#define APC_DEPTH_DATA_SCALE_DOWN_14_BITS				(APC_DEPTH_DATA_14_BITS + APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET) /* rectify, 2 byte per pixel */
-#define APC_DEPTH_DATA_SCALE_DOWN_8_BITS_x80			(APC_DEPTH_DATA_8_BITS_x80 + APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET) /* rectify, 2 byte per pixel but using 1 byte only */
-#define APC_DEPTH_DATA_SCALE_DOWN_11_BITS				(APC_DEPTH_DATA_11_BITS + APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET)/* rectify, 2 byte per pixel but using 11 bit only */
-#define APC_DEPTH_DATA_SCALE_DOWN_OFF_RECTIFY		    (APC_DEPTH_DATA_OFF_RECTIFY + APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET) /* Rule 0.4b  Reserved unused in any firmware*/
-#define APC_DEPTH_DATA_SCALE_DOWN_8_BITS_RAW			(APC_DEPTH_DATA_8_BITS_RAW + APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET) /* raw */
-#define APC_DEPTH_DATA_SCALE_DOWN_14_BITS_RAW		    (APC_DEPTH_DATA_14_BITS_RAW + APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET) /* raw */
-#define APC_DEPTH_DATA_SCALE_DOWN_8_BITS_x80_RAW	    (APC_DEPTH_DATA_8_BITS_x80_RAW + APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET) /* raw */
-#define APC_DEPTH_DATA_SCALE_DOWN_11_BITS_RAW		    (APC_DEPTH_DATA_11_BITS_RAW + APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET) /* raw */
-#define APC_DEPTH_DATA_SCALE_DOWN_14_BITS_COMBINED_RECTIFY     (APC_DEPTH_DATA_14_BITS_COMBINED_RECTIFY + APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET) /* Rule 0.4b Reserved unused in any firmware*/
-#define APC_DEPTH_DATA_SCALE_DOWN_11_BITS_COMBINED_RECTIFY     (APC_DEPTH_DATA_11_BITS_COMBINED_RECTIFY + APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET) /* Rule 0.4b Reserved unused in any firmware*/
+#define APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET                   32
+#define APC_DEPTH_DATA_SCALE_DOWN_OFF_RAW			            (APC_DEPTH_DATA_OFF_RAW + APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET)/* raw (depth off, only raw color) */
+#define APC_DEPTH_DATA_SCALE_DOWN_DEFAULT			            (APC_DEPTH_DATA_DEFAULT + APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET)  /* raw (depth off, only raw color) */
+#define APC_DEPTH_DATA_SCALE_DOWN_8_BITS				        (APC_DEPTH_DATA_8_BITS + APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET)/* rectify, 1 byte per pixel */
+#define APC_DEPTH_DATA_SCALE_DOWN_14_BITS				        (APC_DEPTH_DATA_14_BITS + APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET) /* rectify, 2 byte per pixel */
+#define APC_DEPTH_DATA_SCALE_DOWN_8_BITS_x80			        (APC_DEPTH_DATA_8_BITS_x80 + APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET) /* rectify, 2 byte per pixel but using 1 byte only */
+#define APC_DEPTH_DATA_SCALE_DOWN_11_BITS				        (APC_DEPTH_DATA_11_BITS + APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET)/* rectify, 2 byte per pixel but using 11 bit only */
+#define APC_DEPTH_DATA_SCALE_DOWN_OFF_RECTIFY		            (APC_DEPTH_DATA_OFF_RECTIFY + APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET) /* Rule 0.4b  Reserved unused in any firmware*/
+#define APC_DEPTH_DATA_SCALE_DOWN_8_BITS_RAW			        (APC_DEPTH_DATA_8_BITS_RAW + APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET) /* raw */
+#define APC_DEPTH_DATA_SCALE_DOWN_14_BITS_RAW		            (APC_DEPTH_DATA_14_BITS_RAW + APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET) /* raw */
+#define APC_DEPTH_DATA_SCALE_DOWN_8_BITS_x80_RAW	            (APC_DEPTH_DATA_8_BITS_x80_RAW + APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET) /* raw */
+#define APC_DEPTH_DATA_SCALE_DOWN_11_BITS_RAW		            (APC_DEPTH_DATA_11_BITS_RAW + APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET) /* raw */
+#define APC_DEPTH_DATA_SCALE_DOWN_14_BITS_COMBINED_RECTIFY      (APC_DEPTH_DATA_14_BITS_COMBINED_RECTIFY + APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET) /* Rule 0.4b Reserved unused in any firmware*/
+#define APC_DEPTH_DATA_SCALE_DOWN_11_BITS_COMBINED_RECTIFY      (APC_DEPTH_DATA_11_BITS_COMBINED_RECTIFY + APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET) /* Rule 0.4b Reserved unused in any firmware*/
 
 // For Interleave mode depth data type
-#define APC_DEPTH_DATA_SCALE_DOWN_ILM_OFF_RAW			(APC_DEPTH_DATA_SCALE_DOWN_OFF_RAW + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* raw (depth off, only raw color) */
-#define APC_DEPTH_DATA_SCALE_DOWN_ILM_DEFAULT			(APC_DEPTH_DATA_SCALE_DOWN_DEFAULT + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* raw (depth off, only raw color) */
-#define APC_DEPTH_DATA_SCALE_DOWN_ILM_8_BITS			(APC_DEPTH_DATA_SCALE_DOWN_8_BITS + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* rectify, 1 byte per pixel */
-#define APC_DEPTH_DATA_SCALE_DOWN_ILM_14_BITS			(APC_DEPTH_DATA_SCALE_DOWN_14_BITS + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* rectify, 2 byte per pixel */
-#define APC_DEPTH_DATA_SCALE_DOWN_ILM_8_BITS_x80		(APC_DEPTH_DATA_SCALE_DOWN_8_BITS_x80 + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* rectify, 2 byte per pixel but using 1 byte only */
-#define APC_DEPTH_DATA_SCALE_DOWN_ILM_11_BITS			(APC_DEPTH_DATA_SCALE_DOWN_11_BITS + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* rectify, 2 byte per pixel but using 11 bit only */
-#define APC_DEPTH_DATA_SCALE_DOWN_ILM_OFF_RECTIFY		(APC_DEPTH_DATA_SCALE_DOWN_OFF_RECTIFY + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* rectify (depth off, only rectify color) */
-#define APC_DEPTH_DATA_SCALE_DOWN_ILM_8_BITS_RAW		(APC_DEPTH_DATA_SCALE_DOWN_8_BITS_RAW + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* raw */
-#define APC_DEPTH_DATA_SCALE_DOWN_ILM_14_BITS_RAW		(APC_DEPTH_DATA_SCALE_DOWN_14_BITS_RAW + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* raw */
-#define APC_DEPTH_DATA_SCALE_DOWN_ILM_8_BITS_x80_RAW	(APC_DEPTH_DATA_SCALE_DOWN_8_BITS_x80_RAW + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* raw */
-#define APC_DEPTH_DATA_SCALE_DOWN_ILM_11_BITS_RAW		(APC_DEPTH_DATA_SCALE_DOWN_11_BITS_RAW + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* raw */
-#define APC_DEPTH_DATA_SCALE_DOWN_ILM_14_BITS_COMBINED_RECTIFY     (APC_DEPTH_DATA_SCALE_DOWN_14_BITS_COMBINED_RECTIFY + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) //
-#define APC_DEPTH_DATA_SCALE_DOWN_ILM_11_BITS_COMBINED_RECTIFY (APC_DEPTH_DATA_SCALE_DOWN_11_BITS_COMBINED_RECTIFY + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) // multi-baseline
+#define APC_DEPTH_DATA_SCALE_DOWN_ILM_OFF_RAW			        (APC_DEPTH_DATA_SCALE_DOWN_OFF_RAW + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* raw (depth off, only raw color) */
+#define APC_DEPTH_DATA_SCALE_DOWN_ILM_DEFAULT			        (APC_DEPTH_DATA_SCALE_DOWN_DEFAULT + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* raw (depth off, only raw color) */
+#define APC_DEPTH_DATA_SCALE_DOWN_ILM_8_BITS			        (APC_DEPTH_DATA_SCALE_DOWN_8_BITS + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* rectify, 1 byte per pixel */
+#define APC_DEPTH_DATA_SCALE_DOWN_ILM_14_BITS			        (APC_DEPTH_DATA_SCALE_DOWN_14_BITS + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* rectify, 2 byte per pixel */
+#define APC_DEPTH_DATA_SCALE_DOWN_ILM_8_BITS_x80		        (APC_DEPTH_DATA_SCALE_DOWN_8_BITS_x80 + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* rectify, 2 byte per pixel but using 1 byte only */
+#define APC_DEPTH_DATA_SCALE_DOWN_ILM_11_BITS			        (APC_DEPTH_DATA_SCALE_DOWN_11_BITS + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* rectify, 2 byte per pixel but using 11 bit only */
+#define APC_DEPTH_DATA_SCALE_DOWN_ILM_OFF_RECTIFY		        (APC_DEPTH_DATA_SCALE_DOWN_OFF_RECTIFY + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* rectify (depth off, only rectify color) */
+#define APC_DEPTH_DATA_SCALE_DOWN_ILM_8_BITS_RAW		        (APC_DEPTH_DATA_SCALE_DOWN_8_BITS_RAW + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* raw */
+#define APC_DEPTH_DATA_SCALE_DOWN_ILM_14_BITS_RAW		        (APC_DEPTH_DATA_SCALE_DOWN_14_BITS_RAW + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* raw */
+#define APC_DEPTH_DATA_SCALE_DOWN_ILM_8_BITS_x80_RAW	        (APC_DEPTH_DATA_SCALE_DOWN_8_BITS_x80_RAW + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* raw */
+#define APC_DEPTH_DATA_SCALE_DOWN_ILM_11_BITS_RAW		        (APC_DEPTH_DATA_SCALE_DOWN_11_BITS_RAW + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) /* raw */
+#define APC_DEPTH_DATA_SCALE_DOWN_ILM_14_BITS_COMBINED_RECTIFY  (APC_DEPTH_DATA_SCALE_DOWN_14_BITS_COMBINED_RECTIFY + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) //
+#define APC_DEPTH_DATA_SCALE_DOWN_ILM_11_BITS_COMBINED_RECTIFY  (APC_DEPTH_DATA_SCALE_DOWN_11_BITS_COMBINED_RECTIFY + APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET) // multi-baseline
 
 // for Flash Read/Write +
 // Firmware (size in KBytes)
@@ -247,21 +261,6 @@ typedef enum {
 #define APC_USER_DATA_FILE_SIZE_1			4096
 #define APC_BACKUP_USER_DATA_FILE_ID        201
 #define APC_BACKUP_USER_DATA_SIZE           1024
-// for Flash Read/Write -
-
-/*
-    The group 1 is the factory settings which are calibrated before shipment.
-    The group 2 is the factory settings after post calibration.
-    FW Register 0xF6 is the offset.
-    The default offset is set as 5 which means 10 divided by 2 groups.
-*/
-#define APC_MD5_CHECKSUM_SIZE				32
-#define APC_USER_SETTING_OFFSET				5
-#define APC_USER_SETTING_RANGE				10
-#define FW_PROTECT_STRUCT_LEN_OF_STI        17
-#define FW_UNPROTECT_STRUCT_LEN_OF_STI      11
-#define FW_UNKNOWN_STRUCT_LEN_OF_STI        255
-#define FW_UNKNOWN_UNPAREASTARTSEC          (-1)
 
 // for device information +
 typedef struct tagDEVINFORMATION {
@@ -273,53 +272,63 @@ typedef struct tagDEVINFORMATION {
 } DEVINFORMATION, *PDEVINFORMATION;
 // for device information -
 
-#define APC_PID_8029    0x0568
-#define APC_PID_8030    APC_PID_8029
-#define APC_PID_8039    APC_PID_8029
-#define APC_PID_8031    0x0117
-#define APC_PID_8032    0x0118
-#define APC_PID_8036    0x0120
-#define APC_PID_8037    0x0121
-#define APC_PID_8038    0x0124
-#define APC_PID_8038_M0 APC_PID_8038
-#define APC_PID_8038_M1 0x0147
-#define APC_PID_8040W   0x0130
-#define APC_PID_8040S   0x0131
-#define APC_PID_8040S_K 0x0149
-#define APC_PID_8041    0x0126
-#define APC_PID_8042    0x0127
-#define APC_PID_8043    0x0128
-#define APC_PID_8044    0x0129
-#define APC_PID_8045K   0x0134
-#define APC_PID_8046K   0x0135
-#define APC_PID_8051    0x0136
-#define APC_PID_8052    0x0137
-#define APC_PID_8053    0x0138
-#define APC_PID_8054    0x0139
-#define APC_PID_8054_K  0x0143
-#define APC_PID_8059    0x0146
-#define APC_PID_8060    0x0152
-#define APC_PID_8060_K  0x0150
-#define APC_PID_8060_T  0x0151
-#define APC_PID_AMBER   0x0112
-#define APC_PID_SALLY   0x0158
-#define APC_PID_HYPATIA 0x0160
-#define APC_PID_HYPATIA2 0x0173
-#define APC_PID_8062    0x0162
-#define APC_PID_IVY     0x0177
-#define APC_PID_GRAP    0x0179
-#define APC_PID_GRAP_K  0x0183
-#define APC_PID_GRAP_SLAVE   0x0279
-#define APC_PID_GRAP_SLAVE_K 0x0283
-#define APC_PID_SANDRA  0x0167
-#define APC_PID_NORA  0x0168 //NOTE: http://redmine.etron.com.tw/redmine/issues/6688#change-36410
-#define APC_PID_HELEN  0x0171 //NOTE: http://redmine.etron.com.tw/redmine/issues/6649#note-50
+#define APC_PID_8029            0x0568
+#define APC_PID_8030            APC_PID_8029
+#define APC_PID_8039            APC_PID_8029
+#define APC_PID_8031            0x0117
+#define APC_PID_8032            0x0118
+#define APC_PID_8036            0x0120
+#define APC_PID_8037            0x0121
+#define APC_PID_8038            0x0124
+#define APC_PID_8038_M0         APC_PID_8038
+#define APC_PID_8038_M1         0x0147
+#define APC_PID_8040W           0x0130
+#define APC_PID_8040S           0x0131
+#define APC_PID_8040S_K         0x0149
+#define APC_PID_8041            0x0126
+#define APC_PID_8042            0x0127
+#define APC_PID_8043            0x0128
+#define APC_PID_8044            0x0129
+#define APC_PID_8045K           0x0134
+#define APC_PID_8046K           0x0135
+#define APC_PID_8051            0x0136
+#define APC_PID_8052            0x0137
+#define APC_PID_8053            0x0138
+#define APC_PID_8054            0x0139
+#define APC_PID_8054_K          0x0143
+#define APC_PID_8059            0x0146
+#define APC_PID_8060            0x0152
+#define APC_PID_8060_K          0x0150
+#define APC_PID_8060_T          0x0151
+#define APC_PID_AMBER           0x0112
+#define APC_PID_SALLY           0x0158
+#define APC_PID_HYPATIA         0x0160
+#define APC_PID_HYPATIA2        0x0173
+#define APC_PID_8062            0x0162
+#define APC_PID_8063            0x0164
+#define APC_PID_8063_K          0x0165
+#define APC_PID_8076            0x0181
+#define APC_PID_IRIS            0x0184
+#define APC_PID_IVY             0x0177
+#define APC_PID_GRAP            0x0179
+#define APC_PID_GRAP_K          0x0183
+#define APC_PID_GRAP_SLAVE      0x0279
+#define APC_PID_GRAP_SLAVE_K    0x0283
+
 //+[Thermal device]
-#define APC_PID_GRAP_THERMAL 0xf9f9
-#define APC_PID_GRAP_THERMAL2 0xf8f8
-#define APC_VID_GRAP_THERMAL 0x04b4
-//-[Thermal device]
-#define APC_VID_2170 0x0110
+#define APC_PID_GRAP_THERMAL    0xf9f9
+#define APC_PID_GRAP_THERMAL2   0xf8f8
+
+//+[MIPI Camera]
+#define APC_PID_MIPI_8036       (APC_PID_8036 | 0xf000) 
+#define APC_PID_NORA            0x0168 //NOTE: http://redmine.etron.com.tw/redmine/issues/6688#change-36410
+#define APC_PID_HELEN           0x0171 //NOTE: http://redmine.etron.com.tw/redmine/issues/6649#note-50
+#define APC_PID_SANDRA          0x0167
+
+#define APC_VID_GRAP_THERMAL    0x04b4
+#define APC_VID_2170            0x0110
+#define APC_VID_EEVER           0x1e4e
+#define APC_VID_EYS3D           0x3438
 
 // for device selection information +
 typedef struct tagDEVSEL
@@ -417,21 +426,21 @@ typedef enum{
 
 // for Sensor type name +
 typedef enum {
-    APC_SENSOR_TYPE_H22 = 0,
-    APC_SENSOR_TYPE_H65 = 1,
-    APC_SENSOR_TYPE_OV7740 = 2,
-    APC_SENSOR_TYPE_AR0134 = 3,
-    APC_SENSOR_TYPE_AR0135 = 4,
-    APC_SENSOR_TYPE_AR0144 = 5,
-    APC_SENSOR_TYPE_AR0330 = 6,
-    APC_SENSOR_TYPE_AR0522 = 7,
-    APC_SENSOR_TYPE_AR1335 = 8,
-    APC_SENSOR_TYPE_OV9714 = 9,
-    APC_SENSOR_TYPE_OV9282 = 10,
-    APC_SENSOR_TYPE_H68 = 11,
-    APC_SENSOR_TYPE_OV2740 = 12,
+    APC_SENSOR_TYPE_H22     = 0,
+    APC_SENSOR_TYPE_H65     = 1,
+    APC_SENSOR_TYPE_OV7740  = 2,
+    APC_SENSOR_TYPE_AR0134  = 3,
+    APC_SENSOR_TYPE_AR0135  = 4,
+    APC_SENSOR_TYPE_AR0144  = 5,
+    APC_SENSOR_TYPE_AR0330  = 6,
+    APC_SENSOR_TYPE_AR0522  = 7,
+    APC_SENSOR_TYPE_AR1335  = 8,
+    APC_SENSOR_TYPE_OV9714  = 9,
+    APC_SENSOR_TYPE_OV9282  = 10,
+    APC_SENSOR_TYPE_H68     = 11,
+    APC_SENSOR_TYPE_OV2740  = 12,
     APC_SENSOR_TYPE_OC0SA10 = 13,
-    APC_SENSOR_TYPE_UNKOWN = 0xffff
+    APC_SENSOR_TYPE_UNKOWN  = 0xffff
 } SENSOR_TYPE_NAME; 
 // for Sensor type name -
 
@@ -451,12 +460,15 @@ typedef enum
 {
     USB_PORT_TYPE_2_0 = 2,
     USB_PORT_TYPE_3_0,
+    MIPI_PORT_TYPE,
     USB_PORT_TYPE_UNKNOW
 } USB_PORT_TYPE;
 
-//
+// Select CT or PU ID for MIPI
+#define CT_PROPERTY_ID                               1
+#define PU_PROPERTY_ID                               3
+
 // CT Property ID
-//
 #define	CT_PROPERTY_ID_AUTO_EXPOSURE_MODE_CTRL       0
 #define CT_PROPERTY_ID_AUTO_EXPOSURE_PRIORITY_CTRL   1
 #define CT_PROPERTY_ID_EXPOSURE_TIME_ABSOLUTE_CTRL   2
@@ -474,9 +486,7 @@ typedef enum
 #define CT_PROPERTY_ID_TILT_RELATIVE_CTRL           14
 #define CT_PROPERTY_ID_PRIVACY_CTRL                 15
 
-//
 // PU Property ID
-//
 #define PU_PROPERTY_ID_BACKLIGHT_COMPENSATION_CTRL   0
 #define PU_PROPERTY_ID_BRIGHTNESS_CTRL      		 1
 #define PU_PROPERTY_ID_CONTRAST_CTRL 			     2
@@ -490,7 +500,7 @@ typedef enum
 #define PU_PROPERTY_ID_WHITE_BALANCE_CTRL 			10
 #define PU_PROPERTY_ID_WHITE_BALANCE_AUTO_CTRL 	    11
 
-//Auto-Exposure Mode Control
+// Auto-Exposure Mode Control
 #define AE_MOD_MANUAL_MODE							0x01
 #define AE_MOD_AUTO_MODE							0x02
 #define AE_MOD_SHUTTER_PRIORITY_MODE				0x04
@@ -778,6 +788,14 @@ struct APCImageType
         }
     }
 };
+/**
+ * @param M_dst input camera matrix of RGB-lens, including intrinsic parameters, such as RectifyLog-CamMat2 (M3).
+ *              The buffer size is 9.
+ * @param R_dst_to_src input rotation matrix of dst-lens to src-lens, dst is the camera at left side, src is the camera at
+ *                     right side, such as RectifyLog-RotaMat (R31). The buffer size is 9.
+ * @param T_dst_to_src  input translation matrix of dst-lens to src-lens, such as RectifyLog-TranMat (T13).
+ *                     The buffer size is 3.
+ */
 
 struct PointCloudInfo
 {
@@ -788,10 +806,13 @@ struct PointCloudInfo
     float disparityToW[ 2048 ];
     int   disparity_len;
     WORD  wDepthType;
-//multi-lens data
+    int depth_image_edian; //0: lillte-edian, 1: big-edia
+    //multi-lens data
     float focalLength_K;
     float baseline_K;
     float diff_K;
-    int depth_image_edian; //0: lillte-edian, 1: big-edia
+    float slaveDeviceCamMat2[9];
+    float slaveDeviceRotaMat[9];
+    float slaveDeviceTranMat[3];
 };
 #endif // LIB_ESPDI_DEF_H

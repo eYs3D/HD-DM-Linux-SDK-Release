@@ -20,6 +20,11 @@ ifeq ($(CPU), MTK)
 	LIBS = -L../eSPDI -leSPDI_$(CPU)_64 \
 	       -lrt
 endif
+ifeq ($(CPU), TI)
+	TARGET = test_armhf_ti
+	LIBS = -L../eSPDI -leSPDI_$(CPU)_32 \
+	       -lrt
+endif
 
 CFLAGS = -Wall -W -std=c++11
 LFLAGS = -Wall -W 
