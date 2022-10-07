@@ -51,6 +51,7 @@ public:
 private slots:
     void on_pushButton_rectify_read_clicked();
     void on_pushButton_temperature_clicked();
+    void on_pushButton_force_override_clicked();
 
 private:
 

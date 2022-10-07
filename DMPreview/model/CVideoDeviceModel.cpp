@@ -10,6 +10,7 @@
 #include <libudev.h>
 #include <unistd.h>
 #include "CFrameSyncManager.h"
+#include <sys/time.h>
 
 CVideoDeviceModel::CVideoDeviceModel(DEVSELINFO *pDeviceSelfInfo):
 m_state(CLOSED),
@@ -36,15 +37,232 @@ m_serialNumberType(FRAME_COUNT)
 
 CVideoDeviceModel::~CVideoDeviceModel()
 {
-    for (DEVSELINFO *pSelfInfo : m_deviceSelInfo){
+    for (DEVSELINFO *pSelfInfo : m_deviceSelInfo) {
         delete pSelfInfo;
     }
 
-    if(m_pFrameGrabber){
+    if (m_pFrameGrabber) {
         delete m_pFrameGrabber;
     }
 
-    if(m_pIMUModel) delete m_pIMUModel;
+    if (m_pIMUModel) delete m_pIMUModel;
+}
+
+std::string CVideoDeviceModel::resultCodeToAlertString(int index, int copyResultCode) {
+    std::string resultString = std::string("Index ");
+    resultString.append(std::to_string(index));
+
+    if (copyResultCode == COPY_RESULT_ALL)
+        return std::move(resultString.append(" override ALL finished. \n"));
+    else if (copyResultCode == COPY_RESULT_NONE)
+        return std::move(resultString.append(" override ALL verify fail. \n"));
+
+    resultString.append(" override partially equal ");
+    if (copyResultCode & COPY_RESULT_YOFFSET)
+        resultString.append(" YOFFSET ");
+    if (copyResultCode & COPY_RESULT_RECTIFY)
+        resultString.append(" RECTIFY ");
+    if (copyResultCode & COPY_RESULT_ZD)
+        resultString.append(" ZD ");
+    if (copyResultCode & COPY_RESULT_LOG)
+        resultString.append(" LOG ");
+    resultString.append(" finish. \n");
+
+    return std::move(resultString);
+}
+
+std::string CVideoDeviceModel::CopyAllFileToG2() {
+    std::string resultString;
+    for (int i = 0, resultCode = 0x0; i < APC_USER_SETTING_OFFSET; i++) {
+        resultCode = CopyG1FileToG2(i);
+        resultString.append(resultCodeToAlertString(i, resultCode));
+    }
+    return std::move(resultString);
+}
+
+int CVideoDeviceModel::CopyG1FileToG2(int fileIndex) {
+    int resultCode = COPY_RESULT_NONE;
+    if (fileIndex > APC_USER_SETTING_OFFSET) return false;
+
+    auto bufferYOffset = new BYTE[APC_Y_OFFSET_FILE_SIZE];
+    auto bufferYOffsetBackup = new BYTE[APC_Y_OFFSET_FILE_SIZE];
+    auto EYSD = CEYSDDeviceManager::GetInstance()->GetEYSD();
+    auto devSelInfo = m_deviceSelInfo[0];
+    int actualYOffsetBufLen = 0;
+
+    int ret = APC_GetYOffset(EYSD, devSelInfo, bufferYOffset, APC_Y_OFFSET_FILE_SIZE, &actualYOffsetBufLen, fileIndex);
+
+    if (APC_OK != ret || actualYOffsetBufLen != APC_Y_OFFSET_FILE_SIZE) {
+       fprintf(stderr, "### [Stage-YOffset] Read error \n");
+    } else {
+       fprintf(stderr, "### [Stage-YOffset] Read actualYOffsetBufLen %d file 3%d ret=%d\n", actualYOffsetBufLen, fileIndex, ret);
+
+       memcpy(bufferYOffsetBackup, bufferYOffset, actualYOffsetBufLen);
+#ifdef COPY_CLEAN
+       memset(bufferYOffset, 0x0, APC_Y_OFFSET_FILE_SIZE);
+#endif
+       ret = APC_SetYOffset(EYSD, devSelInfo, bufferYOffset, APC_Y_OFFSET_FILE_SIZE, &actualYOffsetBufLen,
+                            fileIndex + APC_USER_SETTING_OFFSET);
+
+       if (ret != APC_OK || actualYOffsetBufLen != APC_Y_OFFSET_FILE_SIZE) {
+           fprintf(stderr, "### [Stage-YOffset] Write error \n");
+       } else {
+           fprintf(stderr, "### [Stage-YOffset] Write actualYOffsetBufLen %d file %d ret=%d\n", actualYOffsetBufLen,
+                    APC_Y_OFFSET_FILE_ID_0 + fileIndex + APC_USER_SETTING_OFFSET,
+                    ret);
+
+           memset(bufferYOffset, 0xff, APC_Y_OFFSET_FILE_SIZE);
+           ret = APC_GetYOffset(EYSD, devSelInfo, bufferYOffset, APC_Y_OFFSET_FILE_SIZE, &actualYOffsetBufLen,
+                                fileIndex + APC_USER_SETTING_OFFSET);
+
+           if (ret != APC_OK || actualYOffsetBufLen != APC_Y_OFFSET_FILE_SIZE ||
+               memcmp(bufferYOffset, bufferYOffsetBackup, actualYOffsetBufLen)) {
+               fprintf(stderr, "### [Stage-YOffset] Verify error. Please check. \n");
+           } else {
+               fprintf(stderr, "### [Stage-YOffset] Verify successfully. \n");
+               resultCode |= COPY_RESULT_YOFFSET;
+           }
+       }
+    }
+
+    delete [] bufferYOffset;
+    delete [] bufferYOffsetBackup;
+
+    auto bufferRectifyTable = new BYTE[APC_RECTIFY_FILE_SIZE];
+    auto bufferRectifyTableBackup = new BYTE[APC_RECTIFY_FILE_SIZE];
+    int actualRectifyBufLen = 0;
+    ret = APC_GetRectifyTable(EYSD, devSelInfo, bufferRectifyTable, APC_RECTIFY_FILE_SIZE,
+                             &actualRectifyBufLen, fileIndex);
+    if (ret != APC_OK || actualRectifyBufLen != APC_RECTIFY_FILE_SIZE) {
+       fprintf(stderr, "### [Stage-Rectify] Read error \n");
+    } else {
+       fprintf(stderr, "### [Stage-Rectify] Read actualRectifyBufLen %d file 4%d ret=%d\n", actualRectifyBufLen,
+                fileIndex, ret);
+
+       memcpy(bufferRectifyTableBackup, bufferRectifyTable, actualRectifyBufLen);
+#ifdef COPY_CLEAN
+       memset(bufferRectifyTable, 0x0, APC_RECTIFY_FILE_SIZE);
+#endif
+       ret = APC_SetRectifyTable(EYSD, devSelInfo, bufferRectifyTable, APC_RECTIFY_FILE_SIZE,
+                                 &actualRectifyBufLen, fileIndex + APC_USER_SETTING_OFFSET);
+
+       if (ret != APC_OK || actualRectifyBufLen != APC_RECTIFY_FILE_SIZE) {
+           fprintf(stderr, "### [Stage-Rectify] Write error \n");
+       } else {
+           fprintf(stderr, "### [Stage-Rectify] Write actualRectifyBufLen %d file %d ret=%d\n", actualRectifyBufLen,
+                    APC_RECTIFY_FILE_ID_0 + fileIndex + APC_USER_SETTING_OFFSET, ret);
+
+           memset(bufferRectifyTable, 0xff, APC_RECTIFY_FILE_SIZE);
+
+           ret = APC_GetRectifyTable(EYSD, devSelInfo, bufferRectifyTable, APC_RECTIFY_FILE_SIZE,
+                                     &actualRectifyBufLen, fileIndex + APC_USER_SETTING_OFFSET);
+
+           if (ret != APC_OK || actualRectifyBufLen != APC_RECTIFY_FILE_SIZE ||
+               memcmp(bufferRectifyTable, bufferRectifyTableBackup, actualRectifyBufLen)) {
+               fprintf(stderr, "### [Stage-Rectify] Verify error. Please check. \n");
+           } else {
+               fprintf(stderr, "### [Stage-Rectify] Verify successfully. \n");
+               resultCode |= COPY_RESULT_RECTIFY;
+           }
+       }
+    }
+
+    delete [] bufferRectifyTable;
+    delete [] bufferRectifyTableBackup;
+
+    auto bufferZDTable = new BYTE[APC_ZD_TABLE_FILE_SIZE_11_BITS];
+    auto bufferZDTableBackup = new BYTE[APC_ZD_TABLE_FILE_SIZE_11_BITS];
+    int actualZDBufLen = 0;
+    ZDTABLEINFO tableInfo {
+       .nIndex = fileIndex,
+       .nDataType = APC_DEPTH_DATA_11_BITS,
+    };
+
+    ret = APC_GetZDTable(EYSD, devSelInfo, bufferZDTable, APC_ZD_TABLE_FILE_SIZE_11_BITS,
+                        &actualZDBufLen, &tableInfo);
+
+    if (ret != APC_OK || actualZDBufLen != APC_ZD_TABLE_FILE_SIZE_11_BITS) {
+       fprintf(stderr, "### [Stage-ZD] Read error \n");
+    } else {
+       fprintf(stderr, "### [Stage-ZD] Read actualZDBufLen %d file 5%d ret=%d\n", actualZDBufLen,
+                fileIndex, ret);
+
+       memcpy(bufferZDTableBackup, bufferZDTable, APC_ZD_TABLE_FILE_SIZE_11_BITS);
+#ifdef COPY_CLEAN
+       memset(bufferZDTable, 0x0, APC_ZD_TABLE_FILE_SIZE_11_BITS);
+#endif
+       tableInfo.nIndex = fileIndex + APC_USER_SETTING_OFFSET;
+       ret = APC_SetZDTable(EYSD, devSelInfo, bufferZDTable, APC_ZD_TABLE_FILE_SIZE_11_BITS,
+                            &actualZDBufLen, &tableInfo);
+
+       if (ret != APC_OK || actualZDBufLen != APC_ZD_TABLE_FILE_SIZE_11_BITS) {
+           fprintf(stderr, "### [Stage-ZD] Write error \n");
+       } else {
+           fprintf(stderr, "### [Stage-ZD] Write actualZDBufLen %d file %d ret=%d\n", actualZDBufLen,
+                    APC_ZD_TABLE_FILE_ID_0 + fileIndex + APC_USER_SETTING_OFFSET, ret);
+
+           memset(bufferZDTable, 0xff, APC_ZD_TABLE_FILE_SIZE_11_BITS);
+           tableInfo.nIndex = fileIndex + APC_USER_SETTING_OFFSET;
+           ret = APC_GetZDTable(EYSD, devSelInfo, bufferZDTable, APC_ZD_TABLE_FILE_SIZE_11_BITS,
+                                &actualZDBufLen, &tableInfo);
+
+           if (ret != APC_OK || actualZDBufLen != APC_ZD_TABLE_FILE_SIZE_11_BITS ||
+               memcmp(bufferZDTable, bufferZDTableBackup, APC_ZD_TABLE_FILE_SIZE_11_BITS)) {
+               fprintf(stderr, "### [Stage-ZD] Verify error. Please check. \n");
+           } else {
+               fprintf(stderr, "### [Stage-ZD] Verify successfully. \n");
+               resultCode |= COPY_RESULT_ZD;
+           }
+       }
+    }
+
+    delete [] bufferZDTable;
+    delete [] bufferZDTableBackup;
+
+    auto bufferCalibrationLogData = new BYTE[APC_CALIB_LOG_FILE_SIZE];
+    auto bufferCalibrationLogDataBackup = new BYTE[APC_CALIB_LOG_FILE_SIZE];
+    int actualCalibrationLogDataBufLen = 0;
+
+    ret = APC_GetLogData(EYSD, devSelInfo, bufferCalibrationLogData, APC_CALIB_LOG_FILE_SIZE,
+                        &actualCalibrationLogDataBufLen, fileIndex, ALL_LOG);
+
+    if (APC_OK != ret || actualCalibrationLogDataBufLen != APC_CALIB_LOG_FILE_SIZE) {
+       fprintf(stderr, "### [Stage-LOG] Read error \n");
+    } else {
+       fprintf(stderr, "### [Stage-LOG] Read actualCalibrationLogDataBufLen %d file 24%d ret=%d\n",
+               actualCalibrationLogDataBufLen, fileIndex, ret);
+
+       memcpy(bufferCalibrationLogDataBackup, bufferCalibrationLogData, APC_CALIB_LOG_FILE_SIZE);
+#ifdef COPY_CLEAN
+       memset(bufferCalibrationLogData, 0x0, APC_CALIB_LOG_FILE_SIZE);
+#endif
+       ret = APC_SetLogData(EYSD, devSelInfo, bufferCalibrationLogData, APC_CALIB_LOG_FILE_SIZE,
+                            &actualCalibrationLogDataBufLen, fileIndex + APC_USER_SETTING_OFFSET);
+
+       if (actualCalibrationLogDataBufLen != APC_CALIB_LOG_FILE_SIZE || ret != APC_OK) {
+           fprintf(stderr, "### [Stage-LOG] Write error \n");
+       } else {
+           fprintf(stderr, "### [Stage-LOG] Write actualCalibrationLogDataBufLen %d file %d ret=%d\n",
+                   actualCalibrationLogDataBufLen, APC_CALIB_LOG_FILE_ID_0 + fileIndex + APC_USER_SETTING_OFFSET, ret);
+
+           memset(bufferCalibrationLogData, 0xff, APC_CALIB_LOG_FILE_SIZE);
+           ret = APC_GetLogData(EYSD, devSelInfo, bufferCalibrationLogData, APC_CALIB_LOG_FILE_SIZE,
+                                &actualCalibrationLogDataBufLen, fileIndex + APC_USER_SETTING_OFFSET, ALL_LOG);
+
+           if (ret != APC_OK || actualCalibrationLogDataBufLen != APC_CALIB_LOG_FILE_SIZE ||
+               memcmp(bufferCalibrationLogData, bufferCalibrationLogDataBackup, APC_CALIB_LOG_FILE_SIZE)) {
+               fprintf(stderr, "### [Stage-LOG] Verify error. Please check. \n");
+           } else {
+               fprintf(stderr, "### [Stage-LOG] Verify successfully. \n");
+               resultCode |= COPY_RESULT_LOG;
+           }
+       }
+    }
+
+    delete [] bufferCalibrationLogData;
+    delete [] bufferCalibrationLogDataBackup;
+
+    return resultCode;
 }
 
 void CVideoDeviceModel::AdjustDeviceSelfInfo(DEVSELINFO *pDeviceSelfInfo)
@@ -62,7 +280,7 @@ bool CVideoDeviceModel::EqualModel(CVideoDeviceModel *pModel)
 
     if (selfInfo.size() != modelInfo.size()) return false;
 
-    for(size_t i = 0 ; i < selfInfo.size() ; ++i){
+    for(size_t i = 0 ; i < selfInfo.size() ; ++i) {
         DeviceInfo self = selfInfo[i];
         DeviceInfo another = modelInfo[i];
 
@@ -94,7 +312,7 @@ int CVideoDeviceModel::Init()
 
 int CVideoDeviceModel::Reset()
 {
-    for(size_t i = 1 ; i < m_deviceSelInfo.size() ; ++i){
+    for(size_t i = 1 ; i < m_deviceSelInfo.size() ; ++i) {
         delete m_deviceSelInfo[i];
     }
 
@@ -102,11 +320,11 @@ int CVideoDeviceModel::Reset()
 
     m_deviceInfo.clear();
 
-    for(int i = 0 ; i < STREAM_TYPE_COUNT ; ++i){
+    for(int i = 0 ; i < STREAM_TYPE_COUNT ; ++i) {
         m_streamInfo[i].resize(MAX_STREAM_INFO_COUNT, {0, 0, false});
     }
 
-    for(CCameraPropertyModel *pCameraPropertyModel : m_cameraPropertyModel){
+    for(CCameraPropertyModel *pCameraPropertyModel : m_cameraPropertyModel) {
         delete pCameraPropertyModel;
     }
     m_cameraPropertyModel.clear();
@@ -119,7 +337,7 @@ int CVideoDeviceModel::Update()
     UpdateIR();
     UpdateDepthDataType();
     UpdateZDTable();
-    for(CCameraPropertyModel *pCameraPropertyModel : m_cameraPropertyModel){
+    for(CCameraPropertyModel *pCameraPropertyModel : m_cameraPropertyModel) {
         pCameraPropertyModel->Update();
     }
     return APC_OK;
@@ -127,23 +345,23 @@ int CVideoDeviceModel::Update()
 
 int CVideoDeviceModel::DataVerification()
 {
-    for (DeviceInfo deviceInfo : m_deviceInfo){
+    for (DeviceInfo deviceInfo : m_deviceInfo) {
         ERROR_HANDLE(/* deviceInfo.deviceInfomation.nChipID != 0 && */ // 8063 did not give chipId temporarily
                      deviceInfo.deviceInfomation.wPID != 0 &&
                      deviceInfo.deviceInfomation.wVID != 0 &&
                      deviceInfo.deviceInfomation.strDevName != 0 &&
                      deviceInfo.sSerialNumber.length() != 0 &&
-                     deviceInfo.sSerialNumber.length() != 0, "Get device information failed!!\n");
+                     deviceInfo.sSerialNumber.length() != 0, "Get device information failed!\n");
     }
 
-    for (int i = 0 ; i < STREAM_TYPE_COUNT ; ++i){
-        if (IsStreamSupport( (STREAM_TYPE)i )){
-            ERROR_HANDLE(!m_streamInfo[i].empty(), "Get stream information failed!!\n");
+    for (int i = 0 ; i < STREAM_TYPE_COUNT ; ++i) {
+        if (IsStreamSupport( (STREAM_TYPE)i )) {
+            ERROR_HANDLE(!m_streamInfo[i].empty(), "Get stream information failed!\n");
         }
     }
 
     if (m_usbPortType != MIPI_PORT_TYPE) {
-        ERROR_HANDLE(true == (USB_PORT_TYPE_UNKNOW != m_usbPortType), "Get usb port type failed!!\n");
+        ERROR_HANDLE(true == (USB_PORT_TYPE_UNKNOW != m_usbPortType), "Get usb port type failed!\n");
     }
 
     return APC_OK;
@@ -151,14 +369,14 @@ int CVideoDeviceModel::DataVerification()
 
 void CVideoDeviceModel::ChangeState(STATE state)
 {
-    if(RECONNECTING == state && RECONNECTING != m_state){
+    if (RECONNECTING == state && RECONNECTING != m_state) {
         m_restoreState = m_state;
-        if (STREAMING == m_restoreState){
+        if (STREAMING == m_restoreState) {
             StopStreaming(true);
         }
-    }else if(RECONNECTED == state){
+    }else if (RECONNECTED == state) {
         state = m_restoreState;
-        if (STREAMING == m_restoreState){
+        if (STREAMING == m_restoreState) {
             StartStreaming();
         }
     }
@@ -193,7 +411,7 @@ CVideoDeviceModel::DeviceInfo CVideoDeviceModel::GetDeviceInformation(DEVSELINFO
 
     DeviceInfo deviceInfo;
     memset(&deviceInfo, 0, sizeof(DeviceInfo));
-    if(!pDeviceSelfInfo) return deviceInfo;
+    if (!pDeviceSelfInfo) return deviceInfo;
 
     int ret;
     RETRY_APC_API(ret, APC_GetDeviceInfo(pEYSDI, pDeviceSelfInfo, &deviceInfo.deviceInfomation));
@@ -201,15 +419,15 @@ CVideoDeviceModel::DeviceInfo CVideoDeviceModel::GetDeviceInformation(DEVSELINFO
     char pFWVersion[256] = {0};
     int  nFWLength;
     RETRY_APC_API(ret, APC_GetFwVersion(pEYSDI, pDeviceSelfInfo, pFWVersion, 256, &nFWLength));
-    if (APC_OK == ret){
+    if (APC_OK == ret) {
         deviceInfo.sFWVersion = pFWVersion;
     }
 
     unsigned char pSerialNumber[256] = {0};
     int  nSerialNumberLength;
     RETRY_APC_API(ret, APC_GetSerialNumber(pEYSDI, pDeviceSelfInfo, pSerialNumber, 256, &nSerialNumberLength));
-    if (APC_OK == ret){
-        if(nSerialNumberLength<0)
+    if (APC_OK == ret) {
+        if (nSerialNumberLength<0)
             nSerialNumberLength = 0;
         deviceInfo.sSerialNumber.resize( nSerialNumberLength / 2 );
         for (int i = 0 ; i < nSerialNumberLength / 2 ; ++i)
@@ -219,11 +437,11 @@ CVideoDeviceModel::DeviceInfo CVideoDeviceModel::GetDeviceInformation(DEVSELINFO
     char pBusInfo[256] = {0};
     int  nBusInfoLength;
     RETRY_APC_API(ret, APC_GetBusInfo(pEYSDI, pDeviceSelfInfo, pBusInfo, &nBusInfoLength));
-    if (APC_OK == ret){
+    if (APC_OK == ret) {
         deviceInfo.sBusInfo = pBusInfo;
     }
 
-    auto getModelName = [=](char *pDevV4lPath, char *pModelNameResult){
+    auto getModelName = [=](char *pDevV4lPath, char *pModelNameResult) {
         FILE* f;
         char buffer[128];
         int i = 0;
@@ -263,7 +481,7 @@ int CVideoDeviceModel::InitUsbType()
     RETRY_APC_API(ret, APC_GetDevicePortType(CEYSDDeviceManager::GetInstance()->GetEYSD(),
                                                    m_deviceSelInfo[0],
                                                    &m_usbPortType));
-    if (APC_OK != ret){
+    if (APC_OK != ret) {
         struct udev *udev;
         struct udev_enumerate *enumerate;
         struct udev_list_entry *devices, *dev_list_entry;
@@ -285,17 +503,17 @@ int CVideoDeviceModel::InitUsbType()
             dev = udev_device_new_from_syspath(udev, path);
             const char *speed = udev_device_get_sysattr_value(dev, "speed");
             struct udev_device *nodeDev = dev;
-            while (!speed){
+            while (!speed) {
                 struct udev_device *parentDev = udev_device_get_parent(dev);
                 if (!parentDev) break;
                 dev = parentDev;
                 speed = udev_device_get_sysattr_value(dev, "speed");
             }
 
-            if (speed){
-                if (!strcmp(speed, "5000")){
+            if (speed) {
+                if (!strcmp(speed, "5000")) {
                     m_usbPortType = USB_PORT_TYPE_3_0;
-                }else if (!strcmp(speed, "480")){
+                }else if (!strcmp(speed, "480")) {
                     m_usbPortType = USB_PORT_TYPE_2_0;
                 }
 
@@ -318,7 +536,7 @@ USB_PORT_TYPE CVideoDeviceModel::GetUsbType()
 
 bool CVideoDeviceModel::IsStreamSupport(STREAM_TYPE type)
 {
-    switch (type){
+    switch (type) {
         case STREAM_COLOR:
         case STREAM_DEPTH:
             return !GetStreamInfoList(type).empty();
@@ -338,8 +556,8 @@ int CVideoDeviceModel::InitStreamInfoList()
     if (APC_OK != ret) return ret;
 
     auto it = m_streamInfo[STREAM_COLOR].begin();
-    for ( ; it != m_streamInfo[STREAM_COLOR].end() ; ++it){
-        if (0 == (*it).nWidth){
+    for ( ; it != m_streamInfo[STREAM_COLOR].end() ; ++it) {
+        if (0 == (*it).nWidth) {
             break;
         }
     }
@@ -347,8 +565,8 @@ int CVideoDeviceModel::InitStreamInfoList()
     m_streamInfo[STREAM_COLOR].shrink_to_fit();
 
     it = m_streamInfo[STREAM_DEPTH].begin();
-    for ( ; it != m_streamInfo[STREAM_DEPTH].end() ; ++it){
-        if (0 == (*it).nWidth){
+    for ( ; it != m_streamInfo[STREAM_DEPTH].end() ; ++it) {
+        if (0 == (*it).nWidth) {
             break;
         }
     }
@@ -367,7 +585,7 @@ int CVideoDeviceModel::InitCameraproperty()
 {
     AddCameraPropertyModels();
 
-    for(CCameraPropertyModel *pCameraPropertyModel : m_cameraPropertyModel){
+    for(CCameraPropertyModel *pCameraPropertyModel : m_cameraPropertyModel) {
         pCameraPropertyModel->Init();
     }
 
@@ -377,21 +595,21 @@ int CVideoDeviceModel::InitCameraproperty()
 int CVideoDeviceModel::SetPlumAR0330(bool bEnable)
 {
     unsigned short nValue = 0;
-    if(APC_OK != APC_GetFWRegister(CEYSDDeviceManager::GetInstance()->GetInstance(),
+    if (APC_OK != APC_GetFWRegister(CEYSDDeviceManager::GetInstance()->GetInstance(),
                                            m_deviceSelInfo[0],
                                            0xF3,
                                            &nValue,
-                                           FG_Address_1Byte | FG_Value_1Byte)){
+                                           FG_Address_1Byte | FG_Value_1Byte)) {
         return APC_WRITE_REG_FAIL;
     }
 
     nValue |= 0x11;
     nValue &= bEnable ? 0x10 : 0x01;
-    if(APC_OK != APC_SetFWRegister(CEYSDDeviceManager::GetInstance()->GetInstance(),
+    if (APC_OK != APC_SetFWRegister(CEYSDDeviceManager::GetInstance()->GetInstance(),
                                            m_deviceSelInfo[0],
                                            0xF3,
                                            nValue,
-                                           FG_Address_1Byte | FG_Value_1Byte)){
+                                           FG_Address_1Byte | FG_Value_1Byte)) {
         return APC_WRITE_REG_FAIL;
     }
 
@@ -437,13 +655,13 @@ int CVideoDeviceModel::ExtendIR(bool bEnable)
 
     int ret;
     bool bDisableIR = (0 == m_nIRValue);
-    if (bDisableIR){
+    if (bDisableIR) {
         RETRY_APC_API(ret, APC_SetIRMode(pEYSDI, m_deviceSelInfo[0], 0x03)); // 2 bits on for opening both 2 ir
     }
 
     RETRY_APC_API(ret, APC_SetIRMaxValue(pEYSDI, m_deviceSelInfo[0], bEnable ? EXTEND_IR_MAX : DEFAULT_IR_MAX));
 
-    if (bDisableIR){
+    if (bDisableIR) {
         RETRY_APC_API(ret, APC_SetIRMode(pEYSDI, m_deviceSelInfo[0], 0x00);); // turn off ir
     }
 
@@ -530,7 +748,7 @@ int CVideoDeviceModel::TransformDepthDataType(int nDepthDataType, bool bRectifyD
 {
     NormalizeDepthDataType(nDepthDataType);
 
-    switch (nDepthDataType){
+    switch (nDepthDataType) {
         case APC_DEPTH_DATA_8_BITS:
         case APC_DEPTH_DATA_8_BITS_RAW:
             nDepthDataType = bRectifyData ? APC_DEPTH_DATA_8_BITS : APC_DEPTH_DATA_8_BITS_RAW; break;
@@ -552,7 +770,9 @@ int CVideoDeviceModel::TransformDepthDataType(int nDepthDataType, bool bRectifyD
             nDepthDataType = bRectifyData ? APC_DEPTH_DATA_DEFAULT : APC_DEPTH_DATA_OFF_RECTIFY;  break;
     }
 
-    if (IsInterleaveMode()) nDepthDataType += APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET;
+    if (APC_PID_MIPI_8036 != GetDeviceInformation()[0].deviceInfomation.wPID &&
+        IsInterleaveMode())
+        nDepthDataType += APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET;
 
     return nDepthDataType;
 }
@@ -562,7 +782,7 @@ int CVideoDeviceModel::SetDepthDataType(int nDepthDataType)
     void *pEYSDI = CEYSDDeviceManager::GetInstance()->GetEYSD();
 
     int ret;
-    for (DEVSELINFO *devSelInfo : m_deviceSelInfo){
+    for (DEVSELINFO *devSelInfo : m_deviceSelInfo) {
         ret = APC_SetDepthDataType(pEYSDI, devSelInfo, nDepthDataType);
         if (ret != APC_OK) return ret;
         UpdateDepthDataType();
@@ -601,7 +821,7 @@ bool CVideoDeviceModel::IsRectifyData()
     int depthDataType = GetDepthDataType();
     NormalizeDepthDataType(depthDataType);
 
-    switch (depthDataType){
+    switch (depthDataType) {
         case APC_DEPTH_DATA_8_BITS:
         case APC_DEPTH_DATA_8_BITS_x80:
         case APC_DEPTH_DATA_11_BITS:
@@ -620,7 +840,7 @@ APCImageType::Value CVideoDeviceModel::GetDepthImageType()
     int depthDataType = GetDepthDataType();
     NormalizeDepthDataType(depthDataType);
 
-    switch (depthDataType){
+    switch (depthDataType) {
         case APC_DEPTH_DATA_8_BITS:
         case APC_DEPTH_DATA_8_BITS_RAW:
             return APCImageType::DEPTH_8BITS;
@@ -659,7 +879,7 @@ int CVideoDeviceModel::SetHWPP(bool bEnable)
     unsigned short value = 0;
     void *pEYSDI = CEYSDDeviceManager::GetInstance()->GetEYSD();
 
-    for(size_t i = 0 ; i < m_deviceSelInfo.size() ; ++i){
+    for(size_t i = 0 ; i < m_deviceSelInfo.size() ; ++i) {
         value = 0;
         APC_GetHWRegister(pEYSDI, m_deviceSelInfo[i],
                               0xf424, &value,
@@ -670,7 +890,7 @@ int CVideoDeviceModel::SetHWPP(bool bEnable)
                               0xf424, value,
                               FG_Address_2Byte | FG_Value_1Byte);
 
-        if(0 == i && m_deviceSelInfo.size() > 1){
+        if (0 == i && m_deviceSelInfo.size() > 1) {
             APC_SetSensorRegister(pEYSDI, m_deviceSelInfo[i],
                                       0xC2, 0x9024, value,
                                       FG_Address_2Byte | FG_Value_1Byte,
@@ -699,8 +919,20 @@ int CVideoDeviceModel::UpdateZDTable()
     zdTableInfo.nIndex = m_pVideoDeviceController->GetPreviewOptions()->GetStreamIndex(STREAM_DEPTH);
     AdjustZDTableIndex(zdTableInfo.nIndex);
 
+    std::vector<APC_STREAM_INFO> streamInfo = GetStreamInfoList(STREAM_DEPTH);
     int nActualLength = 0;
     int ret;
+    {
+        unsigned short PidBuf;
+        unsigned short VidBuf;
+
+        RETRY_APC_API(ret, APC_GetPidVid(CEYSDDeviceManager::GetInstance()->GetEYSD(),
+                                               m_deviceSelInfo[0],
+                                               &PidBuf, &VidBuf));
+        if ((PidBuf == APC_PID_MIPI_8036) && (streamInfo[zdTableInfo.nIndex].nHeight == 360 && streamInfo[zdTableInfo.nIndex].nWidth == 640)) {
+            zdTableInfo.nIndex = 3;
+        }
+    }
     RETRY_APC_API(ret, APC_GetZDTable(CEYSDDeviceManager::GetInstance()->GetEYSD(),
                                             m_deviceSelInfo[0],
                                             m_zdTableInfo.ZDTable, m_zdTableInfo.nTableSize,
@@ -715,9 +947,8 @@ int CVideoDeviceModel::UpdateZDTable()
 
     unsigned short nZValue;
     for( int i = 0 ; i < nActualLength / 2 ; ++i) {
-
         nZValue = (((unsigned short)m_zdTableInfo.ZDTable[i * 2]) << 8) + m_zdTableInfo.ZDTable[i * 2 + 1];
-        if (nZValue){
+        if (nZValue) {
             m_zdTableInfo.nZNear = std::min(m_zdTableInfo.nZNear, nZValue);
             m_zdTableInfo.nZFar = std::max(m_zdTableInfo.nZFar, nZValue);
         }
@@ -735,8 +966,8 @@ CVideoDeviceModel::ZDTableInfo *CVideoDeviceModel::GetZDTableInfo()
 {
     return &m_zdTableInfo;
 }
-#define DEBUG_RECTIFY_LOG (0)
 
+#define DEBUG_RECTIFY_LOG (0)
 int CVideoDeviceModel::GetRectifyLogData(int nDevIndex, int nRectifyLogIndex, eSPCtrl_RectLogData *pRectifyLogData, STREAM_TYPE depthType)
 {
     if (!pRectifyLogData) return APC_NullPtr;
@@ -744,6 +975,18 @@ int CVideoDeviceModel::GetRectifyLogData(int nDevIndex, int nRectifyLogIndex, eS
     if (nDevIndex >= (int)m_deviceInfo.size()) return APC_NullPtr;
 
     int ret;
+    {
+        std::vector<APC_STREAM_INFO> streamInfo = GetStreamInfoList(STREAM_DEPTH);
+        unsigned short PidBuf;
+        unsigned short VidBuf;
+
+        RETRY_APC_API(ret, APC_GetPidVid(CEYSDDeviceManager::GetInstance()->GetEYSD(),
+                                               m_deviceSelInfo[0],
+                                               &PidBuf, &VidBuf));
+        if ((PidBuf == APC_PID_MIPI_8036) && (streamInfo[nRectifyLogIndex].nHeight == 360 && streamInfo[nRectifyLogIndex].nWidth == 640)) {
+            nRectifyLogIndex = 3;
+        }
+    }
     RETRY_APC_API(ret, APC_GetRectifyMatLogData(CEYSDDeviceManager::GetInstance()->GetEYSD(),
                                                       m_deviceSelInfo[nDevIndex],
                                                       pRectifyLogData,
@@ -771,7 +1014,6 @@ int CVideoDeviceModel::GetRectifyLogData(int nDevIndex, int nRectifyLogIndex, eS
                 pRectifyLogData->RotaMat[7],
                 pRectifyLogData->RotaMat[8]
         );
-
         fprintf(stderr, "rectify main TranMat %f %f %f \n",
                 pRectifyLogData->TranMat[0],
                 pRectifyLogData->TranMat[1],
@@ -803,11 +1045,11 @@ int CVideoDeviceModel::StartStreaming()
 
     PrepareOpenDevice();
 
-    if (m_pVideoDeviceController->GetPreviewOptions()->IsPointCloudViewer()){
+    if (m_pVideoDeviceController->GetPreviewOptions()->IsPointCloudViewer()) {
         StartFrameGrabber();
     }
 
-    if (m_pVideoDeviceController->GetPreviewOptions()->IsIMUSyncWithFrame()){
+    if (m_pVideoDeviceController->GetPreviewOptions()->IsIMUSyncWithFrame()) {
         m_pVideoDeviceController->StartIMUSyncWithFrame();
     }
 
@@ -830,9 +1072,10 @@ int CVideoDeviceModel::PrepareOpenDevice()
 {
     bool bColorStream = m_pVideoDeviceController->GetPreviewOptions()->IsStreamEnable(STREAM_COLOR);
     bool bDepthStream = m_pVideoDeviceController->GetPreviewOptions()->IsStreamEnable(STREAM_DEPTH);
+    bool bIsPointCloudViewer = m_pVideoDeviceController->GetPreviewOptions()->IsPointCloudViewer();
 
     SetIRValue(m_pVideoDeviceController->GetPreviewOptions()->GetIRLevel());
-    if (bDepthStream){
+    if (bDepthStream) {
         SetDepthDataType(TransformDepthDataType(GetDepthDataType()));
     }else{
         SetDepthDataType(TransformDepthDataType(APC_DEPTH_DATA_OFF_RAW));
@@ -843,12 +1086,15 @@ int CVideoDeviceModel::PrepareOpenDevice()
     m_imageData[STREAM_COLOR].bMJPG = false;
     m_imageData[STREAM_DEPTH].nWidth = 0;
     m_imageData[STREAM_DEPTH].nHeight = 0;
+    m_imageData[STREAM_BOTH].nWidth = 0;
+    m_imageData[STREAM_BOTH].nHeight = 0;
+    m_imageData[STREAM_BOTH].bMJPG = false;
 
-    if (bColorStream){
+    if (bColorStream) {
         std::vector<APC_STREAM_INFO> streamInfo = GetStreamInfoList(STREAM_COLOR);
         int index = m_pVideoDeviceController->GetPreviewOptions()->GetStreamIndex(STREAM_COLOR);
         m_imageData[STREAM_COLOR].nWidth = streamInfo[index].nWidth;
-        m_imageData[STREAM_COLOR].nHeight  = streamInfo[index].nHeight;
+        m_imageData[STREAM_COLOR].nHeight = streamInfo[index].nHeight;
         m_imageData[STREAM_COLOR].bMJPG = streamInfo[index].bFormatMJPG;
         m_imageData[STREAM_COLOR].depthDataType = GetDepthDataType();
         m_imageData[STREAM_COLOR].imageDataType = m_imageData[STREAM_COLOR].bMJPG ?
@@ -857,13 +1103,13 @@ int CVideoDeviceModel::PrepareOpenDevice()
 
         unsigned short nBytePerPixel = 2;
         unsigned int nBufferSize = m_imageData[STREAM_COLOR].nWidth * m_imageData[STREAM_COLOR].nHeight * nBytePerPixel;
-        if (m_imageData[STREAM_COLOR].imageBuffer.size() != nBufferSize){
+        if (m_imageData[STREAM_COLOR].imageBuffer.size() != nBufferSize) {
             m_imageData[STREAM_COLOR].imageBuffer.resize(nBufferSize);
         }
         memset(&m_imageData[STREAM_COLOR].imageBuffer[0], 0, sizeof(nBufferSize));
     }
 
-    if (bDepthStream){
+    if (bDepthStream) {
         std::vector<APC_STREAM_INFO> streamInfo = GetStreamInfoList(STREAM_DEPTH);
         int index = m_pVideoDeviceController->GetPreviewOptions()->GetStreamIndex(STREAM_DEPTH);
         m_imageData[STREAM_DEPTH].nWidth = streamInfo[index].nWidth;
@@ -873,14 +1119,32 @@ int CVideoDeviceModel::PrepareOpenDevice()
 
         unsigned short nBytePerPixel = 2;
         unsigned int nBufferSize = m_imageData[STREAM_DEPTH].nWidth * m_imageData[STREAM_DEPTH].nHeight * nBytePerPixel;
-        if (m_imageData[STREAM_DEPTH].imageBuffer.size() != nBufferSize){
+        if (m_imageData[STREAM_DEPTH].imageBuffer.size() != nBufferSize) {
             m_imageData[STREAM_DEPTH].imageBuffer.resize(nBufferSize);
         }
         memset(&m_imageData[STREAM_DEPTH].imageBuffer[0], 0, sizeof(nBufferSize));
     }
 
+    if (m_usbPortType == MIPI_PORT_TYPE &&
+        bColorStream &&
+        bDepthStream &&
+        !bIsPointCloudViewer) {
+        m_imageData[STREAM_BOTH].nWidth = m_imageData[STREAM_COLOR].nWidth + m_imageData[STREAM_DEPTH].nWidth;
+        m_imageData[STREAM_BOTH].nHeight = m_imageData[STREAM_COLOR].nHeight;
+        m_imageData[STREAM_BOTH].bMJPG = m_imageData[STREAM_COLOR].bMJPG;
+        m_imageData[STREAM_BOTH].depthDataType = m_imageData[STREAM_COLOR].depthDataType;
+        m_imageData[STREAM_BOTH].imageDataType = m_imageData[STREAM_COLOR].imageDataType;
+
+        unsigned short nBytePerPixel = 2;
+        unsigned int nBufferSize = m_imageData[STREAM_BOTH].nWidth * m_imageData[STREAM_BOTH].nHeight * nBytePerPixel;
+        if (m_imageData[STREAM_BOTH].imageBuffer.size() != nBufferSize) {
+            m_imageData[STREAM_BOTH].imageBuffer.resize(nBufferSize);
+        }
+        memset(&m_imageData[STREAM_BOTH].imageBuffer[0], 0, sizeof(nBufferSize));
+    }
+
     if (InterleaveModeSupport() &&
-        APC_OK != SetInterleaveModeEnable(IsInterleaveMode())){
+        APC_OK != SetInterleaveModeEnable(IsInterleaveMode())) {
         CTaskInfo *pInfo = CTaskInfoManager::GetInstance()->RequestTaskInfo(CTaskInfo::VIDEO_INTERLEAVE_MODE, this);
         CThreadWorkerManage::GetInstance()->AddTask(pInfo);
     }
@@ -907,14 +1171,13 @@ CImageDataModel *CVideoDeviceModel::GetPreivewImageDataModel(STREAM_TYPE streamT
 
 int CVideoDeviceModel::StartFrameGrabber()
 {
-    if(m_pFrameGrabber) {
+    if (m_pFrameGrabber) {
         delete m_pFrameGrabber;
     }
 
     int nMaxPoolSize = 1;
     m_pFrameGrabber = new FrameGrabber(nMaxPoolSize, CVideoDeviceModel::FrameGrabberCallbackFn, this);
     return APC_OK;
-
 }
 
 int CVideoDeviceModel::PreparePointCloudInfo()
@@ -939,19 +1202,19 @@ int CVideoDeviceModel::GetPointCloudInfo(eSPCtrl_RectLogData *pRectifyLogData, P
     pointCloudInfo.centerY = -1.0f * pRectifyLogData->ReProjectMat[7] * ratio_Mat;
     pointCloudInfo.focalLength = pRectifyLogData->ReProjectMat[11] * ratio_Mat;
 
-    switch (depthImageData.imageDataType){
+    switch (depthImageData.imageDataType) {
         case APCImageType::DEPTH_14BITS: pointCloudInfo.disparity_len = 0; break;
         case APCImageType::DEPTH_11BITS:
         {
             pointCloudInfo.disparity_len = 2048;
-            for(int i = 0 ; i < pointCloudInfo.disparity_len ; ++i){
-                pointCloudInfo.disparityToW[i] = ( i * ratio_Mat / 8.0f ) / baseline + diff;
+            for(int i = 0 ; i < pointCloudInfo.disparity_len ; ++i) {
+                pointCloudInfo.disparityToW[i] = (i * ratio_Mat / 8.0f) / baseline + diff;
             }
             break;
         }
         default:
             pointCloudInfo.disparity_len = 256;
-            for(int i = 0 ; i < pointCloudInfo.disparity_len ; ++i){
+            for(int i = 0 ; i < pointCloudInfo.disparity_len ; ++i) {
                 pointCloudInfo.disparityToW[i] = (i * ratio_Mat) / baseline + diff;
             }
             break;
@@ -972,15 +1235,6 @@ int CVideoDeviceModel::OpenDevice()
 
     if (m_usbPortType == MIPI_PORT_TYPE) {
         ret = APC_OpenDevice(CEYSDDeviceManager::GetInstance()->GetEYSD(),
-                              m_deviceSelInfo[0],
-                              m_imageData[STREAM_COLOR].nWidth, m_imageData[STREAM_COLOR].nHeight, m_imageData[STREAM_COLOR].bMJPG,
-                              m_imageData[STREAM_DEPTH].nWidth, m_imageData[STREAM_DEPTH].nHeight,
-                              DEPTH_IMG_NON_TRANSFER,
-                              true, nullptr,
-                              &nFPS,
-                              IMAGE_SN_SYNC);
-    } else {
-        ret = APC_OpenDevice2(CEYSDDeviceManager::GetInstance()->GetEYSD(),
                              m_deviceSelInfo[0],
                              m_imageData[STREAM_COLOR].nWidth, m_imageData[STREAM_COLOR].nHeight, m_imageData[STREAM_COLOR].bMJPG,
                              m_imageData[STREAM_DEPTH].nWidth, m_imageData[STREAM_DEPTH].nHeight,
@@ -988,9 +1242,18 @@ int CVideoDeviceModel::OpenDevice()
                              true, nullptr,
                              &nFPS,
                              IMAGE_SN_SYNC);
+    } else {
+        ret = APC_OpenDevice2(CEYSDDeviceManager::GetInstance()->GetEYSD(),
+                              m_deviceSelInfo[0],
+                              m_imageData[STREAM_COLOR].nWidth, m_imageData[STREAM_COLOR].nHeight, m_imageData[STREAM_COLOR].bMJPG,
+                              m_imageData[STREAM_DEPTH].nWidth, m_imageData[STREAM_DEPTH].nHeight,
+                              DEPTH_IMG_NON_TRANSFER,
+                              true, nullptr,
+                              &nFPS,
+                              IMAGE_SN_SYNC);
     }
 
-    if (APC_OK == ret){
+    if (APC_OK == ret) {
         if (bColorStream) {
             m_pVideoDeviceController->GetPreviewOptions()->SetStreamFPS(STREAM_COLOR, nFPS);
             if (bDepthStream) m_pVideoDeviceController->GetPreviewOptions()->SetStreamFPS(STREAM_DEPTH, nFPS);
@@ -1014,13 +1277,13 @@ int CVideoDeviceModel::StartStreamingTask()
             CreateStreamTask(STREAM_COLOR);
         }
     } else {
-        if (bColorStream){
+        if (bColorStream) {
             CreateStreamTask(STREAM_COLOR);
         }
         
-        if (bDepthStream){
-            auto AdjustRealDepthWidth = [](int &nWidth, APCImageType::Value type){
-                if (APCImageType::DEPTH_8BITS == type){
+        if (bDepthStream) {
+            auto AdjustRealDepthWidth = [](int &nWidth, APCImageType::Value type) {
+                if (APCImageType::DEPTH_8BITS == type) {
                     nWidth *= 2;
                 }
             };
@@ -1030,8 +1293,8 @@ int CVideoDeviceModel::StartStreamingTask()
         }
     }
 
-    if (InterleaveModeSupport()){
-        if (IsInterleaveMode()){
+    if (InterleaveModeSupport()) {
+        if (IsInterleaveMode()) {
             m_bPrevLowLightValue = m_cameraPropertyModel[0]->GetCameraProperty(CCameraPropertyModel::LOW_LIGHT_COMPENSATION).nValue;
             m_cameraPropertyModel[0]->SetCameraPropertyValue(CCameraPropertyModel::LOW_LIGHT_COMPENSATION, 0);
             m_cameraPropertyModel[0]->SetCameraPropertySupport(CCameraPropertyModel::LOW_LIGHT_COMPENSATION, false);
@@ -1045,12 +1308,12 @@ int CVideoDeviceModel::StopStreaming(bool bRestart)
 {
     ChangeState(OPENED);
 
-    if (m_pVideoDeviceController->GetPreviewOptions()->IsIMUSyncWithFrame()){
+    if (m_pVideoDeviceController->GetPreviewOptions()->IsIMUSyncWithFrame()) {
         m_pVideoDeviceController->StopIMUSyncWithFrame();
     }
 
     StopStreamingTask();
-    if (m_pVideoDeviceController->GetPreviewOptions()->IsPointCloudViewer()){
+    if (m_pVideoDeviceController->GetPreviewOptions()->IsPointCloudViewer()) {
         StopFrameGrabber();
     }
 
@@ -1065,15 +1328,14 @@ int CVideoDeviceModel::StopStreaming(bool bRestart)
 
 int CVideoDeviceModel::StopStreamingTask()
 {
-    for (CTaskInfo *pTask : m_taskInfoStorage){
+    for (CTaskInfo *pTask : m_taskInfoStorage) {
         CThreadWorkerManage::GetInstance()->RemoveTask(pTask);
     }
 
     m_taskInfoStorage.clear();
 
-    if (InterleaveModeSupport()){
-
-        if(IsInterleaveMode()){
+    if (InterleaveModeSupport()) {
+        if (IsInterleaveMode()) {
             m_cameraPropertyModel[0]->SetCameraPropertySupport(CCameraPropertyModel::LOW_LIGHT_COMPENSATION, true);
             m_cameraPropertyModel[0]->SetCameraPropertyValue(CCameraPropertyModel::LOW_LIGHT_COMPENSATION, m_bPrevLowLightValue);
         }
@@ -1094,16 +1356,24 @@ int CVideoDeviceModel::ClosePreviewView()
 {
     bool bColorStream = m_pVideoDeviceController->GetPreviewOptions()->IsStreamEnable(STREAM_COLOR);
     bool bDepthStream = m_pVideoDeviceController->GetPreviewOptions()->IsStreamEnable(STREAM_DEPTH);
+    bool bIsPointCloudViewer = m_pVideoDeviceController->GetPreviewOptions()->IsPointCloudViewer();
 
-    if (bColorStream){
+    if (bColorStream) {
         m_pVideoDeviceController->GetControlView()->ClosePreviewView(STREAM_COLOR);
     }
 
-    if (bDepthStream){
+    if (bDepthStream) {
         m_pVideoDeviceController->GetControlView()->ClosePreviewView(STREAM_DEPTH);
     }
 
-    if (m_pVideoDeviceController->GetPreviewOptions()->IsPointCloudViewer()){
+    if (m_usbPortType == MIPI_PORT_TYPE &&
+        bColorStream &&
+        bDepthStream &&
+        !bIsPointCloudViewer) {
+        m_pVideoDeviceController->GetControlView()->ClosePreviewView(STREAM_BOTH);
+    }
+
+    if (m_pVideoDeviceController->GetPreviewOptions()->IsPointCloudViewer()) {
         m_pVideoDeviceController->GetControlView()->ClosePointCloud();
     }
 
@@ -1112,7 +1382,7 @@ int CVideoDeviceModel::ClosePreviewView()
 
 int CVideoDeviceModel::StopFrameGrabber()
 {
-    if(m_pFrameGrabber) {
+    if (m_pFrameGrabber) {
         delete m_pFrameGrabber;
         m_pFrameGrabber = nullptr;
     }
@@ -1121,14 +1391,14 @@ int CVideoDeviceModel::StopFrameGrabber()
 
 int CVideoDeviceModel::AdjustRegister()
 {
-    if(GetState() != STREAMING) return APC_OK;
+    if (GetState() != STREAMING) return APC_OK;
 
-    if (!IsHWPP()){
+    if (!IsHWPP()) {
         SetHWPP(true);
     }
-    int ret =  RegisterSettings::DM_Quality_Register_Setting(CEYSDDeviceManager::GetInstance()->GetEYSD(),
-                                                             m_deviceSelInfo[0],
-                                                             m_deviceInfo[0].deviceInfomation.wPID);
+    int ret = RegisterSettings::DM_Quality_Register_Setting(CEYSDDeviceManager::GetInstance()->GetEYSD(),
+                                                            m_deviceSelInfo[0],
+                                                            m_deviceInfo[0].deviceInfomation.wPID);
 
     m_pVideoDeviceController->GetControlView()->UpdateUI();
 
@@ -1150,7 +1420,7 @@ int CVideoDeviceModel::ConfigDepthFilter()
 int CVideoDeviceModel::DoImageGrabber(CTaskInfo::TYPE type)
 {
     STREAM_TYPE streamType;
-    switch (type){
+    switch (type) {
         case CTaskInfo::GRABBER_VIDEO_IMAGE_COLOR:
             streamType = STREAM_COLOR;
             break;
@@ -1189,8 +1459,8 @@ int CVideoDeviceModel::DoImageGrabber(CTaskInfo::TYPE type)
 
     int ret = GetImage(streamType);
     HandleGetImageResult(streamType, ret);
-    if(APC_OK == ret && m_pVideoDeviceController->GetPreviewOptions()->IsPointCloudViewer() &&
-       m_pFrameGrabber){
+    if (APC_OK == ret && m_pVideoDeviceController->GetPreviewOptions()->IsPointCloudViewer() &&
+       m_pFrameGrabber) {
         UpdateFrameGrabberData(streamType);
     }
 
@@ -1199,9 +1469,10 @@ int CVideoDeviceModel::DoImageGrabber(CTaskInfo::TYPE type)
 
 int CVideoDeviceModel::GetImage(STREAM_TYPE type)
 {
+    bool bIsPointCloudViewer = m_pVideoDeviceController->GetPreviewOptions()->IsPointCloudViewer();
     int ret;
 
-    switch (type){
+    switch (type) {
         case STREAM_COLOR:
             if (m_usbPortType == MIPI_PORT_TYPE) {
 			    ret = Get2Image(type);
@@ -1213,7 +1484,10 @@ int CVideoDeviceModel::GetImage(STREAM_TYPE type)
             ret = GetDepthImage();
             break;
         case STREAM_BOTH:
-            ret = Get2Image(type);
+            if (bIsPointCloudViewer)
+                ret = Get2Image(type);
+            else
+                ret = Get2ImageNoSplit(type);
             break;
         default:
             return APC_NotSupport;
@@ -1223,7 +1497,8 @@ int CVideoDeviceModel::GetImage(STREAM_TYPE type)
 }
 
 #if 0
-int max_calc_frame_count = 30;
+#define MAX_CAP_FRAME_COUNT 300
+int max_calc_frame_count = MAX_CAP_FRAME_COUNT;
 FILE *color_fp = NULL;
 #endif
 int CVideoDeviceModel::Get2Image(STREAM_TYPE type)
@@ -1248,8 +1523,8 @@ int CVideoDeviceModel::Get2Image(STREAM_TYPE type)
     }
 
 #if 0
-    printf("[%s][%d]Save image buffer as file...\n",  __func__, __LINE__);
-    if (max_calc_frame_count == 30) {
+    if (max_calc_frame_count == MAX_CAP_FRAME_COUNT) {
+        printf("########## Save image buffer as file ##########\n");
         color_fp = fopen("DMPreview.yuv", "wb");
         fseek(color_fp, 0, SEEK_SET);
     }
@@ -1259,16 +1534,56 @@ int CVideoDeviceModel::Get2Image(STREAM_TYPE type)
     } else if (max_calc_frame_count == 0) {
         fclose(color_fp);
         max_calc_frame_count--;
+        printf("###############################################\n");
     }
 #endif
 
+#if 0
+    struct timeval t, tProcessImg;
+    gettimeofday(&t, NULL);
+#endif
     ret = ProcessImage(STREAM_COLOR, nColorImageSize, nSerial);
     if (APC_OK != ret) return ret;
-
+#if 0
+    gettimeofday(&tProcessImg, NULL);
+    printf("ProcessCImg: %lums\n", ((tProcessImg.tv_sec - t.tv_sec) * 1000000 + tProcessImg.tv_usec - t.tv_usec) / 1000);
+#endif
     if (type == STREAM_BOTH) { 
         ret = ProcessImage(STREAM_DEPTH, nDepthImageSize, nSerial);
         if (APC_OK != ret) return ret;
     }
+#if 0
+    gettimeofday(&tProcessImg, NULL);
+    printf("ProcessDImg: %lums\n", ((tProcessImg.tv_sec - t.tv_sec) * 1000000 + tProcessImg.tv_usec - t.tv_usec) / 1000);
+#endif
+
+    return ret;
+}
+
+int CVideoDeviceModel::Get2ImageNoSplit(STREAM_TYPE type)
+{
+    QMutexLocker locker(&m_streamMutex[STREAM_BOTH]);
+    unsigned long int nImageSize = 0;
+    int nSerial = EOF;
+    int64_t cur_tv_sec = 0;
+    int64_t cur_tv_usec = 0;
+
+    int ret = APC_Get2ImageWithTimestampNoSplit(CEYSDDeviceManager::GetInstance()->GetEYSD(),
+							                    m_deviceSelInfo[0],
+                                                &m_imageData[STREAM_BOTH].imageBuffer[0],
+                                                &nImageSize,
+                                                &nSerial,
+                                                &cur_tv_sec,
+                                                &cur_tv_usec,
+                                                true);
+
+    if (APC_OK != ret) {
+        printf("[%s][%d] Call APC_Get2ImageWithTimestampNoSplit() Error, %d\n", __func__, __LINE__, ret);
+        return ret;
+    }
+
+    ret = ProcessImage(STREAM_BOTH, nImageSize, nSerial);
+    if (APC_OK != ret) return ret;
 
     return ret;
 }
@@ -1340,14 +1655,16 @@ int CVideoDeviceModel::GetColorImage()
     }
 #endif
 
-    return ProcessImage(STREAM_COLOR, nImageSize, nSerial);
+    ret = ProcessImage(STREAM_COLOR, nImageSize, nSerial);
+
+    return ret;
 }
 
 int CVideoDeviceModel::FirstSuccessGetImageCallback(STREAM_TYPE type)
 {
     QMutexLocker locker(&m_streamMutex[type]);
     if (STREAM_DEPTH == type ||
-        STREAM_DEPTH_30mm == type){
+        STREAM_DEPTH_30mm == type) {
         CTaskInfo *pInfo = CTaskInfoManager::GetInstance()->RequestTaskInfo(CTaskInfo::VIDEO_QUALITY_REGISTER_SETTING, this);
         CThreadWorkerManage::GetInstance()->AddTask(pInfo);
     }
@@ -1422,28 +1739,29 @@ int CVideoDeviceModel::GetDepthImage()
     }
 #endif
 
-    return ProcessImage(STREAM_DEPTH, nImageSize, nSerial);
+    ret = ProcessImage(STREAM_DEPTH, nImageSize, nSerial);
+
+    return ret;
 }
 
 int CVideoDeviceModel::HandleGetImageResult(STREAM_TYPE type, int getImageResult)
 {
     if (STREAMING != GetState()) return getImageResult;
 
-    if (APC_OK == getImageResult){
-        if(GetColdResetThresholdMs(type) == FirstOpenDeviceColdeRestThresholdMs()){
+    if (APC_OK == getImageResult) {
+        if (GetColdResetThresholdMs(type) == FirstOpenDeviceColdeRestThresholdMs()) {
             FirstSuccessGetImageCallback(type);
             SetColdResetThresholdMs(type, OpenDeviceColdeRestThresholdMs());
         }
 
         SetLastestSuccessTime(type, QTime::currentTime());
-
-    }else{
+    } else {
         QTime lastestSuccessTime = GetLastestSuccessTime(type);
         if (lastestSuccessTime.msecsTo(QTime::currentTime()) > GetColdResetThresholdMs(type) ||
-            lastestSuccessTime.msecsTo(QTime::currentTime()) < 0){
+            lastestSuccessTime.msecsTo(QTime::currentTime()) < 0) {
             static QMutex mutex;
             QMutexLocker locker(&mutex);
-            if(!m_coldResetTask){
+            if (!m_coldResetTask) {
                 SetColdResetStartTime(QTime::currentTime());
                 m_coldResetTask = CTaskInfoManager::GetInstance()->RequestTaskInfo(CTaskInfo::VIDEO_COLD_RESET, this);
                 CThreadWorkerManage::GetInstance()->AddTask(m_coldResetTask);
@@ -1457,19 +1775,19 @@ int CVideoDeviceModel::HandleGetImageResult(STREAM_TYPE type, int getImageResult
 int CVideoDeviceModel::ProcessImageCallback(STREAM_TYPE streamType,
                                             int nImageSize, int nSerialNumber)
 {
-    if (IsInterleaveMode()){
-        if (STREAM_COLOR == streamType){
+    if (IsInterleaveMode()) {
+        if (STREAM_COLOR == streamType) {
             if (1 == nSerialNumber % 2) return APC_OK;
-            if (m_nLastInterLeaveColorSerial + 2 != nSerialNumber){
+            if (m_nLastInterLeaveColorSerial + 2 != nSerialNumber) {
                 m_nLastInterLeaveColorSerial = nSerialNumber;
                 return APC_OK;
             }
             m_nLastInterLeaveColorSerial = nSerialNumber;
         }
 
-        if (STREAM_DEPTH == streamType){
+        if (STREAM_DEPTH == streamType) {
             if (0 == nSerialNumber % 2) return APC_OK;
-            if (m_nLastInterLeaveDepthSerial + 2 != nSerialNumber){
+            if (m_nLastInterLeaveDepthSerial + 2 != nSerialNumber) {
                 m_nLastInterLeaveDepthSerial = nSerialNumber;
                 return APC_OK;
             }
@@ -1480,14 +1798,14 @@ int CVideoDeviceModel::ProcessImageCallback(STREAM_TYPE streamType,
     CEYSDUIView *pView = m_pVideoDeviceController->GetControlView();
     if (!pView) return APC_OK;
 
-    if (IsIMUSyncWithFrame()){
+    if (IsIMUSyncWithFrame()) {
         return CFrameSyncManager::GetInstance()->SyncImageCallback(this,
                                                             m_imageData[streamType].imageDataType, streamType,
                                                             &m_imageData[streamType].imageBuffer[0],
                                                             nImageSize,
                                                             m_imageData[streamType].nWidth, m_imageData[streamType].nHeight,
                                                             nSerialNumber, nullptr);
-    }else{
+    } else {
         return pView->ImageCallback(m_imageData[streamType].imageDataType, streamType,
                                     &m_imageData[streamType].imageBuffer[0],
                                     nImageSize,
@@ -1503,75 +1821,91 @@ int CVideoDeviceModel::ProcessImage(STREAM_TYPE streamType,
     return ProcessImageCallback(streamType, nImageSize, nSerialNumber);
 }
 
-int CVideoDeviceModel::UpdateFrameGrabberData(STREAM_TYPE streamType)
+int CVideoDeviceModel::UpdateFrameGrabberColorData(STREAM_TYPE streamType)
+{
+    const bool bIsDpethOutput = PreviewOptions::POINT_CLOUDE_VIEWER_OUTPUT_DEPTH == m_pVideoDeviceController->GetPreviewOptions()->GetPointCloudViewOutputFormat();
+    CImageDataModel *pColorImageData = GetPreivewImageDataModel(streamType);
+
+    if (!pColorImageData) return APC_NullPtr;
+    
+    QMutexLocker locker(&pColorImageData->GetDataMutex());
+    
+    BYTE *pBuffer = &pColorImageData->GetRGBData()[0];
+    int nBytesPerPixelColor = 3;
+    if (bIsDpethOutput) {
+        CImageDataModel *pDepthImageData = GetPreivewImageDataModel(STREAM_DEPTH);
+        if (pDepthImageData &&
+            pDepthImageData->GetWidth() > 0 && pDepthImageData->GetHeight() > 0) {
+            if (pDepthImageData->GetWidth() == pColorImageData->GetWidth() &&
+                pDepthImageData->GetHeight() == pColorImageData->GetHeight()) {
+                pBuffer = &pDepthImageData->GetRGBData()[0];
+            } else {
+                if (m_imageData[STREAM_RESERVED].imageBuffer.size() != pColorImageData->GetWidth() * pColorImageData->GetHeight() * 3) {
+                    m_imageData[STREAM_RESERVED].imageBuffer.resize(pColorImageData->GetWidth() * pColorImageData->GetHeight() * 3);
+                }
+                PlyWriter::resampleImage(pDepthImageData->GetWidth(), pDepthImageData->GetHeight(), &pDepthImageData->GetRGBData()[0],
+                                         pColorImageData->GetWidth(), pColorImageData->GetHeight(), &m_imageData[STREAM_RESERVED].imageBuffer[0],
+                                         nBytesPerPixelColor);
+                pBuffer = &m_imageData[STREAM_RESERVED].imageBuffer[0];
+            }
+        }
+    }
+    m_pFrameGrabber->SetFrameFormat(FrameGrabber::FRAME_POOL_INDEX_COLOR,
+                                    pColorImageData->GetWidth(), pColorImageData->GetHeight(),
+                                    nBytesPerPixelColor);
+    m_pFrameGrabber->UpdateFrameData(FrameGrabber::FRAME_POOL_INDEX_COLOR,
+                                     pColorImageData->GetSerialNumber(),
+                                     pBuffer,
+                                     pColorImageData->GetRGBData().size());
+}
+
+int CVideoDeviceModel::UpdateFrameGrabberDepthData(STREAM_TYPE streamType)
 {
     const bool bIsDpethOutput = PreviewOptions::POINT_CLOUDE_VIEWER_OUTPUT_DEPTH == m_pVideoDeviceController->GetPreviewOptions()->GetPointCloudViewOutputFormat();
     const bool bIsRGBStreamEnabled = m_pVideoDeviceController->GetPreviewOptions()->IsStreamEnable(STREAM_COLOR) ||
             m_pVideoDeviceController->GetPreviewOptions()->IsStreamEnable(STREAM_KOLOR);
+    CImageDataModel *pDepthImageData = GetPreivewImageDataModel(STREAM_DEPTH);
 
-    switch(streamType){
+    if (!pDepthImageData) return APC_NullPtr;
+    
+    int nBytesPerPixelDepth = 2;
+    if (APCImageType::DEPTH_8BITS == m_imageData[STREAM_DEPTH].imageDataType) nBytesPerPixelDepth = 1;
+    m_pFrameGrabber->SetFrameFormat(FrameGrabber::FRAME_POOL_INDEX_DEPTH,
+                                    pDepthImageData->GetWidth(), pDepthImageData->GetHeight(),
+                                    nBytesPerPixelDepth);
+    if (bIsDpethOutput && !bIsRGBStreamEnabled) { // Only Depth without doing case STREAM_COLOR
+        m_pFrameGrabber->SetFrameFormat(FrameGrabber::FRAME_POOL_INDEX_COLOR,
+                                        pDepthImageData->GetWidth(), pDepthImageData->GetHeight(),
+                                        3);
+        m_pFrameGrabber->UpdateFrameData(FrameGrabber::FRAME_POOL_INDEX_COLOR,
+                                         pDepthImageData->GetSerialNumber(),
+                                         &pDepthImageData->GetRGBData()[0],
+                                         pDepthImageData->GetRGBData().size());
+    }
+    m_pFrameGrabber->UpdateFrameData(FrameGrabber::FRAME_POOL_INDEX_DEPTH,
+                                     pDepthImageData->GetSerialNumber(),
+                                     &pDepthImageData->GetRawData()[0],
+                                     pDepthImageData->GetRawData().size());
+}
+
+int CVideoDeviceModel::UpdateFrameGrabberData(STREAM_TYPE streamType)
+{
+    switch (streamType) {
         case STREAM_COLOR:
         case STREAM_KOLOR:
         {
-            CImageDataModel *pColorImageData = GetPreivewImageDataModel(streamType);
-            if (!pColorImageData) return APC_NullPtr;
-
-            QMutexLocker locker(&pColorImageData->GetDataMutex());
-
-            BYTE *pBuffer = &pColorImageData->GetRGBData()[0];
-            int nBytesPerPixelColor = 3;
-            if (bIsDpethOutput){
-                CImageDataModel *pDepthImageData = GetPreivewImageDataModel(STREAM_DEPTH);
-                if (pDepthImageData &&
-                    pDepthImageData->GetWidth() > 0 && pDepthImageData->GetHeight() > 0){
-                    if (pDepthImageData->GetWidth() == pColorImageData->GetWidth() &&
-                        pDepthImageData->GetHeight() == pColorImageData->GetHeight()){
-                        pBuffer = &pDepthImageData->GetRGBData()[0];
-                    }else{
-                        if (m_imageData[STREAM_RESERVED].imageBuffer.size() != pColorImageData->GetWidth() * pColorImageData->GetHeight() * 3){
-                            m_imageData[STREAM_RESERVED].imageBuffer.resize(pColorImageData->GetWidth() * pColorImageData->GetHeight() * 3);
-                        }
-                        PlyWriter::resampleImage(pDepthImageData->GetWidth(), pDepthImageData->GetHeight(), &pDepthImageData->GetRGBData()[0],
-                                                 pColorImageData->GetWidth(), pColorImageData->GetHeight(), &m_imageData[STREAM_RESERVED].imageBuffer[0],
-                                                 nBytesPerPixelColor);
-                        pBuffer = &m_imageData[STREAM_RESERVED].imageBuffer[0];
-                    }
-                }
-            }
-
-            m_pFrameGrabber->SetFrameFormat(FrameGrabber::FRAME_POOL_INDEX_COLOR,
-                                            pColorImageData->GetWidth(), pColorImageData->GetHeight(),
-                                            nBytesPerPixelColor);
-            m_pFrameGrabber->UpdateFrameData(FrameGrabber::FRAME_POOL_INDEX_COLOR,
-                                             pColorImageData->GetSerialNumber(),
-                                             pBuffer,
-                                             pColorImageData->GetRGBData().size());
+            UpdateFrameGrabberColorData(streamType);
             break;
         }
         case STREAM_DEPTH:
-        case STREAM_BOTH:
         {
-            CImageDataModel *pDepthData = GetPreivewImageDataModel(STREAM_DEPTH);
-            if (!pDepthData) return APC_NullPtr;
-
-            int nBytesPerPixelDepth = 2;
-            if(APCImageType::DEPTH_8BITS == m_imageData[STREAM_DEPTH].imageDataType) nBytesPerPixelDepth = 1;
-            m_pFrameGrabber->SetFrameFormat(FrameGrabber::FRAME_POOL_INDEX_DEPTH,
-                                            pDepthData->GetWidth(), pDepthData->GetHeight(),
-                                            nBytesPerPixelDepth);
-            if (bIsDpethOutput && !bIsRGBStreamEnabled) { // Only Depth without doing case STREAM_COLOR
-                m_pFrameGrabber->SetFrameFormat(FrameGrabber::FRAME_POOL_INDEX_COLOR,
-                                                pDepthData->GetWidth(), pDepthData->GetHeight(),
-                                                3);
-                m_pFrameGrabber->UpdateFrameData(FrameGrabber::FRAME_POOL_INDEX_COLOR,
-                                                 pDepthData->GetSerialNumber(),
-                                                 &pDepthData->GetRGBData()[0],
-                                                 pDepthData->GetRGBData().size());
-            }
-            m_pFrameGrabber->UpdateFrameData(FrameGrabber::FRAME_POOL_INDEX_DEPTH,
-                                             pDepthData->GetSerialNumber(),
-                                             &pDepthData->GetRawData()[0],
-                                             pDepthData->GetRawData().size());
+            UpdateFrameGrabberDepthData(streamType);
+            break;
+        }
+        case STREAM_BOTH: // For MIPI
+        {
+            UpdateFrameGrabberColorData(STREAM_COLOR);
+            UpdateFrameGrabberDepthData(STREAM_DEPTH);
             break;
         }
         default: return APC_NotSupport;
@@ -1586,7 +1920,7 @@ int CVideoDeviceModel::CreateStreamTask(STREAM_TYPE type)
     SetLastestSuccessTime(type, QTime::currentTime());
 
     CTaskInfo::TYPE taskType;
-    switch (type){
+    switch (type) {
         case STREAM_COLOR: taskType = CTaskInfo::GRABBER_VIDEO_IMAGE_COLOR; break;
         case STREAM_COLOR_SLAVE: taskType = CTaskInfo::GRABBER_VIDEO_IMAGE_COLOR_SLAVE; break;
         case STREAM_DEPTH: taskType = CTaskInfo::GRABBER_VIDEO_IMAGE_DEPTH; break;
@@ -1648,7 +1982,7 @@ void CVideoDeviceModel::SerialCountToFrameCount(STREAM_TYPE streamType, int &nSe
         }
     }
 
-    if (m_mapSerialCountDiff.count( streamType ) > 0){
+    if (m_mapSerialCountDiff.count( streamType ) > 0) {
 
         if ( 1 == m_mapSerialCountDiff[ streamType ] ) // frame-count
         {
@@ -1670,10 +2004,9 @@ void CVideoDeviceModel::SerialCountToFrameCount(STREAM_TYPE streamType, int &nSe
 
     m_mapSerialCountLast[ streamType ] = nSerialNumber;
 
-    if (m_mapSerialCount2FrameCount.count(streamType) > 0){
+    if (m_mapSerialCount2FrameCount.count(streamType) > 0) {
         nSerialNumber = m_mapSerialCount2FrameCount[ streamType ];
     }
-
 }
 
 std::vector<CloudPoint> CVideoDeviceModel::GeneratePointCloud(
@@ -1692,12 +2025,12 @@ std::vector<CloudPoint> CVideoDeviceModel::GeneratePointCloud(
                          PlyFilterSupprot();
 
     std::vector<float> imgFloatBufOut;
-    if (bUsePlyFilter){
-        if(APC_OK != PlyFilterTransform(depthData, colorData,
+    if (bUsePlyFilter) {
+        if (APC_OK != PlyFilterTransform(depthData, colorData,
                                             nDepthWidth, nDepthHeight,
                                             nColorWidth, nColorHeight,
                                             imgFloatBufOut, GetRectifyLogData(depthType),
-                                            depthImageType)){
+                                            depthImageType)) {
             return {};
         }
     }
@@ -1723,7 +2056,7 @@ std::vector<CloudPoint> CVideoDeviceModel::GeneratePointCloud(std::vector<unsign
                                                               bool bUsePlyFilter, std::vector<float> imgFloatBufOut)
 {
     std::vector<CloudPoint> cloudPoints;
-    if(bUsePlyFilter && !imgFloatBufOut.empty()){
+    if (bUsePlyFilter && !imgFloatBufOut.empty()) {
         PlyWriter::EYSDFrameTo3D_PlyFilterFloat(nDepthWidth, nDepthHeight,
                                                  imgFloatBufOut,
                                                  nColorWidth, nColorHeight,
@@ -1773,7 +2106,7 @@ int CVideoDeviceModel::PlyFilterTransform(std::vector<unsigned char> &depthData,
         nDepthHeight = resampleHeightDepth;
     }
 
-    switch (depthImageType){
+    switch (depthImageType) {
         case APCImageType::DEPTH_8BITS:
         {
             //D8 TO D11 IMAGE +
@@ -1818,7 +2151,7 @@ int CVideoDeviceModel::PlyFilterTransform(std::vector<unsigned char> &depthData,
             break;
     }
 
-    if (imgFloatBufOut.empty()){
+    if (imgFloatBufOut.empty()) {
         return APC_NullPtr;
     }
 
@@ -1839,8 +2172,6 @@ int CVideoDeviceModel::ProcessFrameGrabberCallback(std::vector<unsigned char>& b
                                                    std::vector<unsigned char>& bufColor, int widthColor, int heightColor,
                                                    int serialNumber)
 {
-
-
     size_t nPointCloudSize = widthDepth * heightDepth * 3;
     if (m_pointCloudDepth.size() != nPointCloudSize) m_pointCloudDepth.resize(nPointCloudSize);
     else                                             std::fill(m_pointCloudDepth.begin(), m_pointCloudDepth.end(), 0.0f);
@@ -1857,14 +2188,14 @@ int CVideoDeviceModel::ProcessFrameGrabberCallback(std::vector<unsigned char>& b
     float fZNear = (nZNear * 1.0f) > 0 ? nZNear : 0.1f;
     float fZFar = (nZFar * 1.0f) > 0? nZFar : 1000.0f;
     unsigned char *pImgColor = bufColor.empty() ? nullptr : &bufColor[0];
-    if(APC_OK == APC_GetPointCloud(CEYSDDeviceManager::GetInstance()->GetEYSD(),
+    if (APC_OK == APC_GetPointCloud(CEYSDDeviceManager::GetInstance()->GetEYSD(),
                                            m_deviceSelInfo[0],
                                            pImgColor, widthColor, heightColor,
                                            &bufDepth[0], widthDepth, heightDepth,
                                            &m_pointCloudInfo,
                                            &m_pointCloudColor[0],
                                            &m_pointCloudDepth[0],
-                                           fZNear, fZFar)){
+                                           fZNear, fZFar)) {
         m_pVideoDeviceController->GetControlView()->PointCloudCallback(m_pointCloudDepth, m_pointCloudColor);
     }
     return APC_OK;
@@ -1876,7 +2207,7 @@ int CVideoDeviceModel::InitIMU()
 
     if (m_pIMUModel) delete m_pIMUModel;
 
-    for (CIMUModel::INFO info : GetIMUInfo()){
+    for (CIMUModel::INFO info : GetIMUInfo()) {
         m_pIMUModel = new CIMUModel(info, this);
 
         if (m_pIMUModel->IsValid()) break;
@@ -1898,7 +2229,7 @@ void CVideoDeviceModel::SetIMUSyncWithFrame(bool bSync)
     if (!m_pVideoDeviceController) return;
     if (bSync == m_pVideoDeviceController->GetPreviewOptions()->IsIMUSyncWithFrame()) return;
 
-    if (bSync){
+    if (bSync) {
         m_pVideoDeviceController->StartIMUSyncWithFrame();
     }else{
         m_pVideoDeviceController->StopIMUSyncWithFrame();
@@ -1929,12 +2260,16 @@ bool CVideoDeviceModel::IsInterleaveMode()
         return bIsInterLeave;
     }
 
-    int nFPS = m_pVideoDeviceController->GetPreviewOptions()->GetStreamFPS(STREAM_COLOR);
+    if (APC_PID_MIPI_8036 == GetDeviceInformation()[0].deviceInfomation.wPID) {
+        GetInterleaveMode(&bIsInterLeave);
+    } else {
+        int nFPS = m_pVideoDeviceController->GetPreviewOptions()->GetStreamFPS(STREAM_COLOR);
 
-    for (int nInterleaveFPS : GetInterleaveModeFPS()){
-        if (nInterleaveFPS == nFPS){
-            bIsInterLeave = true;
-            break;
+        for (int nInterleaveFPS : GetInterleaveModeFPS()) {
+            if (nInterleaveFPS == nFPS) {
+                bIsInterLeave = true;
+                break;
+            }
         }
     }
 
@@ -1944,7 +2279,8 @@ bool CVideoDeviceModel::IsInterleaveMode()
 int CVideoDeviceModel::AdjustInterleaveModeState()
 {
     if (!InterleaveModeSupport()) return APC_NotSupport;
-    if(STREAMING != GetState()) return APC_OK;
+    if (STREAMING != GetState()) return APC_OK;
+    if (APC_PID_MIPI_8036 == GetDeviceInformation()[0].deviceInfomation.wPID) return APC_NotSupport;
 
     return SetInterleaveModeEnable(IsInterleaveMode());
 }
@@ -1969,3 +2305,28 @@ int CVideoDeviceModel::SetInterleaveModeEnable(bool bEnable)
 
     return ret;
 }
+
+int CVideoDeviceModel::SetInterleaveMode(bool bEnable)
+{
+    if (!InterleaveModeSupport()) return APC_NotSupport;
+
+    int ret;
+    RETRY_APC_API(ret, APC_SetInterleaveMode(CEYSDDeviceManager::GetInstance()->GetEYSD(),
+                                                   m_deviceSelInfo[0],
+                                                   bEnable));
+
+    return ret;
+}
+
+int CVideoDeviceModel::GetInterleaveMode(bool *pEnable)
+{
+    if (!InterleaveModeSupport()) return APC_NotSupport;
+
+    int ret;
+    RETRY_APC_API(ret, APC_GetInterleaveMode(CEYSDDeviceManager::GetInstance()->GetEYSD(),
+                                                   m_deviceSelInfo[0],
+                                                   pEnable));
+
+    return ret;
+}
+

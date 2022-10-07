@@ -63,13 +63,13 @@ void CVideoDeviceDialog::showEvent(QShowEvent *event)
 
 void CVideoDeviceDialog::closeEvent(QCloseEvent *event)
 {
-    for (CPreviewDialog *pPreviewDialog : m_pPreviewDialog){
-        if (pPreviewDialog){
+    for (CPreviewDialog *pPreviewDialog : m_pPreviewDialog) {
+        if (pPreviewDialog) {
             pPreviewDialog->close();
         }
     }
 
-    if (m_pPointCloudViewerDialog){
+    if (m_pPointCloudViewerDialog) {
         m_pPointCloudViewerDialog->close();
     }
 
@@ -87,8 +87,8 @@ void CVideoDeviceDialog::UpdateSelf()
 
 void CVideoDeviceDialog::BeginFrameSync()
 {
-    for (CPreviewDialog *pPreviewDialog : m_pPreviewDialog){
-        if (pPreviewDialog){
+    for (CPreviewDialog *pPreviewDialog : m_pPreviewDialog) {
+        if (pPreviewDialog) {
             pPreviewDialog->setUpdatesEnabled(false);
         }
     }
@@ -97,8 +97,8 @@ void CVideoDeviceDialog::BeginFrameSync()
 
 void CVideoDeviceDialog::EndFrameSync()
 {
-    for (CPreviewDialog *pPreviewDialog : m_pPreviewDialog){
-        if (pPreviewDialog){
+    for (CPreviewDialog *pPreviewDialog : m_pPreviewDialog) {
+        if (pPreviewDialog) {
             pPreviewDialog->setUpdatesEnabled(true);
         }
     }
@@ -107,8 +107,8 @@ void CVideoDeviceDialog::EndFrameSync()
     RUN_ON_UI_THREAD(
     m_pIMUWidget->UpdateSelf();
     m_pIMUWidget->repaint();
-    for (CPreviewDialog *pPreviewDialog : m_pPreviewDialog){
-        if (pPreviewDialog){
+    for (CPreviewDialog *pPreviewDialog : m_pPreviewDialog) {
+        if (pPreviewDialog) {
             pPreviewDialog->repaint();
         }
     }
@@ -119,10 +119,10 @@ void CVideoDeviceDialog::EndFrameSync()
 void CVideoDeviceDialog::OpenPreviewView(CVideoDeviceModel::STREAM_TYPE type)
 {
     RUN_ON_UI_THREAD(
-    if(!m_pPreviewDialog[type]){
+    if (!m_pPreviewDialog[type]) {
         CImageDataModel *pImageDataModel = CImageDataModelFactory::CreateCImageDataModel(type, m_pVideoDeviceController);
         m_pPreviewDialog[type] = new CPreviewDialog(m_pVideoDeviceController, pImageDataModel, this);
-        if(!m_pVideoDeviceController->GetPreviewOptions()->IsPointCloudViewer()){
+        if (!m_pVideoDeviceController->GetPreviewOptions()->IsPointCloudViewer()) {
 			#ifdef TI_EVM
             m_pPreviewDialog[type]->adjustSize();
 			#endif
@@ -136,7 +136,7 @@ void CVideoDeviceDialog::OpenPreviewView(CVideoDeviceModel::STREAM_TYPE type)
 void CVideoDeviceDialog::ClosePreviewView(CVideoDeviceModel::STREAM_TYPE type)
 {
     RUN_ON_UI_THREAD(
-    if (m_pPreviewDialog[type]){
+    if (m_pPreviewDialog[type]) {
         m_pPreviewDialog[type]->close();
         m_pPreviewDialog[type] = nullptr;
     }
@@ -146,7 +146,7 @@ void CVideoDeviceDialog::ClosePreviewView(CVideoDeviceModel::STREAM_TYPE type)
 void CVideoDeviceDialog::ClosePointCloud()
 {
     RUN_ON_UI_THREAD(
-    if (m_pPointCloudViewerDialog){
+    if (m_pPointCloudViewerDialog) {
         m_pPointCloudViewerDialog->close();
         m_pPointCloudViewerDialog = nullptr;
     }
@@ -155,13 +155,13 @@ void CVideoDeviceDialog::ClosePointCloud()
 
 void CVideoDeviceDialog::UpdateColorPalette()
 {
-    for (CPreviewDialog *pPreviewDlog : m_pPreviewDialog){
+    for (CPreviewDialog *pPreviewDlog : m_pPreviewDialog) {
         if (!pPreviewDlog) continue;
 
         CImageDataModel *pImageDataModel = pPreviewDlog->GetImageDataModel();
         if (!pImageDataModel) continue;
 
-        if (CImageDataModel::DEPTH == pImageDataModel->GetModelType()){
+        if (CImageDataModel::DEPTH == pImageDataModel->GetModelType()) {
             int nZNear, nZFar;
             m_pVideoDeviceController->GetPreviewOptions()->GetZRange(nZNear, nZFar);
             ((CImageDataModel_Depth *)pImageDataModel)->UpdateColorPalette(nZNear, nZFar);
@@ -172,7 +172,7 @@ void CVideoDeviceDialog::UpdateColorPalette()
 void CVideoDeviceDialog::RelocateDialogPosition()
 {
     std::vector<CPreviewDialog *> visiblePreviewDialog;
-    for (CPreviewDialog *pPreviewDlog : m_pPreviewDialog){
+    for (CPreviewDialog *pPreviewDlog : m_pPreviewDialog) {
         if (pPreviewDlog && pPreviewDlog->isVisible()) {
             visiblePreviewDialog.push_back(pPreviewDlog);
         }
@@ -186,11 +186,11 @@ void CVideoDeviceDialog::RelocateDialogPosition()
     int nHeight = availableRect.height();
     int nTitleHeight = QApplication::style()->pixelMetric(QStyle::PM_TitleBarHeight);
 
-    if (3 == visiblePreviewDialog.size()){
+    if (3 == visiblePreviewDialog.size()) {
         int nWidthPerPreview = (nWidth - nMargin * 2) / 3;
         int nHeightPerPreview = (nHeight - nTitleHeight) / 2;
 
-        for (size_t i = 0 ; i < visiblePreviewDialog.size() ; ++i){
+        for (size_t i = 0 ; i < visiblePreviewDialog.size() ; ++i) {
             visiblePreviewDialog[i]->move(nLeft + (i * (nWidthPerPreview + nMargin)),
                                           nTop);
             visiblePreviewDialog[i]->SetPreferSize(nWidthPerPreview,
@@ -202,11 +202,11 @@ void CVideoDeviceDialog::RelocateDialogPosition()
         int nWidthPerPreviewBottom = (nWidth - nMargin * 2 ) / 3;
         int nHeightPerPreviewBottom = (nHeight - (nTitleHeight * 2) - nMargin) / 2;
 
-        for (size_t i = 0 ; i < visiblePreviewDialog.size() ; ++i){
+        for (size_t i = 0 ; i < visiblePreviewDialog.size() ; ++i) {
 
             int nRowIndex = (i > 1) ? 1 : 0;
 
-            switch(nRowIndex){
+            switch(nRowIndex) {
                 case 0:
                     visiblePreviewDialog[i]->move(nLeft + (i * (nWidthPerPreviewTop + nMargin)),
                                                   nTop);
@@ -214,7 +214,7 @@ void CVideoDeviceDialog::RelocateDialogPosition()
                                                            nHeightPerPreviewTop);
                     break;
                 case 1:
-                    if (5 == visiblePreviewDialog.size()){
+                    if (5 == visiblePreviewDialog.size()) {
                         visiblePreviewDialog[i]->move(nLeft + ((i - 2) * (nWidthPerPreviewBottom + nMargin)),
                                                       nTop + nHeightPerPreviewTop + nTitleHeight + nMargin);
                         visiblePreviewDialog[i]->SetPreferSize(nWidthPerPreviewBottom,
@@ -238,7 +238,6 @@ void CVideoDeviceDialog::RelocateDialogPosition()
     }
 
     move(nLeft, nTop + nHeight / 2 + nMargin);
-
 }
 
 int CVideoDeviceDialog::ImageCallback(APCImageType::Value imageType,
@@ -253,9 +252,9 @@ int CVideoDeviceDialog::ImageCallback(APCImageType::Value imageType,
         QThread::msleep(100);
     }
 
-    if (m_pPreviewDialog[streamType]->GetImageDataModel()){
+    if (m_pPreviewDialog[streamType]->GetImageDataModel()) {
         m_pPreviewDialog[streamType]->GetImageDataModel()->SetImageInfo(imageType, nWidth, nHeight);
-        if (m_pPreviewDialog[streamType]->isVisible()){
+        if (m_pPreviewDialog[streamType]->isVisible()) {
             m_pPreviewDialog[streamType]->ResizePreviewDialog();
         }
         m_pPreviewDialog[streamType]->GetImageDataModel()->SetUserData(pUserData);
@@ -267,9 +266,9 @@ int CVideoDeviceDialog::ImageCallback(APCImageType::Value imageType,
 
 int CVideoDeviceDialog::PointCloudCallback(std::vector<float> &cloudPoints, std::vector<BYTE> &colors)
 {
-    if(!m_pPointCloudViewerDialog){
+    if (!m_pPointCloudViewerDialog) {
         RUN_ON_UI_THREAD(
-        if(!m_pPointCloudViewerDialog){
+        if (!m_pPointCloudViewerDialog) {
             m_pPointCloudViewerDialog = new CPointCloudViewerDialog(m_pVideoDeviceController, this);
             m_pPointCloudViewerDialog->setGeometry({0, 0, 800, 480});
             m_pPointCloudViewerDialog->show();
@@ -286,7 +285,6 @@ int CVideoDeviceDialog::PointCloudCallback(std::vector<float> &cloudPoints, std:
 CImageDataModel *CVideoDeviceDialog::GetPreviewImageData(CVideoDeviceModel::STREAM_TYPE type)
 {
     if (!m_pPreviewDialog[type]) return nullptr;
-
     return m_pPreviewDialog[type]->GetImageDataModel();
 }
 
@@ -302,7 +300,7 @@ void CVideoDeviceDialog::UpdateModuleInformation()
 
     sVID.sprintf("0x%x", deviceInfo[0].deviceInfomation.wVID);
     sSerial = QString::fromStdString(deviceInfo[0].sSerialNumber);
-    for (CVideoDeviceModel::DeviceInfo info : deviceInfo){
+    for (CVideoDeviceModel::DeviceInfo info : deviceInfo) {
         QString sPIDHex;
         sPIDHex.sprintf("0x%x", info.deviceInfomation.wPID);
         sPID += sPIDHex + ", ";
@@ -342,7 +340,6 @@ void CVideoDeviceDialog::UpdatePreview()
     m_pPreviewWidget = new CVideoDevicePreviewWidget(m_pVideoDeviceController,
                                                    this);
     ui->tabWidget->addTab(m_pPreviewWidget, "Preview");
-
 }
 
 void CVideoDeviceDialog::UpdateRegister()
@@ -363,7 +360,7 @@ void CVideoDeviceDialog::UpdateCameraProperty()
 
 void CVideoDeviceDialog::UpdateDepthAccuracy()
 {
-    if(!m_pVideoDeviceController->GetVideoDeviceModel()->DepthAccuracySupport()) return;
+    if (!m_pVideoDeviceController->GetVideoDeviceModel()->DepthAccuracySupport()) return;
 
     if (m_pDepthAccuracyWidget) delete m_pDepthAccuracyWidget;
     m_pDepthAccuracyWidget = new CVideoDeviceDepthAccuracyWidget(m_pVideoDeviceController->GetDepthAccuracyController(),
@@ -373,7 +370,7 @@ void CVideoDeviceDialog::UpdateDepthAccuracy()
 
 void CVideoDeviceDialog::UpdateIMU()
 {
-    if(!m_pVideoDeviceController->GetIMUDataController()) return;
+    if (!m_pVideoDeviceController->GetIMUDataController()) return;
 
     if (m_pIMUWidget) delete m_pIMUWidget;
     m_pIMUWidget = new CVideoDeviceIMUWidget(m_pVideoDeviceController->GetIMUDataController(),
@@ -383,7 +380,7 @@ void CVideoDeviceDialog::UpdateIMU()
 
 void CVideoDeviceDialog::UpdateAudio()
 {
-    if(!m_pVideoDeviceController->GetVideoDeviceModel()->AudioSupport()) return;
+    if (!m_pVideoDeviceController->GetVideoDeviceModel()->AudioSupport()) return;
 
     if (m_pAudioWidget) delete m_pAudioWidget;
     m_pAudioWidget = new CVideoDeviceAudoWidget(this);
@@ -407,6 +404,22 @@ void CVideoDeviceDialog::UpdateThermalUI() {
     }
 }
 
+void CVideoDeviceDialog::on_pushButton_force_override_clicked() {
+
+    QMessageBox::StandardButton result = QMessageBox::question(
+                this, "Dangerous action !!",
+                "Pressed Yes, all your calibration files in G2 section "
+                "will be override by the value in G1.",
+                QMessageBox::Yes|QMessageBox::No);
+
+    if (result == QMessageBox::Yes) {
+        auto resultString = m_pVideoDeviceController->GetVideoDeviceModel()->CopyAllFileToG2();
+        QMessageBox::StandardButton result = QMessageBox::information(
+                    this, "Result",
+                    resultString.c_str());
+    }
+}
+
 void CVideoDeviceDialog::on_pushButton_temperature_clicked() {
     QString temperatureString;
     float deviceTemperature = 0.0f;
@@ -423,7 +436,7 @@ void CVideoDeviceDialog::on_pushButton_rectify_read_clicked()
     int nIndex = ui->comboBox_log_index->currentText().toInt();
     eSPCtrl_RectLogData rectLogData;
     int ret;
-    if (ui->checkBox_slave_dev->isChecked()){
+    if (ui->checkBox_slave_dev->isChecked()) {
         ret = m_pVideoDeviceController->GetSlaveRectifyLogData(nIndex, &rectLogData);
     }else{
         ret = m_pVideoDeviceController->GetRectifyLogData(nIndex, &rectLogData);
@@ -549,11 +562,11 @@ void CVideoDeviceDialog::on_pushButton_rectify_read_clicked()
         fclose(pFile);
     }
 
-    if (PUMA == nDevType){
+    if (PUMA == nDevType) {
         QString sRectifyLogInfo;
         sRectifyLogInfo.sprintf("index:%d\n", nIndex);
         sRectifyLogInfo += "ReProjectMat=\n";
-        for (int i = 0 ; i < 16 ; ++i){
+        for (int i = 0 ; i < 16 ; ++i) {
             if (rectLogData.ReProjectMat[i] > 0) sRectifyLogInfo += " ";
             sRectifyLogInfo += QString::number(rectLogData.ReProjectMat[i], 'f', 6);
             if (i % 4 == 3) sRectifyLogInfo += "\n";

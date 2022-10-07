@@ -44,16 +44,24 @@ int CVideoDeviceModel_8036::GetRectifyLogData(int nDevIndex, int nRectifyLogInde
 
 int CVideoDeviceModel_8036::TransformDepthDataType(int nDepthDataType, bool bRectifyData)
 {
+    int ret = APC_OK;
     int depthDataType = CVideoDeviceModel::TransformDepthDataType(nDepthDataType, bRectifyData);
 
     std::vector<APC_STREAM_INFO> depthStreamInfo = GetStreamInfoList(STREAM_DEPTH);
 
-    if (!depthStreamInfo.empty()){
+    if (!depthStreamInfo.empty()) {
         int nDepthIndex = m_pVideoDeviceController->GetPreviewOptions()->GetStreamIndex(STREAM_DEPTH);
-        if (640 == depthStreamInfo[nDepthIndex].nWidth && 360 == depthStreamInfo[nDepthIndex].nHeight){
+        unsigned short PidBuf;
+        unsigned short VidBuf;
+
+        RETRY_APC_API(ret, APC_GetPidVid(CEYSDDeviceManager::GetInstance()->GetEYSD(),
+                                               m_deviceSelInfo[0],
+                                               &PidBuf, &VidBuf));
+        if ((PidBuf == APC_PID_8036) && (640 == depthStreamInfo[nDepthIndex].nWidth && 360 == depthStreamInfo[nDepthIndex].nHeight)) {
             char FWVersion[128];
             int nActualLength = 0;
             char *FindFwVer;
+            // Apply the same FW to support 360x640 even if USB & MIPI in AMP project
             if (APC_OK == APC_GetFwVersion(CEYSDDeviceManager::GetInstance()->GetEYSD(), m_deviceSelInfo[0], FWVersion, 256, &nActualLength)) {
                 FindFwVer = strstr(FWVersion, "MIPITX-SLAVE");
                 if (!FindFwVer)

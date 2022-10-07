@@ -33,8 +33,14 @@ INCLUDEPATH += $$PWD/../eSPDI/
 INCLUDEPATH += $$PWD/../eSPDI/thermal/x86_64/include/
 
 LIBS += -L$$PWD/../eSPDI -leSPDI_X86_64
-LIBS += -L$$PWD/../eSPDI/thermal/x86_64/lib/ -lMapping
-LIBS += -L$$PWD/../eSPDI/thermal/x86_64/lib/ -lMeasure
+
+contains(DEFINES, THERMAL_SENSOR) {
+    LIBS += -L$$PWD/../eSPDI/thermal/x86_64/lib/ -lMapping
+    LIBS += -L$$PWD/../eSPDI/thermal/x86_64/lib/ -lMeasure
+    HEADERS += utility/thermal/v4l2.h
+    SOURCES += utility/thermal/v4l2.cpp
+}
+
 LIBS += -lrt -lm -ldl -lpthread -lX11 -ludev -lusb-1.0
 CONFIG += c++11
 
@@ -136,12 +142,11 @@ HEADERS += \
     utility/IMU/IMU_Filter/quaternion.h \
     utility/IMU/IMU_Filter/Quaternion1.h \
     utility/IMU/IMU_Calibration/CIMUCalibration.h \
-    utility/thermal/v4l2.h \
     manager/CFrameSyncManager.h \
     model/module/CVideoDeviceModel_Grap.h \
     model/module/CVideoDeviceModel_8073.h \
     model/module/CVideoDeviceModel_8063.h \
-    model/module/CVideoDeviceModel_8076.h \
+    model/module/CVideoDeviceModel_8076_8077.h \
     model/module/CVideoDeviceModel_Iris.h \
     model/module/CVideoDeviceModel_Grap.h
 
@@ -225,11 +230,10 @@ SOURCES += \
     utility/IMU/IMU_Filter/quaternion.cpp \
     utility/IMU/IMU_Filter/Quaternion1.c \
     utility/IMU/IMU_Calibration/CIMUCalibration.cpp \
-    utility/thermal/v4l2.cpp \
     manager/CFrameSyncManager.cpp \
     model/module/CVideoDeviceModel_Grap.cpp \
     model/module/CVideoDeviceModel_8063.cpp \
-    model/module/CVideoDeviceModel_8076.cpp \
+    model/module/CVideoDeviceModel_8076_8077.cpp \
     model/module/CVideoDeviceModel_Iris.cpp \
     model/module/CVideoDeviceModel_8073.cpp
 
@@ -237,4 +241,3 @@ RESOURCES += \
     resource/resource.qrc
 
 DEFINES += UAC_X86_SUPPORTED
-DEFINES += THERMAL_SENSOR

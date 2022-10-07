@@ -9,7 +9,8 @@ CVideoDeviceModel(pDeviceSelfInfo)
 
 int CVideoDeviceModel_8036_8052::AdjustZDTableIndex(int &nIndex)
 {
-    return 0; // Currently using scale down
+    nIndex = 0;
+    return APC_OK; // Currently using scale down
 }
 
 #if defined(_MIPI_CAMERA_)

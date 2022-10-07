@@ -1137,6 +1137,19 @@ int APC_GetDepthImageWithTimestamp(
 */
 int APC_SetupBlock(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, bool enable);
 
+/*! \fn int APC_SetupContinueModek(
+        void *pHandleEYSD,
+        PDEVSELINFO pDevSelInfo,
+        bool enable)
+    \brief get color or depth pin image
+        by issuing V4L2's IOCTL to get frame data
+    \param void *pHandleEYSD	handle
+    \param PDEVSELINFO pDevSelInfo	pointer of device select index
+    \param bool enable Enable the MIPI clock continue mode or not)
+    \return success: APC_OK, others: see eSPDI_def.h
+*/
+int APC_SetupContinueMode(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, bool enable);
+
 /*! \fn int APC_Get_Color_30_mm_depth(
         void *pHandleEYSD,
         PDEVSELINFO pDevSelInfo,
@@ -1225,6 +1238,38 @@ int  APC_Get2Image (void *pHandleEYSD, PDEVSELINFO pDevSelInfo,
                         BYTE *pColorImgBuf, BYTE *pDepthImgBuf,
                         unsigned long int *pColorImageSize, unsigned long int *pDepthImageSize,
                         int *pSerial = 0, int *pSerial2 = 0, int nDepthDataType =0);
+
+/*! \fn int APC_Get2ImageWithTimestampNoSplit(
+        void *pHandleEYSD,
+        PDEVSELINFO pDevSelInfo,
+        BYTE *pColorImgBuf,
+        BYTE *pDepthImgBuf,
+        unsigned long int *pColorImageSize,
+        unsigned long int *pDepthImageSize,
+        int *pColorSerial,
+        int *pDepthSerial,
+        int nDepthDataType)
+    \brief get color and/or depth pin images
+        see APC_GetImage for detailed description
+    \param void *pHandleEYSD	handle
+    \param PDEVSELINFO pDevSelInfo	pointer of device select index
+    \param BYTE *pBuf	buffer to store image
+    \param unsigned long int *pImageSize	the actual buffer size
+    \param int *pColorSerial	serial number
+    \param int nDepthDataType	the depth data type, see definition in eSPDI_def.h
+    \param int64_t *pcur_tv_sec seconds in 'v4l2_buffer' timestamp of this image data
+    \param int64_t *pcur_tv_usec microseconds in 'v4l2_buffer' timestamp of this image data
+    \return success: APC_OK, others: see eSPDI_def.h
+*/
+int APC_Get2ImageWithTimestampNoSplit(
+    void *pHandleEYSD,
+    PDEVSELINFO pDevSelInfo,
+    BYTE *pBuf,
+    unsigned long int *pImageSize,
+    int *pSerial,
+    int64_t *pcur_tv_sec,
+    int64_t *pcur_tv_usec,
+    bool bNeedToSvave);
 
 /*! \fn int APC_Get2ImageWithTimestamp(
         void *pHandleEYSD,
@@ -2801,31 +2846,82 @@ int APC_TableToData(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, int width, int h
  * unsigned int nHeight,
  * APCImageType::Value imageType)
     \brief APC_InitPostProcess
-    \param void **ppPostProcessHandle	 [TODO]
-    \param unsigned int nWidth  [TODO]
-    \param unsigned int nHeight [TODO]
-    \param APCImageType::Value imageType [TODO]
-    \return success: APC_OK, others: see eSPDI_def.h
+    \param void **ppPostProcessHandle
+    \param unsigned int nWidth
+    \param unsigned int nHeight
+    \param APCImageType::Value::DEPTH_11BITS, APCImageType::Value::DEPTH_8BITS
+    \return success: APC_POSTPROCESS_INIT_FAIL or APC_OK
 */
 int APC_InitPostProcess(void **ppPostProcessHandle, unsigned int nWidth,
                             unsigned int nHeight,
                             APCImageType::Value imageType);
 
-/*! \fn APC_PostProcess(void *pPostProcessHandle, unsigned char *pDepthData)
-    \brief APC_PostProcess
-    \param void *ppPostProcessHandle	 [TODO]
-    \param unsigned char *pDepthData [TODO]
-    \return success: APC_OK, others: see eSPDI_def.h
+
+/**
+ *
+ * @param ppPostProcessHandle
+ * @param nWidth
+ * @param nHeight
+ * @param imageType APCImageType::Value::DEPTH_11BITS
+ * @param postProcessParams Custom setting for filters. Contact with us for more info to match your optical environment.
+ * spatial_filter_kernel_size must set to an odd number recommend value is [3, 15]. Larger value is smoother.
+ * spatial_filter_outlier_threshold [1, 64]. Smaller value filters out more points.
+ * @return APC_POSTPROCESS_INIT_FAIL or APC_OK
  */
-int APC_PostProcess(void *pPostProcessHandle, unsigned char *pDepthData);
+int APC_InitPostProcessCustomParameter(void **ppPostProcessHandle, unsigned int nWidth, unsigned int nHeight,
+                                       APCImageType::Value imageType, POST_PROCESS_PARAMS postProcessParams);
+/**
+ *
+ * @param pPostProcessHandle
+ * @param pDepthData disparity buffer.
+ * @param filteredFrame filtered disparity.
+ * @param imageType APCImageType::Value::DEPTH_11BITS will use CV_16UC1 as computing format.
+ * @return APC_OK, others: see eSPDI_def.h
+ */
+int APC_PostProcess(void *pPostProcessHandle, unsigned char *pDepthData, unsigned char *filteredFrame,
+                    APCImageType::Value imageType);
 
 
 /*! \fn APC_ReleasePostProcess(void *pPostProcessHandle)
     \brief APC_ReleasePostProcess
-    \param void *ppPostProcessHandle	 [TODO]
+    \param void *ppPostProcessHandle the handle to be released.
     \return success: APC_OK, others: see eSPDI_def.h
  */
 int APC_ReleasePostProcess(void *pPostProcessHandle);
+
+/**
+ *
+ * @param ppDecimationFilterHandle Handle for user to store.
+ * @param inWidth input disparity width
+ * @param inHeight input disparity height
+ * @param outWidth scale down image width
+ * @param outHeight scale down image height
+ * @param imageType Currently only support APCImageType::DEPTH_11BITS
+ * @param decimationParams Divide resolutions by the factor and round to 4-divisible number. Ex. 1280 / 3 ~= 428
+ * @return APC_POSTPROCESS_INIT_FAIL when null pointers is passed in. APC_OK if no problem.
+ */
+int APC_InitDecimationFilter(void **ppDecimationFilterHandle, unsigned int inWidth, unsigned int inHeight,
+                             unsigned int *outWidth, unsigned int *outHeight, APCImageType::Value imageType,
+                             DECIMATION_PARAMS decimationParams);
+/**
+ *
+ * @param pDecimationFilterHandle
+ * @param pDepthData inWidth * inHeight * 2 (Size of 11 bits disparity) bytes when call APC_InitDecimationFilter*APIs.
+ * @param filteredFrame outWidth * outWidth * 2 (Size of 11 bits disparity) bytes output buffer.
+ * @param imageType APCImageType::Value
+ * @return Returns APC_NullPtr if pDepthData or filteredFrame is nullptr.
+ * Customized version might return APC_DEVICE_NOT_SUPPORT. APC_POSTPROCESS_INIT_FAIL if developer put the wrong imageType
+ * or bad DECIMATION_PARAMS is used.
+ */
+int APC_DecimationFilter(void *pDecimationFilterHandle, unsigned char *pDepthData, unsigned char *filteredFrame,
+                         APCImageType::Value imageType);
+
+/**
+ *
+ * @param pDecimationFilterHandle handle to be released.
+ * @return APC_NullPtr when parameter is nullptr. APC_OK if no problem.
+ */
+int APC_ReleaseDecimationFilter(void *pDecimationFilterHandle);
 
 /*! \fn int APC_SetRootCipher(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, const char* cipher)
     \brief Set the correct root to do un-protect flash when writing parameters of camera.

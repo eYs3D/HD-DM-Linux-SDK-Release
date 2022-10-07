@@ -25,7 +25,7 @@ m_pIMUDataController(nullptr)
                                                  m_pVideoDeviceModel->GetDeviceInformation()[0].deviceInfomation.wPID);
     m_pRegisterReadWriteController = new CRegisterReadWriteController(pVideoDeviceModel);
     m_pCameraPropertyController = new CCameraPropertyController(pVideoDeviceModel);
-    if(m_pVideoDeviceModel->IMUSupport()){
+    if (m_pVideoDeviceModel->IMUSupport()) {
         m_pIMUDataController = new CIMUDataController(m_pVideoDeviceModel);
         m_pVideoDeviceModel->ConfigIMU();
     }
@@ -36,7 +36,7 @@ m_pIMUDataController(nullptr)
 
     Init();
 
-    if(m_pModeConfigOptions->GetModeCount() != 0){
+    if (m_pModeConfigOptions->GetModeCount() != 0) {
         GetPreviewOptions()->EnableModeConfig(true);
         const int videoModePredefined = m_pVideoDeviceModel->DefaultVideoMode();
         bool isVideoModePredefined = videoModePredefined > 0;
@@ -46,10 +46,10 @@ m_pIMUDataController(nullptr)
 
         SelectModeConfigIndex(listIndex);
 
-        if (GetPreviewOptions()->IsStreamEnable(CVideoDeviceModel::STREAM_COLOR)){
+        if (GetPreviewOptions()->IsStreamEnable(CVideoDeviceModel::STREAM_COLOR)) {
             UpdateStreamOptionForCombineMode(GetPreviewOptions()->GetStreamIndex(CVideoDeviceModel::STREAM_COLOR));
-        }else if (GetPreviewOptions()->IsStreamEnable(CVideoDeviceModel::STREAM_DEPTH)){
-             UpdateStreamOptionForCombineMode(GetVideoDeviceModel()->GetCombineStreamIndexFromDepth(GetPreviewOptions()->GetStreamIndex(CVideoDeviceModel::STREAM_DEPTH)));
+        } else if (GetPreviewOptions()->IsStreamEnable(CVideoDeviceModel::STREAM_DEPTH)) {
+            UpdateStreamOptionForCombineMode(GetVideoDeviceModel()->GetCombineStreamIndexFromDepth(GetPreviewOptions()->GetStreamIndex(CVideoDeviceModel::STREAM_DEPTH)));
         }
     }
 }
@@ -443,7 +443,7 @@ int CVideoDeviceController::SelectModeConfigIndex(int nIndex)
     if(GetVideoDeviceModel()->IsColorWithDepthDevice()){
         if (GetPreviewOptions()->IsStreamEnable(CVideoDeviceModel::STREAM_COLOR)){
             UpdateStreamOptionForCombineMode(GetPreviewOptions()->GetStreamIndex(CVideoDeviceModel::STREAM_COLOR));
-        }else if (!GetPreviewOptions()->IsStreamEnable(CVideoDeviceModel::STREAM_DEPTH)){
+        } else if (!GetPreviewOptions()->IsStreamEnable(CVideoDeviceModel::STREAM_DEPTH)){
             int nRotateWidth = modeConfig.D_Resolution.Height;
             int nRotateHeight = modeConfig.D_Resolution.Width;
             SetStreamInfo(CVideoDeviceModel::STREAM_DEPTH,
@@ -456,7 +456,7 @@ int CVideoDeviceController::SelectModeConfigIndex(int nIndex)
 
     if(!modeConfig.vecDepthType.empty() && GetPreviewOptions()->IsStreamEnable(CVideoDeviceModel::STREAM_DEPTH)){
         SetDepthDataBits(modeConfig.vecDepthType[0], modeConfig.bRectifyMode);
-    }else{
+    } else {
         SetDepthDataBits(0, modeConfig.bRectifyMode);
     }
 

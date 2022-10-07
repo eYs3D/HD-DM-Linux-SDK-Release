@@ -17,24 +17,24 @@ FrameGrabber::~FrameGrabber()
     Close();
 }
 
-void FrameGrabber::UpdateFrameData(int index,int serialNumber, unsigned char*buf, size_t size)
+void FrameGrabber::UpdateFrameData(int index, int serialNumber, unsigned char* buf, size_t size)
 {
-    std::lock_guard<std::mutex> lock( FRAME_POOL_INDEX_COLOR == index ? m_mutex_color : m_mutex_depth );
+    std::lock_guard<std::mutex> lock(FRAME_POOL_INDEX_COLOR == index ? m_mutex_color : m_mutex_depth);
 
-    FramePool& fp = ( FRAME_POOL_INDEX_COLOR == index ? m_color : m_depth );
+    FramePool& fp = (FRAME_POOL_INDEX_COLOR == index ? m_color : m_depth);
 
-    if ( fp.data.size() < size ) {
-        fp.data.resize( size );
+    if (fp.data.size() < size) {
+        fp.data.resize(size);
     }
 
-    memcpy( fp.data.data(), buf, size );
+    memcpy(fp.data.data(), buf, size);
 
     fp.sn = serialNumber;
 }
 
 void FrameGrabber::SetFrameFormat(int index, int width, int height, int bytesPerPixel)
 {
-    FramePool& fp = ( FRAME_POOL_INDEX_COLOR == index ? m_color : m_depth );
+    FramePool& fp = (FRAME_POOL_INDEX_COLOR == index ? m_color : m_depth);
 
 	fp.m_width = width;
 	fp.m_height = height;
@@ -42,16 +42,16 @@ void FrameGrabber::SetFrameFormat(int index, int width, int height, int bytesPer
 
 void FrameGrabber::Close()
 {
-    if(!m_threadStart) return;
+    if (!m_threadStart) return;
 
     m_threadStart = false;
 
     m_checkFrameReadyThread->join();
 }
 
-void FrameGrabber::CheckFrameReadyThreadFn( void* pvoid )
+void FrameGrabber::CheckFrameReadyThreadFn(void* pvoid)
 {
-    FrameGrabber* pThis = ( FrameGrabber* )pvoid;
+    FrameGrabber* pThis = (FrameGrabber*)pvoid;
 
     BOOL synchronized = true;
     int last_sn = -1;
@@ -63,7 +63,7 @@ void FrameGrabber::CheckFrameReadyThreadFn( void* pvoid )
         {
             std::lock_guard<std::mutex> lock(pThis->m_mutex_depth);
 
-            if ( pThis->m_depth.sn == last_sn /*|| pThis->m_color.data.empty()*/ )
+            if (pThis->m_depth.sn == last_sn /*|| pThis->m_color.data.empty()*/)
             {
                 synchronized = false;
             }
@@ -78,11 +78,11 @@ void FrameGrabber::CheckFrameReadyThreadFn( void* pvoid )
                 depth = pThis->m_depth;
             }
         }
-        if ( synchronized )
+        if (synchronized)
         {
-            pThis->m_callbackFn( depth.data, depth.m_width, depth.m_height,
-                                    color.data, color.m_width, color.m_height,
-                                    last_sn, pThis->m_callbackParam);
+            pThis->m_callbackFn(depth.data, depth.m_width, depth.m_height,
+                                color.data, color.m_width, color.m_height,
+                                last_sn, pThis->m_callbackParam);
         }
         else std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }

@@ -121,7 +121,7 @@ HEADERS += \
     model/module/CVideoDeviceModel_8051.h \
     model/module/CVideoDeviceModel_8062.h \
     model/module/CVideoDeviceModel_8063.h \
-    model/module/CVideoDeviceModel_8076.h \
+    model/module/CVideoDeviceModel_8076_8077.h \
     model/module/CVideoDeviceModel_Iris.h \
     model/module/CVideoDeviceModel_Hypatia.h \
     model/module/CVideoDeviceModel_Hypatia2.h \
@@ -208,7 +208,7 @@ SOURCES += \
     model/module/CVideoDeviceModel_8051.cpp \
     model/module/CVideoDeviceModel_8062.cpp \
     model/module/CVideoDeviceModel_8063.cpp \
-    model/module/CVideoDeviceModel_8076.cpp \
+    model/module/CVideoDeviceModel_8076_8077.cpp \
     model/module/CVideoDeviceModel_Iris.cpp \
     model/module/CVideoDeviceModel_Hypatia.cpp \
     model/module/CVideoDeviceModel_Hypatia2.cpp \

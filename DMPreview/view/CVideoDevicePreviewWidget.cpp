@@ -336,14 +336,20 @@ void CVideoDevicePreviewWidget::UpdateModuleSync()
     ui->checkBox_master->blockSignals(true);
     ui->checkBox_master->setChecked(m_pVideoDeviceController->GetPreviewOptions()->IsModuleSyncMaster());
     ui->checkBox_master->blockSignals(false);
-
 }
 
 void CVideoDevicePreviewWidget::UpdateInterleaveMode()
 {
     bool bIsSupport = m_pVideoDeviceController->GetVideoDeviceModel()->InterleaveModeSupport();
+    if (APC_PID_MIPI_8036 == m_pVideoDeviceController->GetVideoDeviceModel()->GetDeviceInformation()[0].deviceInfomation.wPID) {
+        bool bInterLeaveEnable;
+        ui->checkBox_interleave_mode->setEnabled(bIsSupport);
+        m_pVideoDeviceController->GetVideoDeviceModel()->GetInterleaveMode(&bInterLeaveEnable);
+        ui->checkBox_interleave_mode->setChecked(bInterLeaveEnable);
+    } else {
+        ui->checkBox_interleave_mode->setChecked(m_pVideoDeviceController->GetVideoDeviceModel()->IsInterleaveMode());
+    }
     ui->checkBox_interleave_mode->setVisible(bIsSupport);
-    ui->checkBox_interleave_mode->setChecked(m_pVideoDeviceController->GetVideoDeviceModel()->IsInterleaveMode());
 }
 
 void CVideoDevicePreviewWidget::UpdatePlyFilter()
@@ -734,6 +740,10 @@ void CVideoDevicePreviewWidget::on_comboBox_mode_index_currentIndexChanged(int n
 void CVideoDevicePreviewWidget::on_checkBox_interleave_mode_stateChanged(int state)
 {
     UpdateModuleSync();
+    if (APC_PID_MIPI_8036 == m_pVideoDeviceController->GetVideoDeviceModel()->GetDeviceInformation()[0].deviceInfomation.wPID) {
+        bool bIsChecked = Qt::Checked == state ? true : false;
+        m_pVideoDeviceController->GetVideoDeviceModel()->SetInterleaveMode(bIsChecked);
+    }
 }
 
 void CVideoDevicePreviewWidget::on_checkBox_module_sync_stateChanged(int state)

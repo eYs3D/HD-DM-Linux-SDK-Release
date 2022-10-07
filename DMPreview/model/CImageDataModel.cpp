@@ -19,7 +19,7 @@ m_streamType(streamType),
 m_type(modelType),
 m_pDataTransformTask(nullptr)
 {
-    switch(streamType){
+    switch(streamType) {
         case CVideoDeviceModel::STREAM_COLOR: m_sDataName = "Color"; break;
         case CVideoDeviceModel::STREAM_COLOR_SLAVE: m_sDataName = "Slave Color"; break;
         case CVideoDeviceModel::STREAM_KOLOR: m_sDataName = "Kolor"; break;
@@ -65,7 +65,7 @@ bool CImageDataModel::SetImageInfo(APCImageType::Value imageType,
 
 int CImageDataModel::GetRawDataBytePerPixel()
 {
-    switch (m_imageType){
+    switch (m_imageType) {
         case APCImageType::COLOR_YUY2:
         case APCImageType::COLOR_MJPG:
         case APCImageType::DEPTH_8BITS_0x80:
@@ -85,7 +85,7 @@ QString CImageDataModel::GetImgaeDataInfo()
 {
     QString sImageInfo;
     //+[Thermal device]
-    if(m_streamType == CVideoDeviceModel::STREAM_THERMAL){
+    if (m_streamType == CVideoDeviceModel::STREAM_THERMAL) {
         sImageInfo.sprintf("%s[%d x %d] FPS[%.2f] Temp[%d C]",
                        m_sDataName.toLocal8Bit().data(),
                        m_nWidth, m_nHeight, m_fpsCalculator.GetFPS(), m_nSerialNumber);
@@ -132,27 +132,26 @@ int CImageDataModel_Color::TransformRawToRGB()
     QMutexLocker locker(&m_dataMutex);
     int ret;
 
-    if (CVideoDeviceModel::STREAMING == m_pVideoDeviceController->GetVideoDeviceModel()->GetState()){
+    if (CVideoDeviceModel::STREAMING == m_pVideoDeviceController->GetVideoDeviceModel()->GetState()) {
 		//+[Thermal device]
-		if(GetImageType() == APCImageType::COLOR_RGB24) {
+		if (GetImageType() == APCImageType::COLOR_RGB24) {
 			if (m_streamType == CVideoDeviceModel::STREAM_THERMAL) {
-                                
-                                 memcpy( &m_rgbData[0],&m_rawData[0], m_rawData.size());
-                                 ret = APC_OK;
-        	        } else {
-        	             ret = APC_NotSupport;
-        	        }
+                memcpy(&m_rgbData[0], &m_rawData[0], m_rawData.size());
+                ret = APC_OK;
+            } else {
+                ret = APC_NotSupport;
+            }
 		} else {
 		//-[Thermal device]
-                    //DMpreview use rgb format to show
-                    ret = APC_ColorFormat_to_BGR24(CEYSDDeviceManager::GetInstance()->GetEYSD(),
-                                           m_pVideoDeviceController->GetVideoDeviceModel()->GetDeviceSelInfo()[0],
-                                           &m_rgbData[0], &m_rawData[0],
-                                           m_rawData.size(),
-                                           GetWidth(), GetHeight(),
-                                           GetImageType());
+            //DMpreview use rgb format to show
+            ret = APC_ColorFormat_to_BGR24(CEYSDDeviceManager::GetInstance()->GetEYSD(),
+                                   m_pVideoDeviceController->GetVideoDeviceModel()->GetDeviceSelInfo()[0],
+                                   &m_rgbData[0], &m_rawData[0],
+                                   m_rawData.size(),
+                                   GetWidth(), GetHeight(),
+                                   GetImageType());
 		}
-    }else {
+    } else {
         ret = APC_NotSupport;
     }
 
@@ -186,7 +185,7 @@ m_pDepthTemporaNoiseTask(nullptr),
 m_nDepthInvalidBandPixel(0),
 m_PostProcessHandle(nullptr)
 {
-    for (int i = 0 ; i < COLOR_PALETTE_COUNT ; i++){
+    for (int i = 0 ; i < COLOR_PALETTE_COUNT ; i++) {
         m_colorPalette[i].resize(16384);
     }
 
@@ -203,15 +202,15 @@ m_PostProcessHandle(nullptr)
 
 CImageDataModel_Depth::~CImageDataModel_Depth()
 {
-    if (m_pDepthAccuracyTask ){
+    if (m_pDepthAccuracyTask) {
         CThreadWorkerManage::GetInstance()->RemoveTask(m_pDepthAccuracyTask);
     }
 
-    if (m_pDepthSpatialNoiseTask){
+    if (m_pDepthSpatialNoiseTask) {
         CThreadWorkerManage::GetInstance()->RemoveTask(m_pDepthSpatialNoiseTask);
     }
 
-    if (m_pDepthTemporaNoiseTask){
+    if (m_pDepthTemporaNoiseTask) {
         CThreadWorkerManage::GetInstance()->RemoveTask(m_pDepthTemporaNoiseTask);
     }
 
@@ -221,10 +220,9 @@ CImageDataModel_Depth::~CImageDataModel_Depth()
 }
 
 bool CImageDataModel_Depth::SetImageInfo(APCImageType::Value imageType, 
-                                         int nWidth, int nHeight){
-    
-    if (nWidth != m_nWidth || nHeight != m_nHeight){
-        if (m_PostProcessHandle){
+                                         int nWidth, int nHeight) {
+    if (nWidth != m_nWidth || nHeight != m_nHeight) {
+        if (m_PostProcessHandle) {
             APC_ReleasePostProcess(m_PostProcessHandle);
             m_PostProcessHandle = nullptr;
         }
@@ -254,7 +252,7 @@ void CImageDataModel_Depth::DepthFilter(BYTE *pData)
     DepthFilterOptions *pDepthFilterOptions = m_pVideoDeviceController->GetDepthFilterOptions();
     if (!pDepthFilterOptions || !pDepthFilterOptions->IsDepthFilter()) return;
 
-    switch(GetImageType()){
+    switch(GetImageType()) {
         case APCImageType::DEPTH_8BITS:
             pDepthFilterOptions->SetType(1);
             pDepthFilterOptions->SetBytesPerPixel(1);
@@ -275,12 +273,12 @@ void CImageDataModel_Depth::DepthFilter(BYTE *pData)
     int new_height = m_nHeight;
     bool bIsSubSample = pDepthFilterOptions->IsSubSample();
 
-    if(bIsSubSample)
+    if (bIsSubSample)
     {
         new_width = 0;
         new_height = 0;
         sub_disparity = NULL;	// sub_disparity Initialize;
-        APC_SubSample( CEYSDDeviceManager::GetInstance()->GetEYSD(),
+        APC_SubSample(CEYSDDeviceManager::GetInstance()->GetEYSD(),
                            m_pVideoDeviceController->GetVideoDeviceModel()->GetDeviceSelInfo()[0],
                            &sub_disparity,
                            pData,
@@ -346,72 +344,72 @@ void CImageDataModel_Depth::DepthFilter(BYTE *pData)
         else if (GetImageType() == APCImageType::DEPTH_14BITS)
         {
             CVideoDeviceModel::ZDTableInfo *pZDTableINfo = m_pVideoDeviceController->GetVideoDeviceModel()->GetZDTableInfo();
-            if ( !pZDTableINfo ) return;
+            if (!pZDTableINfo) return;
 
             const size_t Depth_Size = m_nWidth * m_nHeight;
 
             const WORD* zdTable = (WORD*) pZDTableINfo->ZDTable;
 
-            if ( Depth_Size != m_vecZ14ToD11.size()) m_vecZ14ToD11.resize(Depth_Size);
+            if (Depth_Size != m_vecZ14ToD11.size()) m_vecZ14ToD11.resize(Depth_Size);
 
-            if ( m_vecTableZ14ToD11.empty() )
+            if (m_vecTableZ14ToD11.empty())
             {
                 int Desparity = 0;
 
-                m_vecTableZ14ToD11.resize( 16385, 0 );
+                m_vecTableZ14ToD11.resize(16385, 0);
 
-                for ( int i = 0; i < 2048; i++ )
+                for (int i = 0; i < 2048; i++)
                 {
-                    m_vecTableZ14ToD11[ ((zdTable[i] & 0xff) << 8) | ((zdTable[i] & 0xff00) >> 8)] = ((i & 0xff) << 8) | ((i & 0xff00) >> 8);
+                    m_vecTableZ14ToD11[((zdTable[i] & 0xff) << 8) | ((zdTable[i] & 0xff00) >> 8)] = ((i & 0xff) << 8) | ((i & 0xff00) >> 8);
                 }
-                for ( int i = 16384; i > 0; i-- )
+                for (int i = 16384; i > 0; i--)
                 {
-                    if ( m_vecTableZ14ToD11[ i ] ) Desparity = m_vecTableZ14ToD11[ i ];
+                    if (m_vecTableZ14ToD11[i]) Desparity = m_vecTableZ14ToD11[i];
 
-                    else m_vecTableZ14ToD11[ i ] = Desparity;
+                    else m_vecTableZ14ToD11[i] = Desparity;
                 }
             }
-            WORD* pZ14Depth = ( WORD* )pData;
+            WORD* pZ14Depth = (WORD*)pData;
 
             APC_TableToData(CEYSDDeviceManager::GetInstance()->GetEYSD(),
                                 m_pVideoDeviceController->GetVideoDeviceModel()->GetDeviceSelInfo()[0],
                                 m_nWidth, m_nHeight,
-                                m_vecTableZ14ToD11.size() * sizeof( WORD ),
+                                m_vecTableZ14ToD11.size() * sizeof(WORD),
                                 m_vecTableZ14ToD11.data(),
                                 pZ14Depth,
-                                m_vecZ14ToD11.data() );
+                                m_vecZ14ToD11.data());
             APC_FlyingDepthCancellation_D11(CEYSDDeviceManager::GetInstance()->GetEYSD(),
                                                 m_pVideoDeviceController->GetVideoDeviceModel()->GetDeviceSelInfo()[0],
-                                                ( BYTE* )m_vecZ14ToD11.data(),
+                                                (BYTE*)m_vecZ14ToD11.data(),
                                                 m_nWidth, m_nHeight);
             APC_TableToData(CEYSDDeviceManager::GetInstance()->GetEYSD(),
                                 m_pVideoDeviceController->GetVideoDeviceModel()->GetDeviceSelInfo()[0],
                                 m_nWidth, m_nHeight,
-                                2048 * sizeof( WORD ),
-                                ( unsigned short* )zdTable,
+                                2048 * sizeof(WORD),
+                                (unsigned short*)zdTable,
                                 m_vecZ14ToD11.data(),
-                                pZ14Depth );
+                                pZ14Depth);
         }
     }
 }
 
 void CImageDataModel_Depth::UpdateColorPalette(int nZNear, int nZFar)
 {
-    for (int i = 0 ; i < COLOR_PALETTE_COUNT ; i++){
+    for (int i = 0 ; i < COLOR_PALETTE_COUNT ; i++) {
         memset(&m_colorPalette[i][0], 0, sizeof(RGBQUAD) * 16384);
     }
 
-    if (m_bEnableDepthAccuracy){
+    if (m_bEnableDepthAccuracy) {
         nZNear = 0;
         nZFar = MAX_DEPTH_DISTANCE;
     }
 
-    if (m_dblCamFocus > 0.0 && m_dblBaselineDist > 0.0){
+    if (m_dblCamFocus > 0.0 && m_dblBaselineDist > 0.0) {
         const int nMinDepth = 130;
         const int nMaxDepth = 2047;
 
-        int nMinZ = 8.0 * m_dblCamFocus * m_dblBaselineDist  / nMaxDepth;
-        int nMaxZ = 8.0 * m_dblCamFocus * m_dblBaselineDist  / nMinDepth;
+        int nMinZ = 8.0 * m_dblCamFocus * m_dblBaselineDist / nMaxDepth;
+        int nMaxZ = 8.0 * m_dblCamFocus * m_dblBaselineDist / nMinDepth;
 
         ColorPaletteGenerator::generatePaletteColor(&m_colorPalette[COLOR_PALETTE_RGB][0],
                                                     nMaxZ + 1, 4,
@@ -421,7 +419,7 @@ void CImageDataModel_Depth::UpdateColorPalette(int nZNear, int nZFar)
                                                    nMaxZ + 1, 4,
                                                    nMinZ, nMaxZ,
                                                    false);
-    }else{
+    } else {
         ColorPaletteGenerator::generatePaletteColor(&m_colorPalette[COLOR_PALETTE_RGB][0],
                                                     1 << 14, 4,
                                                     nZNear, nZFar,
@@ -439,7 +437,7 @@ int CImageDataModel_Depth::TransformRawToRGB()
 
     RGBQUAD *pColorPalette = nullptr;
 
-    switch (m_pVideoDeviceController->GetPreviewOptions()->GetDepthDataTransferControl()){
+    switch (m_pVideoDeviceController->GetPreviewOptions()->GetDepthDataTransferControl()) {
         case DEPTH_IMG_COLORFUL_TRANSFER:
             pColorPalette = &m_colorPalette[COLOR_PALETTE_RGB][0];
             break;
@@ -447,45 +445,40 @@ int CImageDataModel_Depth::TransformRawToRGB()
             pColorPalette = &m_colorPalette[COLOR_PALETTE_GRAY][0];
             break;
         default:
-            //if (APCImageType::DEPTH_8BITS == GetImageType()){
-                utImageProcessingUtility::convert_yuv_to_rgb_buffer( &m_rawData[0], &m_rgbData[0], GetWidth(), GetHeight());
-            //}else{
-            //    utImageProcessingUtility::convert_yuv_to_rgb_buffer( &m_rawData[0], &m_rgbData[0], GetWidth() * 2, GetHeight());
-            //}
+            utImageProcessingUtility::convert_yuv_to_rgb_buffer(&m_rawData[0], &m_rgbData[0], GetWidth(), GetHeight());
             return APC_OK;
     }
 
     int nZNear, nZFar;
-    if (m_bEnableDepthAccuracy){
+    if (m_bEnableDepthAccuracy) {
         nZNear = 0;
         nZFar = MAX_DEPTH_DISTANCE;
-    }else{
+    } else {
         m_pVideoDeviceController->GetPreviewOptions()->GetZRange(nZNear, nZFar);
     }
 
-    if  (m_pUserData){
+    if (m_pUserData) {
         utImageProcessingUtility::UpdateD11_Fusion_DisplayImage_DIB24(pColorPalette,
                                                                       (WORD *)m_pUserData, (WORD *)&m_rawData[0],
                                                                       &m_rgbData[0],
                                                                       GetWidth(), GetHeight(),
                                                                       m_dblCamFocus, m_dblBaselineDist,
                                                                       nZNear, nZFar);
-    }else if (m_dblCamFocus != 0 || m_dblBaselineDist != 0){
+    } else if (m_dblCamFocus != 0 || m_dblBaselineDist != 0) {
         utImageProcessingUtility::UpdateD11_Baseline_DisplayImage_DIB24(pColorPalette,
                                                                         (WORD *)&m_rawData[0], &m_rgbData[0],
                                                                         GetWidth(), GetHeight(),
                                                                         m_dblCamFocus, m_dblBaselineDist,
                                                                         nZNear, nZFar);
-    }else{
+    } else {
         CVideoDeviceModel::ZDTableInfo *pZDTableINfo = m_pVideoDeviceController->GetVideoDeviceModel()->GetZDTableInfo();
-        switch (GetImageType()){
+        switch (GetImageType()) {
             case APCImageType::DEPTH_8BITS:
                 utImageProcessingUtility::UpdateD8bitsDisplayImage_DIB24(pColorPalette,
                                                                          &m_rawData[0], &m_rgbData[0],
                                                                          GetWidth(), GetHeight(),
                                                                          pZDTableINfo->ZDTable,
-                                                                         pZDTableINfo->nTableSize
-                                                                         );
+                                                                         pZDTableINfo->nTableSize);
                 break;
             case APCImageType::DEPTH_11BITS:
                 utImageProcessingUtility::UpdateD11DisplayImage_DIB24(pColorPalette,
@@ -532,34 +525,33 @@ void CImageDataModel_Depth::UpdateZVaule()
 {
     int nDepthROI = m_pVideoDeviceController->GetPreviewOptions()->GetDepthROI();
 
-    if (nDepthROI > 1){
+    if (nDepthROI > 1) {
+        int iROI_X = m_nSpecificX - nDepthROI / 2;  if (iROI_X < 0) iROI_X = 0;
+        int iROI_Y = m_nSpecificY - nDepthROI / 2;  if (iROI_Y < 0) iROI_Y = 0;
 
-        int iROI_X = m_nSpecificX - nDepthROI / 2;  if ( iROI_X < 0 ) iROI_X = 0;
-        int iROI_Y = m_nSpecificY - nDepthROI / 2;  if ( iROI_Y < 0 ) iROI_Y = 0;
-
-        const int iROI_W = ( iROI_X + nDepthROI > GetWidth()  ) ? GetWidth()  - iROI_X : iROI_X + nDepthROI;
-        const int iROI_H = ( iROI_Y + nDepthROI > GetHeight() ) ? GetHeight() - iROI_Y : iROI_Y + nDepthROI;
+        const int iROI_W = (iROI_X + nDepthROI > GetWidth()) ? GetWidth()  - iROI_X : iROI_X + nDepthROI;
+        const int iROI_H = (iROI_Y + nDepthROI > GetHeight()) ? GetHeight() - iROI_Y : iROI_Y + nDepthROI;
 
         unsigned long nDepthRoiSum   = 0;
         unsigned long nDepthRoiCount = 0;
 
-        for ( int y2 = iROI_Y; y2 < iROI_H; y2++ )
+        for (int y2 = iROI_Y; y2 < iROI_H; y2++)
         {
-            for ( int x2 = iROI_X; x2 < iROI_W; x2++ )
+            for (int x2 = iROI_X; x2 < iROI_W; x2++)
             {
-                int nZValue = GetZValue( GetDepth(x2, y2) );
+                int nZValue = GetZValue(GetDepth(x2, y2));
 
-                if ( nZValue )
+                if (nZValue)
                 {
                     nDepthRoiSum += nZValue;
                     nDepthRoiCount++;
                 }
             }
         }
-        if ( nDepthRoiCount ) m_nZValue = nDepthRoiSum / nDepthRoiCount;
+        if (nDepthRoiCount) m_nZValue = nDepthRoiSum / nDepthRoiCount;
         else m_nZValue = 0;
 
-    }else{
+    } else {
         m_nZValue = GetZValue(m_nDepth);
     }
 }
@@ -572,7 +564,7 @@ unsigned short CImageDataModel_Depth::GetDepth(int nX, int nY)
     unsigned int nBytePerPixel = GetRawDataBytePerPixel();
     unsigned int nPixelPosition = (nY * GetWidth() + nX) * nBytePerPixel;
     unsigned short nDepth = 0;
-    switch (nBytePerPixel){
+    switch (nBytePerPixel) {
         case 1:
             nDepth = m_rawData[nPixelPosition];
             break;
@@ -590,7 +582,7 @@ unsigned short CImageDataModel_Depth::GetZValue(int nDepth)
 {
     CVideoDeviceModel::ZDTableInfo *pZDTableInfo = m_pVideoDeviceController->GetVideoDeviceModel()->GetZDTableInfo();
     APCImageType::Value imageType = m_pVideoDeviceController->GetVideoDeviceModel()->GetDepthImageType();
-    if (CVideoDeviceModel::STREAMING != m_pVideoDeviceController->GetVideoDeviceModel()->GetState()){
+    if (CVideoDeviceModel::STREAMING != m_pVideoDeviceController->GetVideoDeviceModel()->GetState()) {
         return 0;
     }
 
@@ -598,7 +590,7 @@ unsigned short CImageDataModel_Depth::GetZValue(int nDepth)
 
         if (!nDepth) return 0;
 
-        switch (imageType){
+        switch (imageType) {
             case APCImageType::DEPTH_8BITS_0x80:
             case APCImageType::DEPTH_8BITS:
                 return (WORD)(m_dblCamFocus * m_dblBaselineDist / nDepth);
@@ -611,7 +603,7 @@ unsigned short CImageDataModel_Depth::GetZValue(int nDepth)
         }
     } else {
 
-        if (APCImageType::DEPTH_14BITS == imageType){
+        if (APCImageType::DEPTH_14BITS == imageType) {
             return nDepth;
         }
 
@@ -620,11 +612,11 @@ unsigned short CImageDataModel_Depth::GetZValue(int nDepth)
                         nDepth;
 
         WORD nDevType = m_pVideoDeviceController->GetVideoDeviceModel()->GetDeviceInformation()[0].deviceInfomation.nDevType;
-        if (PUMA != nDevType){
+        if (PUMA != nDevType) {
             zdIndex = nDepth;
         }
 
-        if (zdIndex >= pZDTableInfo->nTableSize / 2){
+        if (zdIndex >= pZDTableInfo->nTableSize / 2) {
             zdIndex = pZDTableInfo->nTableSize / 2 - 1;
         }
 
@@ -636,7 +628,7 @@ unsigned short CImageDataModel_Depth::GetZValue(int nDepth)
 
 void CImageDataModel_Depth::EnableDepthAccruacy(bool bEnable)
 {
-    if(m_bEnableDepthAccuracy == bEnable) return;
+    if (m_bEnableDepthAccuracy == bEnable) return;
 
     m_bEnableDepthAccuracy = bEnable;
 
@@ -644,18 +636,18 @@ void CImageDataModel_Depth::EnableDepthAccruacy(bool bEnable)
     m_pVideoDeviceController->GetPreviewOptions()->GetZRange(nZNear, nZFar);
     UpdateColorPalette(nZNear, nZFar);
 
-    if(m_bEnableDepthAccuracy){
+    if (m_bEnableDepthAccuracy) {
         m_pDepthAccuracyTask = CTaskInfoManager::GetInstance()->RequestTaskInfo(CTaskInfo::DEPTH_ACCURACY_CALCULATE, this);
         CThreadWorkerManage::GetInstance()->AddTask(m_pDepthAccuracyTask);
 
         m_pDepthSpatialNoiseTask = CTaskInfoManager::GetInstance()->RequestTaskInfo(CTaskInfo::DEPTH_SPATIAL_NOISE_CALCULATE, this);
         CThreadWorkerManage::GetInstance()->AddTask(m_pDepthSpatialNoiseTask);
 
-        for ( auto& i : m_listDepth ) i.resize( m_nWidth * m_nHeight, 0 );
+        for (auto& i : m_listDepth) i.resize(m_nWidth * m_nHeight, 0);
         m_pDepthTemporaNoiseTask = CTaskInfoManager::GetInstance()->RequestTaskInfo(CTaskInfo::DEPTH_TEMPORA_NOISE_CALCULATE, this);
         CThreadWorkerManage::GetInstance()->AddTask(m_pDepthTemporaNoiseTask);        
 
-    }else{
+    } else {
         CThreadWorkerManage::GetInstance()->RemoveTask(m_pDepthAccuracyTask);
         m_pDepthAccuracyTask = nullptr;
 
@@ -669,8 +661,8 @@ void CImageDataModel_Depth::EnableDepthAccruacy(bool bEnable)
 
 QRect CImageDataModel_Depth::GetDepthAccuracyRegion()
 {
-    int nHorizontalMargin = (int)((( 1.0f - m_fDepthAccuracyRegionRatio ) * (m_nWidth - m_nDepthInvalidBandPixel)) / 2);
-    int nVerticalMargin = (int)((( 1.0f - m_fDepthAccuracyRegionRatio ) * m_nHeight) / 2);
+    int nHorizontalMargin = (int)(((1.0f - m_fDepthAccuracyRegionRatio) * (m_nWidth - m_nDepthInvalidBandPixel)) / 2);
+    int nVerticalMargin = (int)(((1.0f - m_fDepthAccuracyRegionRatio) * m_nHeight) / 2);
 
     nHorizontalMargin = std::min(nHorizontalMargin, m_nWidth - 1);
     nVerticalMargin = std::min(nVerticalMargin, m_nHeight - 1);
@@ -690,7 +682,7 @@ QRect CImageDataModel_Depth::GetDepthAccuracyRegion()
 
 void CImageDataModel_Depth::AdjustDepthInvalidBandPixel()
 {
-    if (!m_fDepthAccuracyGroundTruthDistanceMM){
+    if (!m_fDepthAccuracyGroundTruthDistanceMM) {
         m_nDepthInvalidBandPixel = 0;
         return;
     }
@@ -698,10 +690,10 @@ void CImageDataModel_Depth::AdjustDepthInvalidBandPixel()
     CVideoDeviceModel *pModel = m_pVideoDeviceController->GetVideoDeviceModel();
     float focalLength, baseline;
 
-    if (m_dblBaselineDist != 0.0 && m_dblCamFocus != 0.0){
+    if (m_dblBaselineDist != 0.0 && m_dblCamFocus != 0.0) {
         focalLength = m_dblCamFocus;
         baseline = m_dblBaselineDist;
-    }else{
+    } else {
         eSPCtrl_RectLogData *pRectLogData = &pModel->GetRectifyLogData(CVideoDeviceModel::STREAM_DEPTH);
         if (0.0 == pRectLogData->ReProjectMat[14]) return;
 
@@ -759,31 +751,31 @@ void CImageDataModel_Depth::CalculateDepthSpatialNoise()
     double DepthZSum  = 0.0;
     int    Count      = 0;
     int    idx        = 0;
-    for ( int y = 0; y < nROIHeight; y++ )
+    for (int y = 0; y < nROIHeight; y++)
     {
-        for ( int x = 0; x < nROIWidth; x++ )
+        for (int x = 0; x < nROIWidth; x++)
         {
             idx = y * nROIWidth + x;
 
-            if ( vecDepthZ[ idx ] )
+            if (vecDepthZ[idx])
             {
                 Count++;
-                DepthZSum += pow( vecDepthZ[ idx ] - ( a * x + b * y + d ), 2 );
+                DepthZSum += pow(vecDepthZ[idx] - (a * x + b * y + d), 2);
             }
         }
     }
 
-    m_fDepthSpatialNoise = Count ? ( sqrt( DepthZSum / Count ) ) : 0.0f;
-    if ( m_fDepthAccuracyGroundTruthDistanceMM > 0.0f){
+    m_fDepthSpatialNoise = Count ? (sqrt(DepthZSum / Count)) : 0.0f;
+    if (m_fDepthAccuracyGroundTruthDistanceMM > 0.0f) {
         m_fDepthSpatialNoise = m_fDepthSpatialNoise / m_fDepthAccuracyGroundTruthDistanceMM;
-    }else{
+    } else {
         m_fDepthSpatialNoise = 0.0f;
     }
 
-    m_fDepthAngle = acos( 1.0f / sqrt( a * a + b * b + 1 ) ) * 180.0f / M_PI;
-    m_fDepthAngleX = acos( 1.0f / sqrt( a * a + 1 ) ) * 180.0f / M_PI;
+    m_fDepthAngle = acos(1.0f / sqrt(a * a + b * b + 1)) * 180.0f / M_PI;
+    m_fDepthAngleX = acos(1.0f / sqrt(a * a + 1)) * 180.0f / M_PI;
     if (a < 0) m_fDepthAngleX *= -1.0f;
-    m_fDepthAngleY = acos( 1.0f / sqrt( b * b + 1 ) ) * 180.0f / M_PI;
+    m_fDepthAngleY = acos(1.0f / sqrt(b * b + 1)) * 180.0f / M_PI;
     if (b > 0) m_fDepthAngleY *= -1.0f;
 }
 
@@ -810,56 +802,56 @@ void CImageDataModel_Depth::CalculateDepthTemporaNoise()
 
     std_cnt = 0;
 
-    for ( int y = nTop; y < nBottom; y++ )
+    for (int y = nTop; y < nBottom; y++)
     {
-        for ( int x = nLeft; x < nRight; x++ )
+        for (int x = nLeft; x < nRight; x++)
         {
-            vecDepthZ[ y * m_nWidth + x ] = GetZValue( GetDepth(x, y) );
+            vecDepthZ[y * m_nWidth + x] = GetZValue(GetDepth(x, y));
         }
     }
-    for ( int y = nTop; y < nBottom; y++ )
+    for (int y = nTop; y < nBottom; y++)
     {
-        for ( int x = nLeft; x < nRight; x++ )
+        for (int x = nLeft; x < nRight; x++)
         {
             idx = y * m_nWidth + x;
 
             nDepthZSum = 0;
             nCount     = 0;
 
-            for ( auto& vecDepth : m_listDepth )
+            for (auto& vecDepth : m_listDepth)
             {
-                if ( vecDepth[ idx ] ) nCount++;
+                if (vecDepth[idx]) nCount++;
 
-                nDepthZSum += vecDepth[ idx ];
+                nDepthZSum += vecDepth[idx];
             }
-            if ( nCount )
+            if (nCount)
             {
                 nAvgDepth = nDepthZSum / nCount;
 
                 nDepthZSum = 0;
 
-                for ( auto& vecDepth : m_listDepth )
+                for (auto& vecDepth : m_listDepth)
                 {
-                    if ( vecDepth[ idx ] )
+                    if (vecDepth[idx])
                     {
-                        nDepthZSum += pow( vecDepth[ idx ] - nAvgDepth, 2 );
+                        nDepthZSum += pow(vecDepth[idx] - nAvgDepth, 2);
                     }
                 }
-                vecSTD[ std_cnt++ ] = sqrt( nDepthZSum / ( float )nCount );
+                vecSTD[std_cnt++] = sqrt(nDepthZSum / (float)nCount);
             }
         }
     }
-    if ( std_cnt )
+    if (std_cnt)
     {
-        std::sort( vecSTD.begin(), vecSTD.begin() + std_cnt );
-        m_fDepthTemporaNoise = vecSTD[ std_cnt / 2 ];
-        if ( m_fDepthAccuracyGroundTruthDistanceMM > 0.0f){
+        std::sort(vecSTD.begin(), vecSTD.begin() + std_cnt);
+        m_fDepthTemporaNoise = vecSTD[std_cnt / 2];
+        if (m_fDepthAccuracyGroundTruthDistanceMM > 0.0f) {
             m_fDepthTemporaNoise = m_fDepthTemporaNoise / m_fDepthAccuracyGroundTruthDistanceMM;
-        }else{
+        } else {
             m_fDepthTemporaNoise = 0.0f;
         }
     }
-    m_listDepth.splice( m_listDepth.end(), m_listDepth, m_listDepth.begin() );
+    m_listDepth.splice(m_listDepth.end(), m_listDepth, m_listDepth.begin());
 
 }
 
@@ -874,12 +866,12 @@ std::vector< WORD > CImageDataModel_Depth::GetDepthZOfROI(int &nWidth, int &nHei
     nWidth = region.width();
     nHeight = region.height();
 
-    std::vector< WORD > vecDepthZ( nWidth * nHeight, 0);
-    for ( int y = nTop; y <= nBottom; y++ )
+    std::vector< WORD > vecDepthZ(nWidth * nHeight, 0);
+    for (int y = nTop; y <= nBottom; y++)
     {
-        for ( int x = nLeft; x <= nRight; x++ )
+        for (int x = nLeft; x <= nRight; x++)
         {
-            vecDepthZ[ (y - nTop) * nWidth + (x - nLeft) ] = GetZValue( GetDepth(x, y) );
+            vecDepthZ[(y - nTop) * nWidth + (x - nLeft)] = GetZValue(GetDepth(x, y));
         }
     }
 
@@ -901,12 +893,12 @@ void CImageDataModel_Depth::CalculateFittedPlane(double &a, double&b, double &d,
     double MatrixBase = 0.0;
     int    idx        = 0;
 
-    for ( int y = 0; y < nHeight; y++ )
+    for (int y = 0; y < nHeight; y++)
     {
-        for ( int x = 0; x < nWidth; x++ )
+        for (int x = 0; x < nWidth; x++)
         {
             idx = y * nWidth + x;
-            if ( vecDepthZ[ idx ] )
+            if (vecDepthZ[idx])
             {
                 MatrixXX += (x * x);
                 MatrixYY += (y * y);
@@ -914,9 +906,9 @@ void CImageDataModel_Depth::CalculateFittedPlane(double &a, double&b, double &d,
                 MatrixX += x;
                 MatrixY += y;
                 MatrixN++;
-                MatrixXZ += (x * vecDepthZ[ idx ]);
-                MatrixYZ += (y * vecDepthZ[ idx ]);
-                MatrixZ += vecDepthZ[ idx ];
+                MatrixXZ += (x * vecDepthZ[idx]);
+                MatrixYZ += (y * vecDepthZ[idx]);
+                MatrixZ += vecDepthZ[idx];
             }
         }
     }
@@ -924,14 +916,13 @@ void CImageDataModel_Depth::CalculateFittedPlane(double &a, double&b, double &d,
     MatrixBase = MatrixXX * MatrixYY * MatrixN + 2 * MatrixXY * MatrixX * MatrixY - MatrixX  * MatrixX  * MatrixYY
                                                                                   - MatrixY  * MatrixY  * MatrixXX
                                                                                   - MatrixXY * MatrixXY * MatrixN;
-    a = ( MatrixXZ * MatrixYY * MatrixN + MatrixZ  * MatrixXY * MatrixY + MatrixYZ * MatrixX  * MatrixY -
-          MatrixZ  * MatrixYY * MatrixX - MatrixXZ * MatrixY  * MatrixY - MatrixYZ * MatrixXY * MatrixN ) / MatrixBase;
-    b = ( MatrixYZ * MatrixXX * MatrixN + MatrixXZ * MatrixX  * MatrixY + MatrixZ  * MatrixXY * MatrixX -
-          MatrixYZ * MatrixX  * MatrixX - MatrixZ  * MatrixXX * MatrixY - MatrixXZ * MatrixXY * MatrixN ) / MatrixBase;
-    d = ( MatrixZ  * MatrixXX * MatrixYY + MatrixYZ * MatrixXY * MatrixX + MatrixXZ * MatrixXY * MatrixY -
-          MatrixXZ * MatrixYY * MatrixX  - MatrixYZ * MatrixXX * MatrixY - MatrixZ  * MatrixXY * MatrixXY ) / MatrixBase;
+    a = (MatrixXZ * MatrixYY * MatrixN + MatrixZ  * MatrixXY * MatrixY + MatrixYZ * MatrixX  * MatrixY -
+         MatrixZ  * MatrixYY * MatrixX - MatrixXZ * MatrixY  * MatrixY - MatrixYZ * MatrixXY * MatrixN) / MatrixBase;
+    b = (MatrixYZ * MatrixXX * MatrixN + MatrixXZ * MatrixX  * MatrixY + MatrixZ  * MatrixXY * MatrixX -
+         MatrixYZ * MatrixX  * MatrixX - MatrixZ  * MatrixXX * MatrixY - MatrixXZ * MatrixXY * MatrixN) / MatrixBase;
+    d = (MatrixZ  * MatrixXX * MatrixYY + MatrixYZ * MatrixXY * MatrixX + MatrixXZ * MatrixXY * MatrixY -
+         MatrixXZ * MatrixYY * MatrixX  - MatrixYZ * MatrixXX * MatrixY - MatrixZ  * MatrixXY * MatrixXY) / MatrixBase;
 }
-
 
 double CImageDataModel_Depth::CalculateZAccuracy(std::vector< WORD > &vecDepthZ,
                                                  int nWidth, int nHeight,
@@ -1003,7 +994,7 @@ void CImageDataModel_Depth::SortZ(std::vector< WORD > &vecDepthZ, double dblDele
     std::vector< WORD > vecDepthZ_bak = vecDepthZ;
     std::sort(vecDepthZ_bak.begin(), vecDepthZ_bak.end());
 
-    auto iterFirstNotZero = std::find_if(vecDepthZ_bak.begin(), vecDepthZ_bak.end(), [](float val){ return val != 0;});
+    auto iterFirstNotZero = std::find_if (vecDepthZ_bak.begin(), vecDepthZ_bak.end(), [](float val) { return val != 0;});
 
     if (iterFirstNotZero == vecDepthZ_bak.end()) return;
 
@@ -1026,10 +1017,9 @@ void CImageDataModel_Depth::SortZ(std::vector< WORD > &vecDepthZ, double dblDele
 }
 
 ///////////////////////////////////////////////////////////////////////
-
 CImageDataModel *CImageDataModelFactory::CreateCImageDataModel(CVideoDeviceModel::STREAM_TYPE type, CVideoDeviceController *pVideoDeviceController)
 {
-    switch (type){
+    switch (type) {
         case CVideoDeviceModel::STREAM_COLOR:
         case CVideoDeviceModel::STREAM_COLOR_SLAVE:
         case CVideoDeviceModel::STREAM_KOLOR:
@@ -1038,6 +1028,7 @@ CImageDataModel *CImageDataModelFactory::CreateCImageDataModel(CVideoDeviceModel
         //+[Thermal device]
         case CVideoDeviceModel::STREAM_THERMAL:
         //-[Thermal device]
+        case CVideoDeviceModel::STREAM_BOTH:
             return new CImageDataModel_Color(type, pVideoDeviceController);
         case CVideoDeviceModel::STREAM_DEPTH:
             return new CImageDataModel_Depth(type, pVideoDeviceController);

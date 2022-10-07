@@ -801,8 +801,11 @@ int RegisterSettings::DM_Quality_Register_Setting(void* hEYSD, PDEVSELINFO pDevS
     case APC_PID_NORA:
         modelName = "NORA";
         break;
+    case APC_PID_IVY:
+        modelName = "IVY";
+        break;
     default:
-        modelName = NULL;
+        modelName = "DEFAULT";
         break;
     }
 

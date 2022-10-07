@@ -21,7 +21,7 @@
 #include "CVideoDeviceModel_8073.h"
 #include "CVideoDeviceModel_Grap.h"
 #include "CVideoDeviceModel_8063.h"
-#include "CVideoDeviceModel_8076.h"
+#include "CVideoDeviceModel_8076_8077.h"
 #include "CVideoDeviceModel_Iris.h"
 
 CVideoDeviceModel *CVideoDeviceModelFactory::CreateVideoDeviceModel(DEVSELINFO *pDeviceSelfInfo)
@@ -37,6 +37,7 @@ CVideoDeviceModel *CVideoDeviceModelFactory::CreateVideoDeviceModel(DEVSELINFO *
         case APC_PID_8029:
             pModel = new CVideoDeviceModel_8029(pDeviceSelfInfo); break;
         case APC_PID_8036:
+        case APC_PID_MIPI_8036:
             pModel = new CVideoDeviceModel_8036(pDeviceSelfInfo); break;
         case APC_PID_8052:
             pModel = new CVideoDeviceModel_8052(pDeviceSelfInfo); break;
@@ -73,7 +74,8 @@ CVideoDeviceModel *CVideoDeviceModelFactory::CreateVideoDeviceModel(DEVSELINFO *
         case APC_PID_8063_K:
             pModel = new CVideoDeviceModel(pDeviceSelfInfo); break;
         case APC_PID_8076:
-            pModel = new CVideoDeviceModel_8076(pDeviceSelfInfo); break;
+        case APC_PID_8077:
+            pModel = new CVideoDeviceModel_8076_8077(pDeviceSelfInfo); break;
         case APC_PID_IRIS:
             pModel = new CVideoDeviceModel_Iris(pDeviceSelfInfo); break;
         case APC_PID_8040S_K:

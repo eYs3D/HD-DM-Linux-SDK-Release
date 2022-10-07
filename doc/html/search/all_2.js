@@ -1,6 +1,4 @@
 var searchData=
 [
-  ['espctrl_5frectlogdata',['eSPCtrl_RectLogData',['../structe_s_p_ctrl___rect_log_data.html',1,'']]],
-  ['espdi_2eh',['eSPDI.h',['../e_s_p_d_i_8h.html',1,'']]],
-  ['espdi_5fdef_2eh',['eSPDI_def.h',['../e_s_p_d_i__def_8h.html',1,'']]]
+  ['decimation_5fparams',['DECIMATION_PARAMS',['../struct_d_e_c_i_m_a_t_i_o_n___p_a_r_a_m_s.html',1,'']]]
 ];

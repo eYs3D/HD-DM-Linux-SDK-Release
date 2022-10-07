@@ -308,12 +308,15 @@ typedef struct tagDEVINFORMATION {
 #define APC_PID_8063            0x0164
 #define APC_PID_8063_K          0x0165
 #define APC_PID_8076            0x0181
+#define APC_PID_8077            0x0182
+#define APC_PID_8081            0x0183
 #define APC_PID_IRIS            0x0184
 #define APC_PID_IVY             0x0177
 #define APC_PID_GRAP            0x0179
-#define APC_PID_GRAP_K          0x0183
+#define APC_PID_GRAP_K          0x0000
 #define APC_PID_GRAP_SLAVE      0x0279
 #define APC_PID_GRAP_SLAVE_K    0x0283
+#define APC_PID_BOOTLOADER      0x0668
 
 //+[Thermal device]
 #define APC_PID_GRAP_THERMAL    0xf9f9
@@ -329,6 +332,16 @@ typedef struct tagDEVINFORMATION {
 #define APC_VID_2170            0x0110
 #define APC_VID_EEVER           0x1e4e
 #define APC_VID_EYS3D           0x3438
+
+typedef struct {
+    int spatial_filter_kernel_size = 5;          // 3 - 15 Larger smoother
+    float spatial_filter_outlier_threshold = 16; // 1 - 64 Smaller filter more
+} POST_PROCESS_PARAMS;
+
+typedef struct {
+    int decimation_sub_sample_factor = 2;        // 1 - 8 scale down factor and round down to a 4-divisible number.
+                                                 // For example [1280, 720] / 3 ~= [426.67, 240] ~= [428, 240]
+} DECIMATION_PARAMS;
 
 // for device selection information +
 typedef struct tagDEVSEL

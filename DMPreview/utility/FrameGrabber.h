@@ -3,9 +3,9 @@
 #include <thread>
 #include <mutex>
 
-typedef void (*FrameGrabberCallbackFn)(	std::vector<unsigned char>& bufDepth, int widthDepth, int heightDepth,
-										std::vector<unsigned char>& bufColor, int widthColor, int heightColor,
-										int serialNumber, void* pParam);
+typedef void (*FrameGrabberCallbackFn)(std::vector<unsigned char>& bufDepth, int widthDepth, int heightDepth,
+                                       std::vector<unsigned char>& bufColor, int widthColor, int heightColor,
+                                       int serialNumber, void* pParam);
 
 class FrameGrabber
 {

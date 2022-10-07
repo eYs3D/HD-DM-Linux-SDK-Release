@@ -121,6 +121,17 @@ public:
     };
 
 public:
+    virtual int CopyG1FileToG2(int fileIndex);
+    virtual std::string CopyAllFileToG2();
+    virtual std::string resultCodeToAlertString(int index, int copyResultCode);
+    static constexpr int APC_USER_SETTING_OFFSET = 5;
+    static constexpr int COPY_RESULT_NONE    = 0x0000;
+    static constexpr int COPY_RESULT_YOFFSET = 0x0001;
+    static constexpr int COPY_RESULT_RECTIFY = 0x0010;
+    static constexpr int COPY_RESULT_ZD      = 0x0100;
+    static constexpr int COPY_RESULT_LOG     = 0x1000;
+    static constexpr int COPY_RESULT_ALL     = 0x1111;
+
     virtual int GetCurrentTemperature(float &temperature) { return APC_NotSupport; }
     virtual bool EqualModel(CVideoDeviceModel *pModel);
 
@@ -212,6 +223,8 @@ public:
     virtual int AdjustInterleaveModeState();
     virtual std::vector<int> GetInterleaveModeFPS();
     virtual int SetInterleaveModeEnable(bool bEnable);
+    virtual int SetInterleaveMode(bool bEnable);
+    virtual int GetInterleaveMode(bool *pEnable);
 
     virtual int InitIMU();
     virtual std::vector<CIMUModel::INFO> GetIMUInfo()
@@ -280,13 +293,11 @@ public:
 protected:
     CVideoDeviceModel(DEVSELINFO *pDeviceSelfInfo);
     virtual ~CVideoDeviceModel();
-
     int SetPlumAR0330(bool bEnable);
-
     virtual int AddCameraPropertyModels();
-
     virtual int GetImage(STREAM_TYPE type);
     virtual int Get2Image(STREAM_TYPE type);
+    virtual int Get2ImageNoSplit(STREAM_TYPE type);
     virtual int GetColorImage();
     virtual int GetDepthImage();
     virtual int FirstSuccessGetImageCallback(STREAM_TYPE type);
@@ -295,10 +306,10 @@ protected:
                              int nImageSize, int nSerialNumber);
     virtual int ProcessImageCallback(STREAM_TYPE streamType,
                              int nImageSize, int nSerialNumber);
+    virtual int UpdateFrameGrabberColorData(STREAM_TYPE streamType);
+    virtual int UpdateFrameGrabberDepthData(STREAM_TYPE streamType);
     virtual int UpdateFrameGrabberData(STREAM_TYPE streamType);
-
     virtual ImageData &GetColorImageData();
-
     virtual CImageDataModel *GetPreivewImageDataModel(STREAM_TYPE streamType);
 public:
     virtual ImageData &GetDepthImageData();
@@ -325,7 +336,6 @@ public:
                                    std::vector<float> &imgFloatBufOut,
                                    eSPCtrl_RectLogData &rectifyLogData,
                                    APCImageType::Value depthImageType);
-
     virtual std::vector<CloudPoint> GeneratePointCloud(std::vector<unsigned char> &depthData,
                                                        std::vector<unsigned char> &colorData,
                                                        unsigned short nDepthWidth,
@@ -337,7 +347,6 @@ public:
                                                        int nZNear, int nZFar,
                                                        bool bUsePlyFilter = false,
                                                        std::vector<float> imgFloatBufOut = {});
-
     virtual int ProcessFrameGrabberCallback(std::vector<unsigned char>& bufDepth, int widthDepth, int heightDepth,
                                             std::vector<unsigned char>& bufColor, int widthColor, int heightColor,
                                             int serialNumber);
