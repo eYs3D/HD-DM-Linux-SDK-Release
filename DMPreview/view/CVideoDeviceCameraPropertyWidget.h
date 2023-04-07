@@ -52,6 +52,14 @@ private slots:
 
     void on_pushButton_write_manuel_global_gain_value_clicked();
 
+    void on_button_analog_gain_read_clicked();
+
+    void on_button_analog_gain_write_clicked();
+
+    void on_button_digital_gain_read_clicked();
+
+    void on_button_digital_gain_write_clicked();
+
 private:
     void UpdateDevice();
     void UpdateExposureTime();
@@ -60,6 +68,7 @@ private:
     void UpdateLowLightCompensation();
     void UpdateManuelExposureTime();
     void UpdateAETarget();
+    void UpdateManualGains();
     float EV_value = 0;
 private:
     CCameraPropertyController *m_pCameraPropertyController;

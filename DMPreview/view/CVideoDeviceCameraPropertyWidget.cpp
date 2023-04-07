@@ -25,6 +25,7 @@ void CVideoDeviceCameraPropertyWidget::UpdateSelf()
     UpdateLowLightCompensation();
     UpdateManuelExposureTime();
     UpdateAETarget();
+    UpdateManualGains();
 }
 
 void CVideoDeviceCameraPropertyWidget::showEvent(QShowEvent *event)
@@ -178,13 +179,31 @@ void CVideoDeviceCameraPropertyWidget::UpdateLowLightCompensation()
 
 void CVideoDeviceCameraPropertyWidget::UpdateManuelExposureTime()
 {
-    bool bValid = m_pCameraPropertyController->IsManuelExposureTimeValid();
+    bool bValid = m_pCameraPropertyController->IsManualExposureValid();
 
     ui->doubleSpinBox_manuel_exposure_time_value->setEnabled(bValid);
     ui->pushButton_write_manuel_exposure_time_value->setEnabled(bValid);
 
     ui->doubleSpinBox_manuel_global_gain_value->setEnabled(bValid);
-    ui->pushButton_write_manuel_global_gain_value->setEnabled(bValid);
+
+    bool bSupportGlobalGainSet = m_pCameraPropertyController->IsManualGlobalGainSetSupport() && bValid;
+    ui->pushButton_write_manuel_global_gain_value->setEnabled(bSupportGlobalGainSet);
+}
+
+void CVideoDeviceCameraPropertyWidget::UpdateManualGains() {
+    bool bValid = m_pCameraPropertyController->IsManualExposureValid();
+    bool bNeedShowGainLayout = m_pCameraPropertyController->IsManualGainSupport();
+
+    ui->groupBox_manual_gain_control->setVisible(bNeedShowGainLayout);
+
+    ui->spin_box_analog_gain->setEnabled(bValid);
+    ui->spin_box_digital_gain->setEnabled(bValid);
+
+    ui->button_analog_gain_read->setEnabled(bValid);
+    ui->button_analog_gain_write->setEnabled(bValid);
+
+    ui->button_digital_gain_read->setEnabled(bValid);
+    ui->button_digital_gain_write->setEnabled(bValid);
 }
 
 void CVideoDeviceCameraPropertyWidget::UpdateAETarget()
@@ -218,6 +237,7 @@ void CVideoDeviceCameraPropertyWidget::on_checkBox_auto_exposure_stateChanged(in
     m_pCameraPropertyController->SetValue(CCameraPropertyModel::AUTO_EXPOSURE, bIsChecked ? 1 : 0);
     UpdateExposureTime();
     UpdateManuelExposureTime();
+    UpdateManualGains();
     UpdateAETarget();
 }
 
@@ -316,4 +336,40 @@ void CVideoDeviceCameraPropertyWidget::on_pushButton_write_manuel_exposure_time_
 void CVideoDeviceCameraPropertyWidget::on_pushButton_write_manuel_global_gain_value_clicked()
 {
     m_pCameraPropertyController->SetManuelGlobalGain(ui->doubleSpinBox_manuel_global_gain_value->value());
+}
+
+void CVideoDeviceCameraPropertyWidget::on_button_analog_gain_read_clicked()
+{
+    ui->spin_box_analog_gain->setValue(m_pCameraPropertyController->GetManualAnalogGain());
+
+    ui->listWidget_gain_info->clear();
+    QStringList registerList = m_pCameraPropertyController->GetManualGainRegisterValueStringList();
+    ui->listWidget_gain_info->addItems(registerList);
+}
+
+void CVideoDeviceCameraPropertyWidget::on_button_analog_gain_write_clicked()
+{
+    m_pCameraPropertyController->SetManualAnalogGain(ui->spin_box_analog_gain->value());
+
+    ui->listWidget_gain_info->clear();
+    QStringList registerList = m_pCameraPropertyController->GetManualGainRegisterValueStringList();
+    ui->listWidget_gain_info->addItems(registerList);
+}
+
+void CVideoDeviceCameraPropertyWidget::on_button_digital_gain_read_clicked()
+{
+    ui->spin_box_digital_gain->setValue(m_pCameraPropertyController->GetManualDigitalGain());
+
+    ui->listWidget_gain_info->clear();
+    QStringList registerList = m_pCameraPropertyController->GetManualGainRegisterValueStringList();
+    ui->listWidget_gain_info->addItems(registerList);
+}
+
+void CVideoDeviceCameraPropertyWidget::on_button_digital_gain_write_clicked()
+{
+    m_pCameraPropertyController->SetManualDigitalGain(ui->spin_box_digital_gain->value());
+
+    ui->listWidget_gain_info->clear();
+    QStringList registerList = m_pCameraPropertyController->GetManualGainRegisterValueStringList();
+    ui->listWidget_gain_info->addItems(registerList);
 }

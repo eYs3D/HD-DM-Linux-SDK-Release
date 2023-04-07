@@ -74,6 +74,7 @@ void CVideoDeviceRegisterWidget::UpdateSelf()
     UpdateOptions();
     UpdateButtonState();
     setUpdatesEnabled(true);
+    UpdateSwapBytesOrderCheckBox();
 }
 
 void CVideoDeviceRegisterWidget::showEvent(QShowEvent *event)
@@ -178,6 +179,14 @@ void CVideoDeviceRegisterWidget::UpdateButtonState()
     bool IsRegisterPerodicReadRunning = m_pRegisterReadWriteController->IsPeriodicReadRunning();
     ui->pushButton_read->setVisible(!IsRegisterPerodicReadRunning);
     ui->pushButton_stop_reading->setVisible(IsRegisterPerodicReadRunning);
+}
+
+void CVideoDeviceRegisterWidget::UpdateSwapBytesOrderCheckBox()
+{
+    bool isCheck = m_pRegisterReadWriteController->GetSwapBytesOrderStatus();
+    ui->checkBox_swap_bytes_order->setChecked(isCheck);
+    bool canEnable = ui->checkBox_value_2_byte->isChecked();
+    ui->checkBox_swap_bytes_order->setEnabled(canEnable);
 }
 
 void CVideoDeviceRegisterWidget::on_radioButton_ic2_clicked()
@@ -293,4 +302,11 @@ void CVideoDeviceRegisterWidget::on_pushButton_write_clicked()
     QApplication::restoreOverrideCursor();
     UpdateUI();
 
+}
+
+void CVideoDeviceRegisterWidget::on_checkBox_swap_bytes_order_stateChanged(int arg1)
+{
+    bool bIsChecked = Qt::Checked == arg1 ? true : false;
+    m_pRegisterReadWriteController->SetSwapBytesOrderStatus(bIsChecked);
+    qDebug() << "on_checkBox_swap_bytes_order_stateChanged " << bIsChecked;
 }

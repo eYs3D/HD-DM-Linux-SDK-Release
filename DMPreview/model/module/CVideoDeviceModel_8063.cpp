@@ -339,6 +339,7 @@ int CVideoDeviceModel_8063::PrepareOpenDevice()
         unsigned int nBufferSize = m_imageData[type].nWidth * m_imageData[type].nHeight * nBytePerPixel;
         if (m_imageData[type].imageBuffer.size() != nBufferSize){
             m_imageData[type].imageBuffer.resize(nBufferSize);
+            m_imageData[type].processedBuffer.resize(nBufferSize);
         }
         memset(&m_imageData[type].imageBuffer[0], 0, sizeof(nBufferSize));
 

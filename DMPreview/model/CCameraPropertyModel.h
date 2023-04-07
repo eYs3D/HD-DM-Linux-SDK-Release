@@ -55,8 +55,23 @@ public:
 
     float GetManuelExposureTimeMs();
     void SetManuelExposureTimeMs(float fMs);
+    /**
+     * @brief Set/GetManuelGlobalGain Follow the gain tables provided by sensor vendor FAEs.
+     * @return
+     */
     float GetManuelGlobalGain();
     void SetManuelGlobalGain(float fGlobalGain);
+
+    /**
+     * @brief (Get/Set)Manual(Analog/Digital)Gain User could try on these function to get the best exposure.
+     * For sensor vendors did not give us recommended gain table. Developers should try by themselves.
+     * @param fAnalogGain
+     */
+    void SetManualAnalogGain(float fAnalogGain);
+    void SetManualDigitalGain(float fDigitalGain);
+    float GetManualAnalogGain();
+    float GetManualDigitalGain();
+    QStringList GetManualGainRegisterValues();
     float SetAETargetIndex(int index);
 
     QString GetDeviceName(){ return m_sDeviceName; }

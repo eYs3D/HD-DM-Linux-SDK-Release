@@ -46,7 +46,7 @@ int CFrameSyncManager::AccomplishFrameCallback(CVideoDeviceModel *pModel)
                 m_mapSyncList[pModel]->pControlView->ImageCallback(imageObject->imageType, imageObject->streamType,
                                                                    &imageObject->imageBuffer[0], imageObject->nImageSize,
                                                                    imageObject->nWidth, imageObject->nHeight, imageObject->nSerialNumber,
-                                                                   nullptr);
+                                                                   nullptr, true);
             }
         }
 
@@ -87,7 +87,7 @@ int CFrameSyncManager::SyncImageCallback(CVideoDeviceModel *pModel,
         return m_mapSyncList[pModel]->pControlView->ImageCallback(imageType, streamType,
                                                                   pImageBuffer, nImageSize,
                                                                   nWidth, nHeight, nSerialNumber,
-                                                                  pUserData);
+                                                                  pUserData, true);
     }
     std::shared_ptr<ImageObject> pNewImageObj(new ImageObject);
 

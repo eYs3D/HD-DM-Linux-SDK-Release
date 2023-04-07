@@ -132,6 +132,7 @@ int CVideoDeviceModel_8038::PrepareOpenDevice()
         unsigned int nBufferSize = imageData.nWidth * imageData.nHeight * nBytePerPixel;
         if (imageData.imageBuffer.size() != nBufferSize){
             imageData.imageBuffer.resize(nBufferSize);
+            imageData.processedBuffer.resize(nBufferSize);
         }
         memset(&imageData.imageBuffer[0], 0, sizeof(nBufferSize));
     };
@@ -373,7 +374,7 @@ int CVideoDeviceModel_8038::ProcessImageCallback(STREAM_TYPE streamType,
                                     &m_imageData[streamType].imageBuffer[0],
                                     nImageSize,
                                     m_imageData[streamType].nWidth, m_imageData[streamType].nHeight,
-                                    nSerialNumber, &m_depthFusionBuffer[0]);
+                                    nSerialNumber, &m_depthFusionBuffer[0], true);
     }
 
     return CVideoDeviceModel_ColorWithDepth::ProcessImageCallback(streamType, nImageSize, nSerialNumber);

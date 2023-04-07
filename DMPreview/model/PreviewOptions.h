@@ -96,6 +96,11 @@ public:
     void SetIRLevel(int nLevel){ nIRLevel = nLevel; }
     int GetIRLevel(){ return nIRLevel; }
 
+    void SetFloodIRLevel(int nLevel){ nFloodIRLevel = nLevel; }
+    int GetFloodIRLevel(){ return nFloodIRLevel; }
+    void SetFloodIRToggleMode(int nMode){ nFloodIRToggleMode = nMode; }
+    int GetFloodIRToggleMode() { return nFloodIRToggleMode; }
+
     void SetIRExtend(bool bExtend){ bIRExtend = bExtend; }
     bool IsIRExtend(){ return bIRExtend; }
 
@@ -108,14 +113,70 @@ public:
     void SetIMUSyncWithFrame(bool bIsSync){ bIMUSyncWithFrame = bIsSync; }
     bool IsIMUSyncWithFrame(){ return bIMUSyncWithFrame; }
 
+    void SetMIPIPreviewSplit(bool isSplited) { bMIPISplited = isSplited; }
+    bool IsMIPIPreviewSplit() { return bMIPISplited;}
+
+    void SetMIPIClkContinueMode(bool isClkContinueMode) { bMIPIClkContinueMode = isClkContinueMode; }
+    bool IsMIPIClkContinueMode() { return bMIPIClkContinueMode;}
+
+    void SetColorResizeOptionIndex(int index) { nResizeColorOptions = index; }
+    int GetColorResizeOptionIndex() { return nResizeColorOptions; }
+    void SetDepthResizeOptionIndex(int index) { nResizeDepthOptions = index; }
+    int GetDepthResizeOptionIndex() { return nResizeDepthOptions; }
+
+    void SetEnableColorResizeOption(bool isEnable) {
+        bIsEnableColorResizeOptions = isEnable;
+    }
+
+    bool GetEnableColorResizeOption(){
+        return bIsEnableColorResizeOptions;
+    }
+    void SetEnableDepthResizeOption(bool isEnable) {
+        bIsEnableDepthResizeOptions = isEnable;
+    }
+    bool GetEnableDepthResizeOption(){
+        return bIsEnableDepthResizeOptions;
+    }
+
+    int inline GetResizeOptionIndex(APCImageType::Value imageType){
+        switch (imageType) {
+        case APCImageType::COLOR_YUY2:
+        case APCImageType::COLOR_RGB24:
+            return nResizeColorOptions;
+        case APCImageType::DEPTH_11BITS:
+        case APCImageType::DEPTH_14BITS:
+            return nResizeDepthOptions;
+        default:
+            return -1;
+        }
+    }
+    bool inline GetResizeOptionEnableByType(APCImageType::Value imageType){
+        switch (imageType) {
+        case APCImageType::COLOR_YUY2:
+        case APCImageType::COLOR_RGB24:
+            return GetEnableColorResizeOption();
+        case APCImageType::DEPTH_11BITS:
+        case APCImageType::DEPTH_14BITS:
+            return GetEnableDepthResizeOption();
+        default:
+            return false;
+        }
+    }
 private:
     int nIRLevel = 3;
+    int nFloodIRLevel = 15;
+    int nFloodIRToggleMode = 4;
     bool bIRExtend = false;
 
     int nDepthDataType = APC_DEPTH_DATA_11_BITS;
     bool bRectify = true;
-
+    bool bMIPISplited = false;
+    bool bMIPIClkContinueMode = true;
     bool bModeConfig = false;
+    int nResizeColorOptions;
+    int nResizeDepthOptions;
+    bool bIsEnableColorResizeOptions;
+    bool bIsEnableDepthResizeOptions;
 
     StreamOption streamOption[CVideoDeviceModel::STREAM_TYPE_COUNT];
     DEPTH_TRANSFER_CTRL depthTransferControl = DEPTH_IMG_COLORFUL_TRANSFER;

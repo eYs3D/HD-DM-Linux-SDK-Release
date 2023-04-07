@@ -9,7 +9,8 @@
 
 CRegisterReadWriteController::CRegisterReadWriteController(CVideoDeviceModel *pVideoDeviceModel):
 m_pVideoDeviceModel(pVideoDeviceModel),
-m_pRegisterTaskInfo(nullptr)
+m_pRegisterTaskInfo(nullptr),
+m_SwapBytesOrder(false)
 {
     m_pRegisterReadWriteOptions = new RegisterReadWriteOptions();
 }
@@ -189,6 +190,12 @@ int CRegisterReadWriteController::ReadRegister()
 
         if (APC_OK == ret)
         {
+            if (m_pRegisterReadWriteOptions->GetValueSize() == FG_Value_2Byte && m_SwapBytesOrder) {
+                int bHigh = (value & 0xff) << 8;
+                int bLow = (value & 0xff00) >> 8;
+                value = bHigh | bLow;
+            }
+            qDebug() << "ReadRegister: " << value;
             m_pRegisterReadWriteOptions->SetRequestValue(i, value);
         }else{
             m_pRegisterReadWriteOptions->SetRequestValue(i, 0xff);

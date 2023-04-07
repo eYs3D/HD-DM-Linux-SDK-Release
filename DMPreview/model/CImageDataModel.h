@@ -23,10 +23,15 @@ public:
     CImageDataModel(CVideoDeviceModel::STREAM_TYPE streamType, TYPE modelType, CVideoDeviceController *pVideoDeviceController);
     virtual ~CImageDataModel();
 
+    void SetMipiSplit(bool bIsMIPISplit);
+
     virtual bool SetImageInfo(APCImageType::Value imageType,
                               int nWidth, int nHeight);
     int GetWidth(){ return m_nWidth; }
     int GetHeight(){ return m_nHeight; }
+    size_t GetResizedWidth() { return m_nResizedWidth; }
+    size_t GetResizedHeight() { return m_nResizedHeight; }
+
     int GetSerialNumber(){ return m_nSerialNumber; }
     int GetRawDataBytePerPixel();
     TYPE GetModelType(){ return m_type; }
@@ -70,6 +75,8 @@ protected:
 
     int m_nWidth;
     int m_nHeight;
+    size_t m_nResizedWidth;
+    size_t m_nResizedHeight;
     int m_nDataSize;
     int m_nSerialNumber;
     int m_nSpecificX, m_nSpecificY;
@@ -78,6 +85,8 @@ protected:
 
     QMutex m_dataMutex;
     CTaskInfo *m_pDataTransformTask;
+
+    bool m_mipi_split;
 };
 
 class CImageDataModel_Color : public CImageDataModel

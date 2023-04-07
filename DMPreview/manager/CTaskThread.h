@@ -38,6 +38,7 @@ protected:
     void DoDepthSpatialNoiseCalculate();
     void DoDepthTemporaNoiseCalculate();
     void DoImageDataTransform();
+    void DoDeviceModelUpdate();
 
 private:
     CTaskInfo *m_pTaskInfo;

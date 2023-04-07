@@ -29,6 +29,8 @@ void CVideoDevicePreviewWidget::UpdateSelf()
 {    
     setUpdatesEnabled(false);
     UpdateUSBPort();
+    UpdateMIPISplitCheckBox();
+    UpdateMIPIClkContinueModeCheckBox();
     UpdateStreamimgComponetState(CVideoDeviceModel::STREAMING ==
                                  m_pVideoDeviceController->GetVideoDeviceModel()->GetState());
     UpdateModeConfig();
@@ -37,6 +39,7 @@ void CVideoDevicePreviewWidget::UpdateSelf()
     UpdateDepthmapBits();
     UpdateZValue();
     UpdateIRLevel();
+    UpdateFloodIRLevel();
     UpdateDepthROI();
     UpdateRectify();
     UpdateHWPP();
@@ -44,7 +47,9 @@ void CVideoDevicePreviewWidget::UpdateSelf()
     UpdateInterleaveMode();
     UpdatePlyFilter();
     UpdatePointCloudViewer();
+    UpdateResizeWidgets();
     setUpdatesEnabled(true);
+    UpdateAutoReconnetCheckBox();
 }
 
 void CVideoDevicePreviewWidget::Preview()
@@ -55,6 +60,41 @@ void CVideoDevicePreviewWidget::Preview()
 void CVideoDevicePreviewWidget::paintEvent(QPaintEvent *event)
 {
     QWidget::paintEvent(event);
+}
+
+void CVideoDevicePreviewWidget::UpdateAutoReconnetCheckBox() {
+    bool isCheck = m_pVideoDeviceController->GetAutoReconnectStatus();
+    ui->checkBox_auto_reconnet->setChecked(isCheck);
+}
+
+void CVideoDevicePreviewWidget::UpdateMIPISplitCheckBox() {
+    switch (m_pVideoDeviceController->GetVideoDeviceModel()->GetUsbType()) {
+    case MIPI_PORT_TYPE: {
+        bool isSplit = m_pVideoDeviceController->GetPreviewOptions()->IsMIPIPreviewSplit();
+        ui->checkBox_mipi_split->show();
+        ui->checkBox_mipi_split->setChecked(isSplit);
+        break;
+    }
+    default: {
+        ui->checkBox_mipi_split->hide();
+        break;
+    }
+    }
+}
+
+void CVideoDevicePreviewWidget::UpdateMIPIClkContinueModeCheckBox() {
+    switch (m_pVideoDeviceController->GetVideoDeviceModel()->GetUsbType()) {
+    case MIPI_PORT_TYPE: {
+        bool isClkContinueMode = m_pVideoDeviceController->GetPreviewOptions()->IsMIPIClkContinueMode();
+        ui->checkBox_mipi_clk_continue_mode->show();
+        ui->checkBox_mipi_clk_continue_mode->setChecked(isClkContinueMode);
+        break;
+    }
+    default: {
+        ui->checkBox_mipi_clk_continue_mode->hide();
+        break;
+    }
+    }
 }
 
 void CVideoDevicePreviewWidget::UpdateUSBPort()
@@ -87,6 +127,8 @@ void CVideoDevicePreviewWidget::UpdateStreamimgComponetState(bool bIsStreaming)
     ui->widget_mode_config_option->setEnabled(!bIsStreaming);
     ui->checkBox_hw_pp->setEnabled(bIsStreaming);
     ui->checkBox_master->setEnabled(bIsStreaming);
+    ui->comboBox_color_resize_rate->setEnabled(!bIsStreaming);
+    ui->comboBox_depth_resize_rate->setEnabled(!bIsStreaming);
 }
 
 void CVideoDevicePreviewWidget::UpdateStream()
@@ -524,6 +566,49 @@ void CVideoDevicePreviewWidget::UpdateIRLevel()
     }
 }
 
+void CVideoDevicePreviewWidget::UpdateFloodIRLevel()
+{
+    bool enableFloodIR = m_pVideoDeviceController->GetVideoDeviceModel()->IsFloodIRSupport();
+
+    if (!enableFloodIR) {
+        ui->widget_flood_led_toggle_mode->hide();
+        return;
+    }
+
+    unsigned short nMin, nMax;
+    int ret;
+    ret = m_pVideoDeviceController->GetVideoDeviceModel()->GetFloodIRRange(nMin, nMax);
+    if (APC_OK != ret)   return;
+
+    int nValue = m_pVideoDeviceController->GetVideoDeviceModel()->GetFloodIRValue();
+    QString sValue;
+    sValue.sprintf("%d / %d", nValue, nMax);
+    if (APC_NotSupport == nValue) return;
+
+    ui->label_flood_led_level_value->setText(sValue);
+    ui->horizontalSlider_flood_led->setEnabled(true);
+    ui->horizontalSlider_flood_led->setMinimum(nMin);
+    ui->horizontalSlider_flood_led->setMaximum(nMax);
+    ui->horizontalSlider_flood_led->blockSignals(true);
+    ui->horizontalSlider_flood_led->setValue(nValue);
+    ui->horizontalSlider_flood_led->blockSignals(false);
+
+    if (!m_pVideoDeviceController->GetVideoDeviceModel()->IsFloodIRSupportToggleMode()) {
+        ui->comboBox_toggle_mode->hide();
+        ui->label_toggle_mode->hide();
+        return;
+    }
+
+    nValue = m_pVideoDeviceController->GetVideoDeviceModel()->GetFloodIRToggleMode();
+    if (APC_NotSupport == nValue) return;
+    bool canToggleModeAdjust = enableFloodIR && CVideoDeviceModel::STREAMING != m_pVideoDeviceController->
+                                                                                GetVideoDeviceModel()->GetState();
+    ui->comboBox_toggle_mode->setEnabled(canToggleModeAdjust);
+    ui->comboBox_toggle_mode->blockSignals(true);
+    ui->comboBox_toggle_mode->setCurrentIndex(nValue);
+    ui->comboBox_toggle_mode->blockSignals(false);
+}
+
 void CVideoDevicePreviewWidget::UpdateDepthROI()
 {
     bool bDepthEnable = m_pVideoDeviceController->GetPreviewOptions()->IsStreamEnable(CVideoDeviceModel::STREAM_DEPTH);
@@ -534,6 +619,36 @@ void CVideoDevicePreviewWidget::UpdateDepthROI()
     QString depthROIText;
     depthROIText.sprintf("%d / %d", nDepthROIValue, ui->horizontalSlider_depth_roi->maximum() * 10);
     ui->label_depth_roi_value->setText(depthROIText);
+}
+void CVideoDevicePreviewWidget::UpdateResizeWidgets() {
+    if (m_pVideoDeviceController->GetVideoDeviceModel()->GetUsbType() == MIPI_PORT_TYPE) {
+        ui->widget_resize_settings->hide();
+        return;
+    }
+    UpdateComboBoxColorResize();
+    UpdateComboBoxDepthResize();
+}
+
+void CVideoDevicePreviewWidget::UpdateComboBoxColorResize()
+{
+    if (m_pVideoDeviceController->GetPreviewOptions()->GetEnableColorResizeOption()) {
+        ui->comboBox_color_resize_rate->show();
+        const int index = m_pVideoDeviceController->GetPreviewOptions()->GetColorResizeOptionIndex();
+        ui->comboBox_color_resize_rate->setCurrentIndex(index);
+    } else {
+        ui->comboBox_color_resize_rate->hide();
+    }
+}
+
+void CVideoDevicePreviewWidget::UpdateComboBoxDepthResize()
+{
+    if (m_pVideoDeviceController->GetPreviewOptions()->GetEnableDepthResizeOption()) {
+        ui->comboBox_depth_resize_rate->show();
+        const int index = m_pVideoDeviceController->GetPreviewOptions()->GetDepthResizeOptionIndex();
+        ui->comboBox_depth_resize_rate->setCurrentIndex(index);
+    } else {
+        ui->comboBox_depth_resize_rate->hide();
+    }
 }
 
 void CVideoDevicePreviewWidget::on_checkBox_mode_config_stateChanged(int state)
@@ -834,4 +949,46 @@ void CVideoDevicePreviewWidget::on_spinBox_z_value_far_valueChanged(int nValue)
     if (nValue > 16383){
         ui->spinBox_z_value_far->setValue(16383);
     }
+}
+
+void CVideoDevicePreviewWidget::on_checkBox_mipi_split_toggled(bool checked)
+{
+    ui->checkBox_mipi_split->setChecked(checked);
+    m_pVideoDeviceController->GetPreviewOptions()->SetMIPIPreviewSplit(checked);
+    qDebug() << "on_checkBox_mipi_split_toggled " << checked;
+}
+
+void CVideoDevicePreviewWidget::on_checkBox_mipi_clk_continue_mode_toggled(bool checked)
+{
+    ui->checkBox_mipi_clk_continue_mode->setChecked(checked);
+    m_pVideoDeviceController->GetPreviewOptions()->SetMIPIClkContinueMode(checked);
+    qDebug() << "on_checkBox_mipi_clk_continue_mode_toggled " << checked;
+}
+
+void CVideoDevicePreviewWidget::on_checkBox_auto_reconnet_stateChanged(int arg1)
+{
+    bool bIsChecked = Qt::Checked == arg1 ? true : false;
+    m_pVideoDeviceController->SetAutoReconnectStatus(bIsChecked);
+    qDebug() << "on_checkBox_auto_reconnet_stateChanged " << bIsChecked;
+}
+
+void CVideoDevicePreviewWidget::on_comboBox_color_resize_rate_currentIndexChanged(int index)
+{
+    m_pVideoDeviceController->SetColorResizeOption(index);
+}
+
+void CVideoDevicePreviewWidget::on_comboBox_depth_resize_rate_currentIndexChanged(int index)
+{
+    m_pVideoDeviceController->SetDepthResizeOption(index);
+}
+
+void CVideoDevicePreviewWidget::on_comboBox_toggle_mode_currentIndexChanged(int index)
+{
+    m_pVideoDeviceController->SetFloodIRToggleMode(index);
+}
+
+void CVideoDevicePreviewWidget::on_horizontalSlider_flood_led_valueChanged(int value)
+{
+    m_pVideoDeviceController->SetFloodIRLevel(value);
+    UpdateFloodIRLevel();
 }

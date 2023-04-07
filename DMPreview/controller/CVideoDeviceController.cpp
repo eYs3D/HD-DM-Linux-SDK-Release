@@ -33,6 +33,8 @@ m_pIMUDataController(nullptr)
     m_pDepthFilterOptions = new DepthFilterOptions(this);
     m_pDepthFilterOptions->SetDefaultValue();
     m_pVideoDeviceModel->ConfigDepthFilter();
+    m_pSelfcalibrationController = new CSelfcalibrationController(this, m_pVideoDeviceModel);
+    m_pSparseModeController = new CSparseModeController(this, m_pVideoDeviceModel);
 
     Init();
 
@@ -70,16 +72,67 @@ void CVideoDeviceController::Init()
     EnableRectifyData(m_pPreviewOptions->IsRectify());
     EnableIRExtend(m_pPreviewOptions->IsIRExtend());
     SetIRLevel(m_pPreviewOptions->GetIRLevel());
+    SetFloodIRLevel(m_pPreviewOptions->GetFloodIRLevel());
+    SetColorResizeOption(m_pPreviewOptions->GetColorResizeOptionIndex());
+    SetDepthResizeOption(m_pPreviewOptions->GetDepthResizeOptionIndex());
     for (int i = 0 ; i < CVideoDeviceModel::STREAM_TYPE_COUNT ; ++i){
         CVideoDeviceModel::STREAM_TYPE type = (CVideoDeviceModel::STREAM_TYPE)i;
         GetPreviewOptions()->EnableStream(type, m_pVideoDeviceModel->IsStreamSupport(type));
     }
 }
 
+int CVideoDeviceController::GetColorResizeOption() {
+    return GetPreviewOptions()->GetColorResizeOptionIndex();
+}
+
+void CVideoDeviceController::SetColorResizeOption(int index) {
+    GetPreviewOptions()->SetColorResizeOptionIndex(index);
+}
+
+int CVideoDeviceController::GetDepthResizeOption() {
+    return GetPreviewOptions()->GetDepthResizeOptionIndex();
+}
+
+void CVideoDeviceController::SetDepthResizeOption(int index) {
+    GetPreviewOptions()->SetDepthResizeOptionIndex(index);
+}
+
+inline bool CVideoDeviceController::GetEnableColorResizeOption() {
+    return GetPreviewOptions()->GetEnableColorResizeOption();
+}
+
+void CVideoDeviceController::SetEnableColorResizeOption(bool isEnable) {
+    GetPreviewOptions()->SetEnableColorResizeOption(isEnable);
+}
+
+inline bool CVideoDeviceController::GetEnableDepthResizeOption() {
+    return GetPreviewOptions()->GetEnableDepthResizeOption();
+}
+
+void CVideoDeviceController::SetEnableDepthResizeOption(bool isEnable) {
+    GetPreviewOptions()->SetEnableDepthResizeOption(isEnable);
+}
+
+void CVideoDeviceController::UpdateImageProcessor(size_t cw, size_t ch, size_t dw, size_t dh, APCImageType::Value imgType) {
+    m_pImageProcessController.reset(new CImageProcessController(cw, ch, dw, dh, imgType));
+}
+
 int CVideoDeviceController::SetIRLevel(unsigned short nLevel)
 {
     m_pPreviewOptions->SetIRLevel(nLevel);
     return m_pVideoDeviceModel->SetIRValue(nLevel);
+}
+
+int CVideoDeviceController::SetFloodIRLevel(unsigned short nLevel)
+{
+    m_pPreviewOptions->SetFloodIRLevel(nLevel);
+    return m_pVideoDeviceModel->SetFloodIRValue(nLevel);
+}
+
+int CVideoDeviceController::SetFloodIRToggleMode(int mode)
+{
+    m_pPreviewOptions->SetFloodIRToggleMode(mode);
+    return m_pVideoDeviceModel->SetFloodIRToggleMode(mode);
 }
 
 void CVideoDeviceController::EnableRectifyData(bool bEnable)
@@ -460,6 +513,20 @@ int CVideoDeviceController::SelectModeConfigIndex(int nIndex)
         SetDepthDataBits(0, modeConfig.bRectifyMode);
     }
 
+    bool isEnableYUY2ResizeOption = (GetPreviewOptions()->IsStreamEnable(CVideoDeviceModel::STREAM_COLOR) &&
+                                     modeConfig.eDecodeType_L == ModeConfig::MODE_CONFIG::YUYV) ||
+                                    (GetPreviewOptions()->IsStreamEnable(CVideoDeviceModel::STREAM_KOLOR) &&
+                                     modeConfig.eDecodeType_K == ModeConfig::MODE_CONFIG::YUYV);
+
+    SetEnableColorResizeOption(isEnableYUY2ResizeOption);
+
+    bool isEnableDepthResizeOption = GetPreviewOptions()->IsStreamEnable(CVideoDeviceModel::STREAM_DEPTH) ||
+                                     GetPreviewOptions()->IsStreamEnable(CVideoDeviceModel::STREAM_DEPTH_FUSION) ||
+                                     GetPreviewOptions()->IsStreamEnable(CVideoDeviceModel::STREAM_DEPTH_30mm) ||
+                                     GetPreviewOptions()->IsStreamEnable(CVideoDeviceModel::STREAM_DEPTH_60mm);
+
+    SetEnableDepthResizeOption(isEnableDepthResizeOption);
+
     return APC_OK;
 }
 
@@ -551,4 +618,14 @@ int CVideoDeviceController::StartIMUSyncWithFrame()
 int CVideoDeviceController::StopIMUSyncWithFrame()
 {
     return CFrameSyncManager::GetInstance()->UnregisterDataCallback(m_pVideoDeviceModel);
+}
+
+bool CVideoDeviceController::GetAutoReconnectStatus()
+{
+    return m_pVideoDeviceModel->GetAutoReconnectStatus();
+}
+
+void CVideoDeviceController::SetAutoReconnectStatus(bool auto_reconnet)
+{
+    m_pVideoDeviceModel->SetAutoReconnectStatus(auto_reconnet);
 }

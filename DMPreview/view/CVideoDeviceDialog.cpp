@@ -2,6 +2,7 @@
 #include "ui_CVideoDeviceDialog.h"
 #include <QFile>
 #include <QMessageBox>
+#include <QSettings>
 #include "CVideoDeviceController.h"
 #include "CVideoDevicePreviewWidget.h"
 #include "CVideoDeviceRegisterWidget.h"
@@ -15,6 +16,10 @@
 #include "CEYSDDeviceManager.h"
 #include "CVideoDeviceDepthFilterWidget.h"
 #include "CFrameSyncManager.h"
+#include "CSelfCalibrationWidget.h"
+#include "CSparseModeWidget.h"
+
+
 
 CVideoDeviceDialog::CVideoDeviceDialog(CVideoDeviceModel *pVideoDeviceModel, QWidget *parent):
     QDialog(parent),
@@ -27,7 +32,9 @@ CVideoDeviceDialog::CVideoDeviceDialog(CVideoDeviceModel *pVideoDeviceModel, QWi
     m_pIMUWidget(nullptr),
     m_pAudioWidget(nullptr),
     m_pDepthFilterWidget(nullptr),
-    m_pPointCloudViewerDialog(nullptr)
+    m_pPointCloudViewerDialog(nullptr),
+    m_pSelfCalibrationWidget(nullptr),
+    m_pSparseModeWidget(nullptr)
 {
     setAttribute(Qt::WA_DeleteOnClose);
 
@@ -244,7 +251,8 @@ int CVideoDeviceDialog::ImageCallback(APCImageType::Value imageType,
                                       CVideoDeviceModel::STREAM_TYPE streamType,
                                       BYTE *pImageBuffer, int nImageSize,
                                       int nWidth, int nHeight, int nSerialNumber,
-                                      void *pUserData)
+                                      void *pUserData,
+                                      bool bIsMIPISplit)
 {
     if (!m_pPreviewDialog[streamType]) {
         QMutexLocker locker(&m_previewDialogMutex);
@@ -253,6 +261,8 @@ int CVideoDeviceDialog::ImageCallback(APCImageType::Value imageType,
     }
 
     if (m_pPreviewDialog[streamType]->GetImageDataModel()) {
+        // If  MIPINoSplit && PointCloudViewer, no need to execute IMAGE_DATA_RAW_TO_RGB_TRANSFORM
+        m_pPreviewDialog[streamType]->GetImageDataModel()->SetMipiSplit(bIsMIPISplit);
         m_pPreviewDialog[streamType]->GetImageDataModel()->SetImageInfo(imageType, nWidth, nHeight);
         if (m_pPreviewDialog[streamType]->isVisible()) {
             m_pPreviewDialog[streamType]->ResizePreviewDialog();
@@ -327,6 +337,8 @@ void CVideoDeviceDialog::UpdateTabView()
     UpdatePreview();
     UpdateDepthFilter();
     UpdateCameraProperty();
+    UpdateSelfCalibration();
+    UpdateSparseMode();
     UpdateDepthAccuracy();
     UpdateIMU();
     UpdateAudio();
@@ -404,6 +416,28 @@ void CVideoDeviceDialog::UpdateThermalUI() {
     }
 }
 
+void CVideoDeviceDialog::UpdateSelfCalibration()
+{
+    if (m_pSelfCalibrationWidget) delete m_pSelfCalibrationWidget;
+    m_pSelfCalibrationWidget = new CSelfCalibrationWidget(m_pVideoDeviceController, this);
+    ui->tabWidget->addTab(m_pSelfCalibrationWidget, "SelfCalibration");
+}
+
+void CVideoDeviceDialog::UpdateSparseMode()
+{
+    QSettings settings("./../settings/APC_UIConfig.ini",QSettings::IniFormat);
+    settings.setIniCodec("UTF8");
+    settings.beginGroup("Setting");
+    int sparse_mode_config = 0;
+    sparse_mode_config = settings.value("Enable_TabPage_SparseMode").toInt();
+    qDebug() << "UpdateSparseMode sparse_mode_config:" << sparse_mode_config;
+    if (sparse_mode_config == 1) {
+        if (m_pSparseModeWidget) delete m_pSparseModeWidget;
+        m_pSparseModeWidget = new CSparseModeWidget(m_pVideoDeviceController, this);
+        ui->tabWidget->addTab(m_pSparseModeWidget, "SparseMode");
+    }
+}
+
 void CVideoDeviceDialog::on_pushButton_force_override_clicked() {
 
     QMessageBox::StandardButton result = QMessageBox::question(
@@ -470,6 +504,15 @@ void CVideoDeviceDialog::on_pushButton_rectify_read_clicked()
     pFile = fopen(buf, "wt");
     if (nullptr != pFile) {
         int i;
+        if (rectLogData.type ==1){
+            fprintf(pFile, "Calibration Type : Manual Calibration\n");
+        }else if(rectLogData.type==2){
+            fprintf(pFile, "Calibration Type : OEM Calibration\n");
+        }else{
+            fprintf(pFile, "Calibration Type : User Calibration\n");
+        }
+        fprintf(pFile, "Calibration Version : v%d,%d,%d,%d\n",rectLogData.version[0],rectLogData.version[1],rectLogData.version[2],rectLogData.version[3]);
+        fprintf(pFile, "Calibration Date : %d\n",rectLogData.Date);
         //
         fprintf(pFile, "InImgWidth = %d\n",        rectLogData.InImgWidth);
         fprintf(pFile, "InImgHeight = %d\n",       rectLogData.InImgHeight);
@@ -491,6 +534,8 @@ void CVideoDeviceDialog::on_pushButton_rectify_read_clicked()
         }
         fprintf(pFile, "\n");
         //
+        fprintf(pFile, "ParameterRatio1 = %.8f\n", rectLogData.ParameterRatio[0]);
+        //
         fprintf(pFile, "CamMat2 = ");
         for (i=0; i<9; i++) {
             fprintf(pFile, "%.8f, ",  rectLogData.CamMat2[i]);
@@ -502,6 +547,8 @@ void CVideoDeviceDialog::on_pushButton_rectify_read_clicked()
             fprintf(pFile, "%.8f, ",  rectLogData.CamDist2[i]);
         }
         fprintf(pFile, "\n");
+        //
+        fprintf(pFile, "ParameterRatio2 = %.8f\n", rectLogData.ParameterRatio[1]);
         //
         fprintf(pFile, "RotaMat = ");
         for (i=0; i<9; i++) {

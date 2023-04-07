@@ -8,6 +8,7 @@
 #include "CIMUModel.h"
 #include "CTaskInfoManager.h"
 #include "CVideoDeviceModelFactory.h"
+#include <vector>
 #include <string>
 #include <QTime>
 #include <QMutex>
@@ -118,6 +119,9 @@ public:
         int depthDataType = EOF;
         APCImageType::Value imageDataType = APCImageType::IMAGE_UNKNOWN;
         std::vector<BYTE> imageBuffer;
+        size_t nProcessWidth = 0u;
+        size_t nProcessHeight = 0u;
+        std::vector<BYTE> processedBuffer;
     };
 
 public:
@@ -145,6 +149,7 @@ public:
     virtual int Init();
     virtual int Reset();
     virtual int Update();
+    virtual int UpdateTaskThread();
 
     virtual int DataVerification();
 
@@ -176,6 +181,15 @@ public:
     virtual int UpdateIR();
     virtual int GetIRRange(unsigned short &nMin, unsigned short &nMax);
     virtual unsigned short GetIRValue();
+
+    virtual int SetFloodIRValue(unsigned short nValue) { return APC_NotSupport; }
+    virtual int UpdateFloodIR() { return APC_NotSupport; }
+    virtual int GetFloodIRRange(unsigned short &nMin, unsigned short &nMax) { return APC_NotSupport; }
+    virtual int GetFloodIRValue() { return APC_NotSupport; }
+    virtual bool IsFloodIRSupport() { return false; }
+    virtual int SetFloodIRToggleMode(int mode) { return APC_NotSupport; }
+    virtual int GetFloodIRToggleMode() { return APC_NotSupport; }
+    virtual bool IsFloodIRSupportToggleMode() { return false; }
 
     virtual bool IRExtendSupport(){ return true; }
     virtual bool IsIRExtended();
@@ -246,6 +260,8 @@ public:
     int StartStreaming();
     virtual int PrepareOpenDevice();
     virtual int OpenDevice();
+    int GetMipiInfo(int *i2c_bus, uint16_t *i2c_slave_addr, int *vc_id);
+    int SetVirtualChannel(void);
     virtual int StartStreamingTask();
 
     virtual int PreparePointCloudInfo();
@@ -289,7 +305,11 @@ public:
                                        int serialNumber, void* pParam);
 
     friend class CVideoDeviceModelFactory;
-
+    virtual bool GetAutoReconnectStatus() {return m_auto_reconnet;}
+    virtual void SetAutoReconnectStatus(bool auto_reconnet) {m_auto_reconnet = auto_reconnet;}
+    virtual bool IsManualGainSupport(){ return false; }
+    virtual bool IsManualGlobalGainSetSupport(){ return true; }
+    virtual std::vector<std::string> GetGainRegisterValueStringList() { return std::vector<std::string>(); }
 protected:
     CVideoDeviceModel(DEVSELINFO *pDeviceSelfInfo);
     virtual ~CVideoDeviceModel();
@@ -309,10 +329,10 @@ protected:
     virtual int UpdateFrameGrabberColorData(STREAM_TYPE streamType);
     virtual int UpdateFrameGrabberDepthData(STREAM_TYPE streamType);
     virtual int UpdateFrameGrabberData(STREAM_TYPE streamType);
-    virtual ImageData &GetColorImageData();
     virtual CImageDataModel *GetPreivewImageDataModel(STREAM_TYPE streamType);
 public:
     virtual ImageData &GetDepthImageData();
+    virtual ImageData &GetColorImageData();
 
     virtual void SerialCountToFrameCount(STREAM_TYPE streamType, int &nSerialNumber);
 
@@ -398,6 +418,7 @@ protected:
     int m_nLastInterLeaveDepthSerial;
 
     SERIAL_NUMBER_TYPE m_serialNumberType;
+    bool m_auto_reconnet;
 };
 
 #endif // CVIDEODEVICEMODEL_H

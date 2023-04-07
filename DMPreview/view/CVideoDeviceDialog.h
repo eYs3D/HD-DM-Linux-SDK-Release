@@ -9,6 +9,8 @@ namespace Ui {
 class VideoDeviceDialog;
 }
 
+class CSparseModeWidget;
+class CSelfCalibrationWidget;
 class CVideoDeviceDepthFilterWidget;
 class CVideoDevicePreviewWidget;
 class CVideoDeviceRegisterWidget;
@@ -42,7 +44,8 @@ public:
                               CVideoDeviceModel::STREAM_TYPE streamType,
                               BYTE *pImageBuffer, int nImageSize,
                               int nWidth, int nHeight, int nSerialNumber,
-                              void *pUserData);
+                              void *pUserData,
+                              bool bIsMIPISplit);
 
     virtual void ClosePointCloud();
     virtual int PointCloudCallback(std::vector<float> &cloudPoints, std::vector<BYTE> &colors);
@@ -67,6 +70,8 @@ private:
     void UpdateRectifyLog();
     void RelocateDialogPosition();
     void UpdateThermalUI();
+    void UpdateSelfCalibration();
+    void UpdateSparseMode();
 
 private:
     CVideoDeviceController *m_pVideoDeviceController = nullptr;
@@ -80,6 +85,9 @@ private:
     CVideoDeviceIMUWidget *m_pIMUWidget;
     CVideoDeviceAudoWidget *m_pAudioWidget;
     CVideoDeviceDepthFilterWidget *m_pDepthFilterWidget;
+    CSelfCalibrationWidget *m_pSelfCalibrationWidget;
+    CSparseModeWidget *m_pSparseModeWidget;
+
 
     CPointCloudViewerDialog *m_pPointCloudViewerDialog;
     QMutex m_previewDialogMutex;

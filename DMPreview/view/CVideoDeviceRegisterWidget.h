@@ -60,6 +60,8 @@ private slots:
 
     void on_pushButton_write_clicked();
 
+    void on_checkBox_swap_bytes_order_stateChanged(int arg1);
+
 private:
     void UpdateType();
     void UpdateSlaveID();
@@ -69,6 +71,7 @@ private:
     void UpdateAddressAndValue();
     void UpdateOptions();
     void UpdateButtonState();
+    void UpdateSwapBytesOrderCheckBox();
 
 
 private:

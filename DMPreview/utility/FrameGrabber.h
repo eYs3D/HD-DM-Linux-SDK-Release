@@ -21,6 +21,7 @@ class FrameGrabber
 	   // void UpdateDepthData(int serialNumber, unsigned char* depthBuf, size_t depthSize);// id is 0-base
 		void UpdateFrameData(int index,int serialNumber, unsigned char* buf, size_t size);
 		void SetFrameFormat(int index, int width, int height, int bytesPerPixel);
+        void SetMipiSplit(bool bIsMIPISplit);
 		//void SetDisableSerialSyn(bool value);
         void Close();
 	private:
@@ -61,6 +62,7 @@ class FrameGrabber
         FramePool m_depth;
         int m_last_sn;
 		//bool disableSerialSyn = false; 
+		bool m_mipi_split;
 
         static void CheckFrameReadyThreadFn( void* pvoid );
 	    //bool FindAndDropOutOfDateItem(int targetSn, FramePool& dataPool) const;

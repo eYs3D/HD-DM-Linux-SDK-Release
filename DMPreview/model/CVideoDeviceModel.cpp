@@ -25,7 +25,8 @@ m_coldResetTask(nullptr),
 m_pIMUModel(nullptr),
 m_nLastInterLeaveColorSerial(0),
 m_nLastInterLeaveDepthSerial(0),
-m_serialNumberType(FRAME_COUNT)
+m_serialNumberType(FRAME_COUNT),
+m_auto_reconnet(true)
 {
     DEVSELINFO *pDevSelfInfo = new DEVSELINFO;
     pDevSelfInfo->index = pDeviceSelfInfo->index;
@@ -343,6 +344,12 @@ int CVideoDeviceModel::Update()
     return APC_OK;
 }
 
+int CVideoDeviceModel::UpdateTaskThread()
+{
+
+    return APC_OK;
+}
+
 int CVideoDeviceModel::DataVerification()
 {
     for (DeviceInfo deviceInfo : m_deviceInfo) {
@@ -362,6 +369,8 @@ int CVideoDeviceModel::DataVerification()
 
     if (m_usbPortType != MIPI_PORT_TYPE) {
         ERROR_HANDLE(true == (USB_PORT_TYPE_UNKNOW != m_usbPortType), "Get usb port type failed!\n");
+    } else {
+        m_auto_reconnet = false;
     }
 
     return APC_OK;
@@ -435,7 +444,7 @@ CVideoDeviceModel::DeviceInfo CVideoDeviceModel::GetDeviceInformation(DEVSELINFO
     }
 
     char pBusInfo[256] = {0};
-    int  nBusInfoLength;
+    int nBusInfoLength;
     RETRY_APC_API(ret, APC_GetBusInfo(pEYSDI, pDeviceSelfInfo, pBusInfo, &nBusInfoLength));
     if (APC_OK == ret) {
         deviceInfo.sBusInfo = pBusInfo;
@@ -728,7 +737,11 @@ bool CVideoDeviceModel::IsIRExtended()
 
 int CVideoDeviceModel::NormalizeDepthDataType(int &nDepthDataType)
 {
-    if (nDepthDataType >= APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET + APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET)
+    if (nDepthDataType >= APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET + APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET)
+    {
+        nDepthDataType -= APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET + APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET;
+    }
+    else if (nDepthDataType >= APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET + APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET)
     {
         nDepthDataType -= APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET + APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET;
     }
@@ -783,6 +796,7 @@ int CVideoDeviceModel::SetDepthDataType(int nDepthDataType)
 
     int ret;
     for (DEVSELINFO *devSelInfo : m_deviceSelInfo) {
+        qDebug() << "SetDepthDataType:" << nDepthDataType;
         ret = APC_SetDepthDataType(pEYSDI, devSelInfo, nDepthDataType);
         if (ret != APC_OK) return ret;
         UpdateDepthDataType();
@@ -991,6 +1005,7 @@ int CVideoDeviceModel::GetRectifyLogData(int nDevIndex, int nRectifyLogIndex, eS
                                                       m_deviceSelInfo[nDevIndex],
                                                       pRectifyLogData,
                                                       nRectifyLogIndex));
+
     if (DEBUG_RECTIFY_LOG) {
         fprintf(stderr, "rectify main CamMat2 %f %f %f %f %f %f %f %f %f \n",
                 pRectifyLogData->CamMat2[0],
@@ -1034,6 +1049,10 @@ bool CVideoDeviceModel::IsStreamAvailable()
 
 int CVideoDeviceModel::StartStreaming()
 {
+    bool bIsMIPIClkContinueMode = m_pVideoDeviceController->GetPreviewOptions()->IsMIPIClkContinueMode();
+    bool bContinueMode = false;
+    int ret;
+
     if (!m_pVideoDeviceController->GetControlView()) return APC_NullPtr;
     if (!IsStreamAvailable()) return APC_NullPtr;
 
@@ -1053,12 +1072,34 @@ int CVideoDeviceModel::StartStreaming()
         m_pVideoDeviceController->StartIMUSyncWithFrame();
     }
 
+
+    m_pVideoDeviceController->UpdateImageProcessor(m_imageData[STREAM_COLOR].nWidth, m_imageData[STREAM_COLOR].nHeight,
+                                                   m_imageData[STREAM_DEPTH].nWidth, m_imageData[STREAM_DEPTH].nHeight,
+                                                   APCImageType::DepthDataTypeToDepthImageType(m_imageData[STREAM_DEPTH].depthDataType));
     PreparePointCloudInfo();
 
-    int ret = OpenDevice();
+    ret = OpenDevice();
+
     if (APC_OK != ret) {
         StopStreaming();
         return ret;
+    }
+
+    if (m_usbPortType == MIPI_PORT_TYPE) {
+        ret = APC_GetFWContinueMode(CEYSDDeviceManager::GetInstance()->GetEYSD(), m_deviceSelInfo[0], &bContinueMode);
+        if (ret != APC_OK) {
+            printf("Failed to call APC_GetFWContinueMode()(%d)\n", ret);
+        }
+
+        ret = APC_SetFWContinueMode(CEYSDDeviceManager::GetInstance()->GetEYSD(), m_deviceSelInfo[0], bIsMIPIClkContinueMode);
+        if (ret == APC_OK) {
+            ret = APC_GetFWContinueMode(CEYSDDeviceManager::GetInstance()->GetEYSD(), m_deviceSelInfo[0], &bContinueMode);
+            if (ret != APC_OK) {
+                printf("Failed to call APC_GetFWContinueMode()(%d)\n", ret);
+            }
+        } else {
+            printf("Failed to call APC_SetFWContinueMode()(%d)\n", ret);
+        }
     }
 
     ChangeState(STREAMING);
@@ -1072,7 +1113,8 @@ int CVideoDeviceModel::PrepareOpenDevice()
 {
     bool bColorStream = m_pVideoDeviceController->GetPreviewOptions()->IsStreamEnable(STREAM_COLOR);
     bool bDepthStream = m_pVideoDeviceController->GetPreviewOptions()->IsStreamEnable(STREAM_DEPTH);
-    bool bIsPointCloudViewer = m_pVideoDeviceController->GetPreviewOptions()->IsPointCloudViewer();
+    bool bIsMIPIPreviewSplit = m_pVideoDeviceController->GetPreviewOptions()->IsMIPIPreviewSplit();
+    bool bIsMIPINoSplit = (m_usbPortType == MIPI_PORT_TYPE && !bIsMIPIPreviewSplit);
 
     SetIRValue(m_pVideoDeviceController->GetPreviewOptions()->GetIRLevel());
     if (bDepthStream) {
@@ -1105,6 +1147,7 @@ int CVideoDeviceModel::PrepareOpenDevice()
         unsigned int nBufferSize = m_imageData[STREAM_COLOR].nWidth * m_imageData[STREAM_COLOR].nHeight * nBytePerPixel;
         if (m_imageData[STREAM_COLOR].imageBuffer.size() != nBufferSize) {
             m_imageData[STREAM_COLOR].imageBuffer.resize(nBufferSize);
+            m_imageData[STREAM_COLOR].processedBuffer.resize(nBufferSize);
         }
         memset(&m_imageData[STREAM_COLOR].imageBuffer[0], 0, sizeof(nBufferSize));
     }
@@ -1121,14 +1164,12 @@ int CVideoDeviceModel::PrepareOpenDevice()
         unsigned int nBufferSize = m_imageData[STREAM_DEPTH].nWidth * m_imageData[STREAM_DEPTH].nHeight * nBytePerPixel;
         if (m_imageData[STREAM_DEPTH].imageBuffer.size() != nBufferSize) {
             m_imageData[STREAM_DEPTH].imageBuffer.resize(nBufferSize);
+            m_imageData[STREAM_DEPTH].processedBuffer.resize(nBufferSize);
         }
         memset(&m_imageData[STREAM_DEPTH].imageBuffer[0], 0, sizeof(nBufferSize));
     }
 
-    if (m_usbPortType == MIPI_PORT_TYPE &&
-        bColorStream &&
-        bDepthStream &&
-        !bIsPointCloudViewer) {
+    if (bIsMIPINoSplit) {
         m_imageData[STREAM_BOTH].nWidth = m_imageData[STREAM_COLOR].nWidth + m_imageData[STREAM_DEPTH].nWidth;
         m_imageData[STREAM_BOTH].nHeight = m_imageData[STREAM_COLOR].nHeight;
         m_imageData[STREAM_BOTH].bMJPG = m_imageData[STREAM_COLOR].bMJPG;
@@ -1139,6 +1180,7 @@ int CVideoDeviceModel::PrepareOpenDevice()
         unsigned int nBufferSize = m_imageData[STREAM_BOTH].nWidth * m_imageData[STREAM_BOTH].nHeight * nBytePerPixel;
         if (m_imageData[STREAM_BOTH].imageBuffer.size() != nBufferSize) {
             m_imageData[STREAM_BOTH].imageBuffer.resize(nBufferSize);
+            m_imageData[STREAM_BOTH].processedBuffer.resize(nBufferSize);
         }
         memset(&m_imageData[STREAM_BOTH].imageBuffer[0], 0, sizeof(nBufferSize));
     }
@@ -1194,13 +1236,20 @@ int CVideoDeviceModel::GetPointCloudInfo(eSPCtrl_RectLogData *pRectifyLogData, P
 
     pointCloudInfo.wDepthType = depthImageData.depthDataType;
 
-    const float ratio_Mat = (float)depthImageData.nHeight / pRectifyLogData->OutImgHeight;
+    int scaleOptionIndex = m_pVideoDeviceController->GetPreviewOptions()->GetResizeOptionIndex(depthImageData.imageDataType);
+    bool optionsEnable = m_pVideoDeviceController->GetPreviewOptions()->GetResizeOptionEnableByType(depthImageData.imageDataType);
+    float resizedDepthHeight = (float) m_pVideoDeviceController->GetImageProcessController()->GetResizedResolution(
+                               scaleOptionIndex, depthImageData.imageDataType).height;
+
+    float currentDepthHeight = optionsEnable ? resizedDepthHeight : (float) depthImageData.nHeight;
+    const float ratio_Mat = currentDepthHeight / pRectifyLogData->OutImgHeight;
     const float baseline  = 1.0f / pRectifyLogData->ReProjectMat[14];
     const float diff      = pRectifyLogData->ReProjectMat[15] * ratio_Mat;
 
     pointCloudInfo.centerX = -1.0f * pRectifyLogData->ReProjectMat[3] * ratio_Mat;
     pointCloudInfo.centerY = -1.0f * pRectifyLogData->ReProjectMat[7] * ratio_Mat;
     pointCloudInfo.focalLength = pRectifyLogData->ReProjectMat[11] * ratio_Mat;
+    pointCloudInfo.bIsMIPISplit = m_pVideoDeviceController->GetPreviewOptions()->IsMIPIPreviewSplit();
 
     switch (depthImageData.imageDataType) {
         case APCImageType::DEPTH_14BITS: pointCloudInfo.disparity_len = 0; break;
@@ -1227,6 +1276,7 @@ int CVideoDeviceModel::OpenDevice()
 {
     bool bColorStream = m_pVideoDeviceController->GetPreviewOptions()->IsStreamEnable(STREAM_COLOR);
     bool bDepthStream = m_pVideoDeviceController->GetPreviewOptions()->IsStreamEnable(STREAM_DEPTH);
+    bool bIsRectify = m_pVideoDeviceController->GetPreviewOptions()->IsRectify();
 
     int nFPS = bColorStream ? m_pVideoDeviceController->GetPreviewOptions()->GetStreamFPS(STREAM_COLOR) :
                bDepthStream ? m_pVideoDeviceController->GetPreviewOptions()->GetStreamFPS(STREAM_DEPTH) :
@@ -1241,7 +1291,7 @@ int CVideoDeviceModel::OpenDevice()
                              DEPTH_IMG_NON_TRANSFER,
                              true, nullptr,
                              &nFPS,
-                             IMAGE_SN_SYNC);
+                             bIsRectify ? IMAGE_RECTIFY_DATA : IMAGE_NORECTIFY_DATA);
     } else {
         ret = APC_OpenDevice2(CEYSDDeviceManager::GetInstance()->GetEYSD(),
                               m_deviceSelInfo[0],
@@ -1265,12 +1315,97 @@ int CVideoDeviceModel::OpenDevice()
     return ret;
 }
 
+int parse_cmd_config(const char *cmd, char *param[], int param_count, const char  *delim, uint32_t *count)
+{
+    char *found = NULL;
+    int i = 0;
+    char *cmd_tmp = NULL;
+    char **param_tmp = NULL;
+
+    cmd_tmp = (char *)cmd;
+
+    while( (found = strsep(&cmd_tmp,delim)) != NULL ) {
+        if (i >= param_count) {
+            break;
+        }
+        param_tmp =  &param[i];
+        *param_tmp = found;
+        i++;
+    }
+
+    *count = i;
+
+    return APC_OK;
+}
+
+int CVideoDeviceModel::GetMipiInfo(int *i2c_bus, uint16_t *i2c_slave_addr, int *vc_id)
+{
+    int ret = APC_OK;
+    char *param_strs[3] = {0};
+    uint32_t count = 0;
+    unsigned long lval = 0;
+
+    ret = parse_cmd_config(GetDeviceInformation()[0].sBusInfo.c_str(), param_strs, 3, "-", &count);
+    if (ret == APC_OK) {
+        if (!param_strs[0] || !param_strs[1] || !param_strs[2]) {
+            printf("Failed to parse [%s]\n", GetDeviceInformation()[0].sBusInfo.c_str());
+            return APC_Init_Fail;
+        }
+        lval = strtoul (param_strs[0], NULL, 10);
+        *i2c_bus = (int)lval;
+        lval = strtoul (param_strs[1], NULL, 16);
+        *i2c_slave_addr  = (uint16_t)(lval & 0xff);
+        lval = strtoul (param_strs[2], NULL, 10);
+        *vc_id = (int)lval;
+        printf("Dev#%d: [bus, address, id] = [%d, 0x%02x, %d]\n",
+            m_deviceSelInfo[0]->index,
+            *i2c_bus,
+            *i2c_slave_addr,
+            *vc_id);
+    }
+
+    return ret;
+}
+
+int CVideoDeviceModel::SetVirtualChannel(void)
+{
+    int ret = APC_OK;
+    int i2c_bus;
+    uint16_t i2c_slave_addr;
+    int vc_id;
+    int nVirtualChannelID0 = 0, nVirtualChannelID1 = 0;
+    
+    GetMipiInfo(&i2c_bus, &i2c_slave_addr, &vc_id);
+
+    ret = APC_GetHWVirtualChannel(CEYSDDeviceManager::GetInstance()->GetEYSD(), m_deviceSelInfo[0], &nVirtualChannelID0, &nVirtualChannelID1);
+    if (ret != APC_OK) {
+        printf("Failed to call APC_GetHWVirtualChannel()(%d)\n", ret);
+    }
+    
+    ret = APC_SetHWVirtualChannel(CEYSDDeviceManager::GetInstance()->GetEYSD(), m_deviceSelInfo[0], vc_id);
+    if (ret == APC_OK) {
+        printf("Call APC_SetHWVirtualChannel() (%d, %d)\n", ret, vc_id);
+        ret = APC_GetHWVirtualChannel(CEYSDDeviceManager::GetInstance()->GetEYSD(), m_deviceSelInfo[0], &nVirtualChannelID0, &nVirtualChannelID1);
+        if (ret != APC_OK) {
+            printf("Failed to call APC_GetHWVirtualChannel()(%d)\n", ret);
+        } else {
+            printf("Call APC_GetHWVirtualChannel() (%d, %d, %d)\n", ret, nVirtualChannelID0, nVirtualChannelID1);
+        }
+    } else {
+        printf("Failed to call APC_SetHWVirtualChannel()(%d)\n", ret);
+    }
+
+    return ret;
+}
+
 int CVideoDeviceModel::StartStreamingTask()
 {
+    int ret = APC_OK;
     bool bColorStream = m_pVideoDeviceController->GetPreviewOptions()->IsStreamEnable(STREAM_COLOR);
     bool bDepthStream = m_pVideoDeviceController->GetPreviewOptions()->IsStreamEnable(STREAM_DEPTH);
 
     if (m_usbPortType == MIPI_PORT_TYPE) {
+        ret = SetVirtualChannel();
         if (bColorStream && bDepthStream) {
             CreateStreamTask(STREAM_BOTH);
         } else if (bColorStream) {
@@ -1356,7 +1491,8 @@ int CVideoDeviceModel::ClosePreviewView()
 {
     bool bColorStream = m_pVideoDeviceController->GetPreviewOptions()->IsStreamEnable(STREAM_COLOR);
     bool bDepthStream = m_pVideoDeviceController->GetPreviewOptions()->IsStreamEnable(STREAM_DEPTH);
-    bool bIsPointCloudViewer = m_pVideoDeviceController->GetPreviewOptions()->IsPointCloudViewer();
+    bool bIsMIPIPreviewSplit = m_pVideoDeviceController->GetPreviewOptions()->IsMIPIPreviewSplit();
+    bool bIsMIPINoSplit = (m_usbPortType == MIPI_PORT_TYPE && !bIsMIPIPreviewSplit);
 
     if (bColorStream) {
         m_pVideoDeviceController->GetControlView()->ClosePreviewView(STREAM_COLOR);
@@ -1366,10 +1502,7 @@ int CVideoDeviceModel::ClosePreviewView()
         m_pVideoDeviceController->GetControlView()->ClosePreviewView(STREAM_DEPTH);
     }
 
-    if (m_usbPortType == MIPI_PORT_TYPE &&
-        bColorStream &&
-        bDepthStream &&
-        !bIsPointCloudViewer) {
+    if (bIsMIPINoSplit) {
         m_pVideoDeviceController->GetControlView()->ClosePreviewView(STREAM_BOTH);
     }
 
@@ -1420,6 +1553,7 @@ int CVideoDeviceModel::ConfigDepthFilter()
 int CVideoDeviceModel::DoImageGrabber(CTaskInfo::TYPE type)
 {
     STREAM_TYPE streamType;
+
     switch (type) {
         case CTaskInfo::GRABBER_VIDEO_IMAGE_COLOR:
             streamType = STREAM_COLOR;
@@ -1469,13 +1603,16 @@ int CVideoDeviceModel::DoImageGrabber(CTaskInfo::TYPE type)
 
 int CVideoDeviceModel::GetImage(STREAM_TYPE type)
 {
-    bool bIsPointCloudViewer = m_pVideoDeviceController->GetPreviewOptions()->IsPointCloudViewer();
+    bool bIsMIPIPreviewSplit = m_pVideoDeviceController->GetPreviewOptions()->IsMIPIPreviewSplit();
     int ret;
 
     switch (type) {
         case STREAM_COLOR:
             if (m_usbPortType == MIPI_PORT_TYPE) {
-			    ret = Get2Image(type);
+                if (bIsMIPIPreviewSplit)
+                    ret = Get2Image(type);
+                else
+                    ret = Get2ImageNoSplit(type);
             } else {
                 ret = GetColorImage();
             }
@@ -1484,7 +1621,7 @@ int CVideoDeviceModel::GetImage(STREAM_TYPE type)
             ret = GetDepthImage();
             break;
         case STREAM_BOTH:
-            if (bIsPointCloudViewer)
+            if (bIsMIPIPreviewSplit)
                 ret = Get2Image(type);
             else
                 ret = Get2ImageNoSplit(type);
@@ -1538,24 +1675,13 @@ int CVideoDeviceModel::Get2Image(STREAM_TYPE type)
     }
 #endif
 
-#if 0
-    struct timeval t, tProcessImg;
-    gettimeofday(&t, NULL);
-#endif
     ret = ProcessImage(STREAM_COLOR, nColorImageSize, nSerial);
     if (APC_OK != ret) return ret;
-#if 0
-    gettimeofday(&tProcessImg, NULL);
-    printf("ProcessCImg: %lums\n", ((tProcessImg.tv_sec - t.tv_sec) * 1000000 + tProcessImg.tv_usec - t.tv_usec) / 1000);
-#endif
+
     if (type == STREAM_BOTH) { 
         ret = ProcessImage(STREAM_DEPTH, nDepthImageSize, nSerial);
         if (APC_OK != ret) return ret;
     }
-#if 0
-    gettimeofday(&tProcessImg, NULL);
-    printf("ProcessDImg: %lums\n", ((tProcessImg.tv_sec - t.tv_sec) * 1000000 + tProcessImg.tv_usec - t.tv_usec) / 1000);
-#endif
 
     return ret;
 }
@@ -1775,6 +1901,10 @@ int CVideoDeviceModel::HandleGetImageResult(STREAM_TYPE type, int getImageResult
 int CVideoDeviceModel::ProcessImageCallback(STREAM_TYPE streamType,
                                             int nImageSize, int nSerialNumber)
 {
+    bool IsPointCloudViewer = m_pVideoDeviceController->GetPreviewOptions()->IsPointCloudViewer();
+    bool bIsMIPIPreviewSplit = m_pVideoDeviceController->GetPreviewOptions()->IsMIPIPreviewSplit();
+    bool bIsMIPINoSplit = (m_usbPortType == MIPI_PORT_TYPE && !bIsMIPIPreviewSplit);
+
     if (IsInterleaveMode()) {
         if (STREAM_COLOR == streamType) {
             if (1 == nSerialNumber % 2) return APC_OK;
@@ -1806,11 +1936,29 @@ int CVideoDeviceModel::ProcessImageCallback(STREAM_TYPE streamType,
                                                             m_imageData[streamType].nWidth, m_imageData[streamType].nHeight,
                                                             nSerialNumber, nullptr);
     } else {
+        APCImageType::Value imgType = m_imageData[streamType].imageDataType;
+        int scaleOptionIndex = m_pVideoDeviceController->GetPreviewOptions()->GetResizeOptionIndex(imgType);
+
+        bool optionsEnable = scaleOptionIndex > 0  && /* Resolution might not be 4 divisible by ratio 1X. */
+                             m_pVideoDeviceController->GetPreviewOptions()->GetResizeOptionEnableByType(imgType);
+        if (optionsEnable) {
+            m_pVideoDeviceController->GetImageProcessController()->process(scaleOptionIndex,
+                                                                           m_imageData[streamType].imageBuffer,
+                                                                           m_imageData[streamType].processedBuffer,
+                                                                           imgType);
+        }
+
+        ResizeImgHandler::ResolutionResized rr =
+                m_pVideoDeviceController->GetImageProcessController()->GetResizedResolution(scaleOptionIndex, imgType);
+        BYTE* rawData = optionsEnable ? &m_imageData[streamType].processedBuffer[0] : &m_imageData[streamType].imageBuffer[0];
+        int cbImageSize = optionsEnable ? (rr.width * rr.height << 1): nImageSize;
+        int cbImageWidth = optionsEnable ? rr.width : m_imageData[streamType].nWidth;
+        int cbImageHeight = optionsEnable ? rr.height : m_imageData[streamType].nHeight;
         return pView->ImageCallback(m_imageData[streamType].imageDataType, streamType,
-                                    &m_imageData[streamType].imageBuffer[0],
-                                    nImageSize,
-                                    m_imageData[streamType].nWidth, m_imageData[streamType].nHeight,
-                                    nSerialNumber, nullptr);
+                                    rawData,
+                                    cbImageSize,
+                                    cbImageWidth, cbImageHeight,
+                                    nSerialNumber, nullptr, !(bIsMIPINoSplit && IsPointCloudViewer));
     }
 }
 
@@ -1823,13 +1971,16 @@ int CVideoDeviceModel::ProcessImage(STREAM_TYPE streamType,
 
 int CVideoDeviceModel::UpdateFrameGrabberColorData(STREAM_TYPE streamType)
 {
+    bool bIsMIPIPreviewSplit = m_pVideoDeviceController->GetPreviewOptions()->IsMIPIPreviewSplit();
+    bool bIsMIPINoSplit = (m_usbPortType == MIPI_PORT_TYPE && !bIsMIPIPreviewSplit);
+
     const bool bIsDpethOutput = PreviewOptions::POINT_CLOUDE_VIEWER_OUTPUT_DEPTH == m_pVideoDeviceController->GetPreviewOptions()->GetPointCloudViewOutputFormat();
     CImageDataModel *pColorImageData = GetPreivewImageDataModel(streamType);
 
     if (!pColorImageData) return APC_NullPtr;
     
     QMutexLocker locker(&pColorImageData->GetDataMutex());
-    
+
     BYTE *pBuffer = &pColorImageData->GetRGBData()[0];
     int nBytesPerPixelColor = 3;
     if (bIsDpethOutput) {
@@ -1842,6 +1993,7 @@ int CVideoDeviceModel::UpdateFrameGrabberColorData(STREAM_TYPE streamType)
             } else {
                 if (m_imageData[STREAM_RESERVED].imageBuffer.size() != pColorImageData->GetWidth() * pColorImageData->GetHeight() * 3) {
                     m_imageData[STREAM_RESERVED].imageBuffer.resize(pColorImageData->GetWidth() * pColorImageData->GetHeight() * 3);
+                    m_imageData[STREAM_RESERVED].processedBuffer.resize(pColorImageData->GetWidth() * pColorImageData->GetHeight() * 3);
                 }
                 PlyWriter::resampleImage(pDepthImageData->GetWidth(), pDepthImageData->GetHeight(), &pDepthImageData->GetRGBData()[0],
                                          pColorImageData->GetWidth(), pColorImageData->GetHeight(), &m_imageData[STREAM_RESERVED].imageBuffer[0],
@@ -1853,10 +2005,19 @@ int CVideoDeviceModel::UpdateFrameGrabberColorData(STREAM_TYPE streamType)
     m_pFrameGrabber->SetFrameFormat(FrameGrabber::FRAME_POOL_INDEX_COLOR,
                                     pColorImageData->GetWidth(), pColorImageData->GetHeight(),
                                     nBytesPerPixelColor);
-    m_pFrameGrabber->UpdateFrameData(FrameGrabber::FRAME_POOL_INDEX_COLOR,
-                                     pColorImageData->GetSerialNumber(),
-                                     pBuffer,
-                                     pColorImageData->GetRGBData().size());
+    if (bIsMIPINoSplit) {
+        m_pFrameGrabber->SetMipiSplit(bIsMIPIPreviewSplit);
+        pBuffer = &pColorImageData->GetRawData()[0];
+        m_pFrameGrabber->UpdateFrameData(FrameGrabber::FRAME_POOL_INDEX_COLOR,
+                                         pColorImageData->GetSerialNumber(),
+                                         pBuffer,
+                                         pColorImageData->GetRawData().size());
+    } else {
+        m_pFrameGrabber->UpdateFrameData(FrameGrabber::FRAME_POOL_INDEX_COLOR,
+                                         pColorImageData->GetSerialNumber(),
+                                         pBuffer,
+                                         pColorImageData->GetRGBData().size());
+    }
 }
 
 int CVideoDeviceModel::UpdateFrameGrabberDepthData(STREAM_TYPE streamType)
@@ -1890,6 +2051,8 @@ int CVideoDeviceModel::UpdateFrameGrabberDepthData(STREAM_TYPE streamType)
 
 int CVideoDeviceModel::UpdateFrameGrabberData(STREAM_TYPE streamType)
 {
+    bool bIsMIPIPreviewSplit = m_pVideoDeviceController->GetPreviewOptions()->IsMIPIPreviewSplit();
+
     switch (streamType) {
         case STREAM_COLOR:
         case STREAM_KOLOR:
@@ -1904,8 +2067,12 @@ int CVideoDeviceModel::UpdateFrameGrabberData(STREAM_TYPE streamType)
         }
         case STREAM_BOTH: // For MIPI
         {
-            UpdateFrameGrabberColorData(STREAM_COLOR);
-            UpdateFrameGrabberDepthData(STREAM_DEPTH);
+            if (bIsMIPIPreviewSplit) {
+                UpdateFrameGrabberColorData(STREAM_COLOR);
+                UpdateFrameGrabberDepthData(STREAM_DEPTH);
+            } else {
+                UpdateFrameGrabberColorData(streamType);
+            }
             break;
         }
         default: return APC_NotSupport;
@@ -2172,7 +2339,17 @@ int CVideoDeviceModel::ProcessFrameGrabberCallback(std::vector<unsigned char>& b
                                                    std::vector<unsigned char>& bufColor, int widthColor, int heightColor,
                                                    int serialNumber)
 {
-    size_t nPointCloudSize = widthDepth * heightDepth * 3;
+    size_t nPointCloudSize;
+    bool bIsMIPIPreviewSplit = m_pVideoDeviceController->GetPreviewOptions()->IsMIPIPreviewSplit();
+    bool bIsMIPINoSplit = (m_usbPortType == MIPI_PORT_TYPE && !bIsMIPIPreviewSplit);
+    int ret;
+
+    if (bIsMIPINoSplit) {
+        nPointCloudSize = (widthColor / 2) * heightColor * 3;
+    } else {
+        nPointCloudSize = widthDepth * heightDepth * 3;
+    }
+
     if (m_pointCloudDepth.size() != nPointCloudSize) m_pointCloudDepth.resize(nPointCloudSize);
     else                                             std::fill(m_pointCloudDepth.begin(), m_pointCloudDepth.end(), 0.0f);
 
@@ -2188,16 +2365,30 @@ int CVideoDeviceModel::ProcessFrameGrabberCallback(std::vector<unsigned char>& b
     float fZNear = (nZNear * 1.0f) > 0 ? nZNear : 0.1f;
     float fZFar = (nZFar * 1.0f) > 0? nZFar : 1000.0f;
     unsigned char *pImgColor = bufColor.empty() ? nullptr : &bufColor[0];
-    if (APC_OK == APC_GetPointCloud(CEYSDDeviceManager::GetInstance()->GetEYSD(),
-                                           m_deviceSelInfo[0],
-                                           pImgColor, widthColor, heightColor,
-                                           &bufDepth[0], widthDepth, heightDepth,
-                                           &m_pointCloudInfo,
-                                           &m_pointCloudColor[0],
-                                           &m_pointCloudDepth[0],
-                                           fZNear, fZFar)) {
-        m_pVideoDeviceController->GetControlView()->PointCloudCallback(m_pointCloudDepth, m_pointCloudColor);
+    if (bIsMIPINoSplit) {
+        nPointCloudSize = (widthColor / 2) * heightColor * 3;
+        ret = APC_GetPointCloud(CEYSDDeviceManager::GetInstance()->GetEYSD(),
+                                m_deviceSelInfo[0],
+                                &bufColor[0], widthColor / 2, heightColor,
+                                &bufColor[0], widthColor / 2, heightColor,
+                                &m_pointCloudInfo,
+                                &m_pointCloudColor[0],
+                                &m_pointCloudDepth[0],
+                                fZNear, fZFar);
+    } else {
+        nPointCloudSize = widthDepth * heightDepth * 3;
+        ret = APC_GetPointCloud(CEYSDDeviceManager::GetInstance()->GetEYSD(),
+                                m_deviceSelInfo[0],
+                                pImgColor, widthColor, heightColor,
+                                &bufDepth[0], widthDepth, heightDepth,
+                                &m_pointCloudInfo,
+                                &m_pointCloudColor[0],
+                                &m_pointCloudDepth[0],
+                                fZNear, fZFar);
     }
+    if (APC_OK == ret)
+        m_pVideoDeviceController->GetControlView()->PointCloudCallback(m_pointCloudDepth, m_pointCloudColor);
+
     return APC_OK;
 }
 

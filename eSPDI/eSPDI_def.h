@@ -130,6 +130,9 @@ typedef unsigned short WORD;
 #define FG_Value_1Byte   0x10
 #define FG_Value_2Byte   0x20
 
+// AXES Extension Unit Handshake Document Chapter 7 8 9 10
+#define FG_MULTI_BYTE_RW_SELECTOR_4   0x200
+
 typedef struct packet_s {
     int len;
     int serial;
@@ -308,10 +311,13 @@ typedef struct tagDEVINFORMATION {
 #define APC_PID_8063            0x0164
 #define APC_PID_8063_K          0x0165
 #define APC_PID_8076            0x0181
+#define APC_PID_80362           APC_PID_8076
 #define APC_PID_8077            0x0182
 #define APC_PID_8081            0x0183
 #define APC_PID_IRIS            0x0184
 #define APC_PID_IVY             0x0177
+#define APC_PID_IVY2            0x0191
+#define APC_PID_IVY2_S          0x0195
 #define APC_PID_GRAP            0x0179
 #define APC_PID_GRAP_K          0x0000
 #define APC_PID_GRAP_SLAVE      0x0279
@@ -372,6 +378,7 @@ typedef enum {
   AXES1,
   PUMA,
   KIWI,
+  PLUM,
   UNKNOWN_DEVICE_TYPE = 0xffff
 }DEVICE_TYPE;
 // for device type -
@@ -426,8 +433,12 @@ typedef struct tagKEEP_DATA_CTRL {
 } KEEP_DATA_CTRL;
 
 typedef enum{
+    // Not used
 	IMAGE_SN_NONSYNC = 0,
-	IMAGE_SN_SYNC
+	IMAGE_SN_SYNC,
+	// For MIPI Recitfy Data
+	IMAGE_NORECTIFY_DATA = 100,
+	IMAGE_RECTIFY_DATA
 } CONTROL_MODE;
 
 typedef enum{
@@ -453,6 +464,8 @@ typedef enum {
     APC_SENSOR_TYPE_H68     = 11,
     APC_SENSOR_TYPE_OV2740  = 12,
     APC_SENSOR_TYPE_OC0SA10 = 13,
+    APC_SENSOR_TYPE_VD56G3  = 14,
+    APC_SENSOR_TYPE_VD66GY  = 15,
     APC_SENSOR_TYPE_UNKOWN  = 0xffff
 } SENSOR_TYPE_NAME; 
 // for Sensor type name -
@@ -582,7 +595,10 @@ typedef struct eSPCtrl_RectLogData {
 			float			RECT_AvgErr;/**< Reprojection error */
 			unsigned short	nLineBuffers;/**< Linebuffer for Hardware limitation < 60 */
             float ReProjectMat[16];
-            float K6Ratio; //Ratio for distortion K6
+            float ParameterRatio[2]; //Ratio for distortion K6
+            long Date;
+            char type;
+            char version[4];
 		};
 	};
 } eSPCtrl_RectLogData;
@@ -827,5 +843,6 @@ struct PointCloudInfo
     float slaveDeviceCamMat2[9];
     float slaveDeviceRotaMat[9];
     float slaveDeviceTranMat[3];
+    bool bIsMIPISplit;
 };
 #endif // LIB_ESPDI_DEF_H

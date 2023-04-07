@@ -19,6 +19,7 @@ m_streamType(streamType),
 m_type(modelType),
 m_pDataTransformTask(nullptr)
 {
+    m_mipi_split = true;
     switch(streamType) {
         case CVideoDeviceModel::STREAM_COLOR: m_sDataName = "Color"; break;
         case CVideoDeviceModel::STREAM_COLOR_SLAVE: m_sDataName = "Slave Color"; break;
@@ -42,6 +43,11 @@ CImageDataModel::~CImageDataModel()
     if (m_pDataTransformTask) CThreadWorkerManage::GetInstance()->RemoveTask(m_pDataTransformTask);
 }
 
+void CImageDataModel::SetMipiSplit(bool bIsMIPISplit)
+{
+    m_mipi_split = bIsMIPISplit;
+}
+
 bool CImageDataModel::SetImageInfo(APCImageType::Value imageType,
                                    int nWidth, int nHeight)
 {
@@ -57,8 +63,11 @@ bool CImageDataModel::SetImageInfo(APCImageType::Value imageType,
     m_rawData.resize(m_nWidth * m_nHeight * GetRawDataBytePerPixel());
     m_rgbData.resize(m_nWidth * m_nHeight * 3);
 
-    m_pDataTransformTask = CTaskInfoManager::GetInstance()->RequestTaskInfo(CTaskInfo::IMAGE_DATA_RAW_TO_RGB_TRANSFORM, this);
-    CThreadWorkerManage::GetInstance()->AddTask(m_pDataTransformTask);
+    // If  MIPINoSplit && PointCloudViewer, no need to execute IMAGE_DATA_RAW_TO_RGB_TRANSFORM
+    if (m_mipi_split) {
+        m_pDataTransformTask = CTaskInfoManager::GetInstance()->RequestTaskInfo(CTaskInfo::IMAGE_DATA_RAW_TO_RGB_TRANSFORM, this);
+        CThreadWorkerManage::GetInstance()->AddTask(m_pDataTransformTask);
+    }
 
     return true;
 }

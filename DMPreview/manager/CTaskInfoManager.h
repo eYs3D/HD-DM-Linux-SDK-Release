@@ -37,6 +37,7 @@ public:
         //+[Thermal device]
         GRABBER_VIDEO_IMAGE_THERMAL,
         //-[Thermal device]
+        Device_MODEL_UPDATE,
         NONE
     };
     enum STATE{

@@ -14,35 +14,24 @@ read -p "Please select CPU type (enter: 1(x86_64), 2(armhf_32), 3(TI), 4(NVIDIA 
 case $project in
         [1]* ) 
         echo "run x86_64"
-        ./DMPreview_X86
+        sh ./run_DMPreview_X86.sh
         break;;
 
         [2]* ) 
         echo "run ARM"
-		export LD_LIBRARY_PATH=../eSPDI:$LD_LIBRARY_PATH 
-        export LD_LIBRARY_PATH=../eSPDI/opencv/ARMHF_32/lib/:$LD_LIBRARY_PATH
-        export LD_LIBRARY_PATH=../eSPDI/turbojpeg/armhf_32/lib/:$LD_LIBRARY_PATH 
-        sync
-        ./DMPreview_ARM
-		break;;
+        sh ./run_DMPreview_ARM.sh
+        break;;
 
         [3]* ) 
         echo "run TI"
-		export LD_LIBRARY_PATH=../eSPDI:$LD_LIBRARY_PATH 
-        export LD_LIBRARY_PATH=../eSPDI/opencv/armhf_ti_32/lib/:$LD_LIBRARY_PATH
-        export LD_LIBRARY_PATH=../eSPDI/turbojpeg/armhf_ti_32/lib/:$LD_LIBRARY_PATH 
-        sync
-        ./DMPreview_TI
-		break;;
-        
+        sh ./run_DMPreview_TI.sh
+        break;;
+
         [4]* ) 
         echo "run NVIDIA TX2"
-		export LD_LIBRARY_PATH=../eSPDI:$LD_LIBRARY_PATH 
-        export LD_LIBRARY_PATH=../eSPDI/opencv/TX2/lib/:$LD_LIBRARY_PATH
-        export LD_LIBRARY_PATH=../eSPDI/turbojpeg/TX2/lib/:$LD_LIBRARY_PATH 
-        sync
-        ./DMPreview_TX2
-		break;;
+        sh ./run_DMPreview_TX2.sh.sh
+        break;;
+
         * ) 
         echo "Please select CPU type";;
 esac

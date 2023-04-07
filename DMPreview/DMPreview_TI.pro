@@ -53,82 +53,73 @@ FORMS += \
     view/CVideoDeviceDepthFilterWidget.ui
 
 HEADERS += \
-    view/mainwindow.h \
-    view/CVideoDeviceDialog.h \
-    model/CVideoDeviceModel.h \
     controller/CVideoDeviceController.h \
+    controller/CRegisterReadWriteController.h \
+    controller/CCameraPropertyController.h \
+    controller/CIMUDataController.h \
+    controller/CDepthAccuracyController.h \
+    controller/CDepthFilterController.h \
+    controller/CImageProcessController.h \
     manager/CEYSDDeviceManager.h \
-    model/CCameraPropertyModel.h \
-    utility/PlyWriter.h \
-    model/PreviewOptions.h \
-    model/CIMUModel.h \
-    model/CVideoDeviceModelFactory.h \
-    view/CVideoDevicePreviewWidget.h \
-    view/CEYSDUIView.h \
     manager/CThreadWorkerManage.h \
     manager/CTaskThread.h \
     manager/CTaskInfoManager.h \
-    utility/utDisplayMetrics.h \
-    view/CPreviewDialog.h \
-    model/CImageDataModel.h \
-    utility/utImageProcessingUtility.h \
-    utility/ColorPaletteGenerator.h \
-    view/CMessageDialog.h \
     manager/CMessageManager.h \
-    utility/PlyFilter.h \
-    view/CVideoDeviceRegisterWidget.h \
-    utility/RegisterSettings.h \
-    controller/CRegisterReadWriteController.h \
+    manager/CIMUDeviceManager.h \
+    manager/CFrameSyncManager.h \
+    model/CVideoDeviceModel.h \
+    model/CCameraPropertyModel.h \
+    model/PreviewOptions.h \
+    model/CIMUModel.h \
+    model/CVideoDeviceModelFactory.h \
+    model/CImageDataModel.h \
     model/RegisterReadWriteOptions.h \
-    controller/CCameraPropertyController.h \
-    view/CVideoDeviceCameraPropertyWidget.h \
-    utility/ModeConfig.h \
-    utility/sqlite3/sqlite3.h \
-    utility/sqlite3/sqlite3ext.h \
     model/ModeConfigOptions.h \
-    model/module/CVideoDeviceModel_8037.h \
-    model/module/CVideoDeviceModel_8040_8054.h \
-    model/module/CVideoDeviceModel_8053_8059.h \
-    model/module/CVideoDeviceModel_8054.h \
-    model/module/CVideoDeviceModel_ColorWithDepth.h \
-    model/module/CVideoDeviceModel_Kolor.h \
-    model/module/CVideoDeviceModel_8040.h \
-    utility/IMUData.h \
-    utility/hidapi/hidapi.h \
-    view/CVideoDeviceIMUWidget.h \
-    controller/CIMUDataController.h \
-    model/module/CVideoDeviceModel_8038.h \
-    utility/DepthFusionHelper.h \
-    model/module/CVideoDeviceModel_8060.h \
-    view/CVideoDeviceAudoWidget.h \
+    model/DepthFilterOptions.h \
     model/module/CVideoDeviceModel_8029.h \
     model/module/CVideoDeviceModel_8036_8052.h \
+    model/module/CVideoDeviceModel_8036.h \
+    model/module/CVideoDeviceModel_8037.h \
+    model/module/CVideoDeviceModel_8038.h \
+    model/module/CVideoDeviceModel_8040_8054.h \
+    model/module/CVideoDeviceModel_8040.h \
+    model/module/CVideoDeviceModel_8051.h \
+    model/module/CVideoDeviceModel_8052.h \
+    model/module/CVideoDeviceModel_8053_8059.h \
     model/module/CVideoDeviceModel_8053.h \
-    view/CPointCloudViewerWidget.h \
+    model/module/CVideoDeviceModel_8054.h \
+    model/module/CVideoDeviceModel_8060.h \
+    model/module/CVideoDeviceModel_8062.h \
+    model/module/CVideoDeviceModel_8063.h \
+    model/module/CVideoDeviceModel_8073.h \
+    model/module/CVideoDeviceModel_8076_8077.h \
+    model/module/CVideoDeviceModel_8081.h \
+    model/module/CVideoDeviceModel_8083.h \
+    model/module/CVideoDeviceModel_ColorWithDepth.h \
+    model/module/CVideoDeviceModel_Kolor.h \
+    model/module/CVideoDeviceModel_Iris.h \
+    model/module/CVideoDeviceModel_Hypatia.h \
+    model/module/CVideoDeviceModel_Hypatia2.h \
+    model/module/CVideoDeviceModel_Nora.h \
+    model/module/CVideoDeviceModel_Grap.h \
+    utility/PlyWriter.h \
+    utility/utDisplayMetrics.h \
+    utility/utImageProcessingUtility.h \
+    utility/ColorPaletteGenerator.h \
+    utility/PlyFilter.h \
+    utility/RegisterSettings.h \
+    utility/ModeConfig.h \
+    utility/IMUData.h \
+    utility/DepthFusionHelper.h \
     utility/OpenGLShaderCore.h \
-    view/CPointCloudViewerDialog.h \
     utility/FrameGrabber.h \
     utility/FPSCalculator.h \
     utility/ArcBall.h \
     utility/ArcBallMatrix.h \
     utility/OGLBasic.h \
-    controller/CDepthAccuracyController.h \
-    view/CVideoDeviceDepthAccuracyWidget.h \
-    view/CIMUDataViewerWidget.h \
-    model/DepthFilterOptions.h \
-    controller/CDepthFilterController.h \
-    view/CVideoDeviceDepthFilterWidget.h \
-    model/module/CVideoDeviceModel_8051.h \
-    model/module/CVideoDeviceModel_8062.h \
-    model/module/CVideoDeviceModel_8063.h \
-    model/module/CVideoDeviceModel_8076_8077.h \
-    model/module/CVideoDeviceModel_Iris.h \
-    model/module/CVideoDeviceModel_Hypatia.h \
-    model/module/CVideoDeviceModel_Hypatia2.h \
-    model/module/CVideoDeviceModel_Nora.h \
-    model/module/CVideoDeviceModel_8052.h \
-    model/module/CVideoDeviceModel_8036.h \
-    manager/CIMUDeviceManager.h \
+    utility/sqlite3/sqlite3.h \
+    utility/sqlite3/sqlite3ext.h \
+    utility/hidapi/hidapi.h \
     utility/IMU/IMU_Filter/IMUFilter_AHRS.h \
     utility/IMU/IMU_Filter/IMUFilter_Complementary.h \
     utility/IMU/IMU_Filter/IMUFilter.h \
@@ -137,85 +128,88 @@ HEADERS += \
     utility/IMU/IMU_Filter/quaternion.h \
     utility/IMU/IMU_Filter/Quaternion1.h \
     utility/IMU/IMU_Calibration/CIMUCalibration.h \
-    manager/CFrameSyncManager.h \
-    model/module/CVideoDeviceModel_Grap.h \
-    model/module/CVideoDeviceModel_8073.h
+    view/mainwindow.h \
+    view/CVideoDeviceDialog.h \
+    view/CVideoDevicePreviewWidget.h \
+    view/CEYSDUIView.h \
+    view/CPreviewDialog.h \
+    view/CMessageDialog.h \
+    view/CVideoDeviceRegisterWidget.h \
+    view/CVideoDeviceCameraPropertyWidget.h \
+    view/CVideoDeviceIMUWidget.h \
+    view/CVideoDeviceAudoWidget.h \
+    view/CPointCloudViewerWidget.h \
+    view/CPointCloudViewerDialog.h \
+    view/CVideoDeviceDepthAccuracyWidget.h \
+    view/CIMUDataViewerWidget.h \
+    view/CVideoDeviceDepthFilterWidget.h
 
 SOURCES += \
-    view/mainwindow.cpp \
     main.cpp \
-    view/CVideoDeviceDialog.cpp \
-    model/CVideoDeviceModel.cpp \
     controller/CVideoDeviceController.cpp \
+    controller/CRegisterReadWriteController.cpp \
+    controller/CCameraPropertyController.cpp \
+    controller/CIMUDataController.cpp \
+    controller/CDepthAccuracyController.cpp \
+    controller/CDepthFilterController.cpp \
+    controller/CImageProcessController.cpp \
     manager/CEYSDDeviceManager.cpp \
-    model/CCameraPropertyModel.cpp \
-    utility/PlyWriter.cpp \
-    model/PreviewOptions.cpp \
-    model/CIMUModel.cpp \
-    model/CVideoDeviceModelFactory.cpp \
-    view/CVideoDevicePreviewWidget.cpp \
-    view/CEYSDUIView.cpp \
     manager/CThreadWorkerManage.cpp \
     manager/CTaskThread.cpp \
     manager/CTaskInfoManager.cpp \
-    utility/utDisplayMetrics.cpp \
-    view/CPreviewDialog.cpp \
-    model/CImageDataModel.cpp \
-    utility/utImageProcessingUtility.cpp \
-    utility/ColorPaletteGenerator.cpp \
-    view/CMessageDialog.cpp \
     manager/CMessageManager.cpp \
-    utility/PlyFilter.cpp \
-    view/CVideoDeviceRegisterWidget.cpp \
-    utility/RegisterSettings.cpp \
-    controller/CRegisterReadWriteController.cpp \
+    manager/CIMUDeviceManager.cpp \
+    manager/CFrameSyncManager.cpp \
+    model/CVideoDeviceModel.cpp \
+    model/CCameraPropertyModel.cpp \
+    model/PreviewOptions.cpp \
+    model/CIMUModel.cpp \
+    model/CVideoDeviceModelFactory.cpp \
+    model/CImageDataModel.cpp \
     model/RegisterReadWriteOptions.cpp \
-    controller/CCameraPropertyController.cpp \
-    view/CVideoDeviceCameraPropertyWidget.cpp \
-    utility/ModeConfig.cpp \
-    utility/sqlite3/sqlite3.c \
     model/ModeConfigOptions.cpp \
-    model/module/CVideoDeviceModel_8037.cpp \
-    model/module/CVideoDeviceModel_8040_8054.cpp \
-    model/module/CVideoDeviceModel_8053_8059.cpp \
-    model/module/CVideoDeviceModel_8054.cpp \
-    model/module/CVideoDeviceModel_ColorWithDepth.cpp \
-    model/module/CVideoDeviceModel_Kolor.cpp \
-    model/module/CVideoDeviceModel_8040.cpp \
-    utility/IMUData.cpp \
-    utility/hidapi/hid_udev.c \
-    view/CVideoDeviceIMUWidget.cpp \
-    controller/CIMUDataController.cpp \
-    model/module/CVideoDeviceModel_8038.cpp \
-    utility/DepthFusionHelper.cpp \
-    model/module/CVideoDeviceModel_8060.cpp \
-    view/CVideoDeviceAudoWidget.cpp \
+    model/DepthFilterOptions.cpp \
     model/module/CVideoDeviceModel_8029.cpp \
     model/module/CVideoDeviceModel_8036_8052.cpp \
-    model/module/CVideoDeviceModel_8053.cpp \
-    view/CPointCloudViewerWidget.cpp \
-    view/CPointCloudViewerDialog.cpp \
-    utility/FrameGrabber.cpp \
-    utility/FPSCalculator.cpp \
-    utility/ArcBall.cpp \
-    utility/ArcBallMatrix.cpp \
-    controller/CDepthAccuracyController.cpp \
-    view/CVideoDeviceDepthAccuracyWidget.cpp \
-    view/CIMUDataViewerWidget.cpp \
-    model/DepthFilterOptions.cpp \
-    controller/CDepthFilterController.cpp \
-    view/CVideoDeviceDepthFilterWidget.cpp \
+    model/module/CVideoDeviceModel_8036.cpp \
+    model/module/CVideoDeviceModel_8037.cpp \
+    model/module/CVideoDeviceModel_8038.cpp \
+    model/module/CVideoDeviceModel_8040_8054.cpp \
+    model/module/CVideoDeviceModel_8040.cpp \
     model/module/CVideoDeviceModel_8051.cpp \
+    model/module/CVideoDeviceModel_8052.cpp \
+    model/module/CVideoDeviceModel_8053_8059.cpp \
+    model/module/CVideoDeviceModel_8053.cpp \
+    model/module/CVideoDeviceModel_8054.cpp \
+    model/module/CVideoDeviceModel_8060.cpp \
     model/module/CVideoDeviceModel_8062.cpp \
     model/module/CVideoDeviceModel_8063.cpp \
+    model/module/CVideoDeviceModel_8073.cpp \
     model/module/CVideoDeviceModel_8076_8077.cpp \
+    model/module/CVideoDeviceModel_8081.cpp \
+    model/module/CVideoDeviceModel_8083.cpp \
+    model/module/CVideoDeviceModel_ColorWithDepth.cpp \
+    model/module/CVideoDeviceModel_Kolor.cpp \
     model/module/CVideoDeviceModel_Iris.cpp \
     model/module/CVideoDeviceModel_Hypatia.cpp \
     model/module/CVideoDeviceModel_Hypatia2.cpp \
     model/module/CVideoDeviceModel_Nora.cpp \
-    model/module/CVideoDeviceModel_8052.cpp \
-    model/module/CVideoDeviceModel_8036.cpp \
-    manager/CIMUDeviceManager.cpp \
+    model/module/CVideoDeviceModel_Grap.cpp \
+    utility/PlyWriter.cpp \
+    utility/utDisplayMetrics.cpp \
+    utility/utImageProcessingUtility.cpp \
+    utility/ColorPaletteGenerator.cpp \
+    utility/PlyFilter.cpp \
+    utility/RegisterSettings.cpp \
+    utility/ModeConfig.cpp \
+    utility/IMUData.cpp \
+    utility/DepthFusionHelper.cpp \
+    utility/FrameGrabber.cpp \
+    utility/FPSCalculator.cpp \
+    utility/ArcBall.cpp \
+    utility/ArcBallMatrix.cpp \
+    utility/sqlite3/sqlite3.c \
+    utility/hidapi/hid_udev.c \
     utility/IMU/IMU_Filter/IMUFilter_AHRS.cpp \
     utility/IMU/IMU_Filter/IMUFilter_Complementary.cpp \
     utility/IMU/IMU_Filter/StatelessOrientation.cpp \
@@ -223,9 +217,21 @@ SOURCES += \
     utility/IMU/IMU_Filter/quaternion.cpp \
     utility/IMU/IMU_Filter/Quaternion1.c \
     utility/IMU/IMU_Calibration/CIMUCalibration.cpp \
-    manager/CFrameSyncManager.cpp \
-    model/module/CVideoDeviceModel_Grap.cpp \
-    model/module/CVideoDeviceModel_8073.cpp
+    view/mainwindow.cpp \
+    view/CVideoDeviceDialog.cpp \
+    view/CVideoDevicePreviewWidget.cpp \
+    view/CEYSDUIView.cpp \
+    view/CPreviewDialog.cpp \
+    view/CMessageDialog.cpp \
+    view/CVideoDeviceRegisterWidget.cpp \
+    view/CVideoDeviceCameraPropertyWidget.cpp \
+    view/CVideoDeviceIMUWidget.cpp \
+    view/CVideoDeviceAudoWidget.cpp \
+    view/CPointCloudViewerWidget.cpp \
+    view/CPointCloudViewerDialog.cpp \
+    view/CVideoDeviceDepthAccuracyWidget.cpp \
+    view/CIMUDataViewerWidget.cpp \
+    view/CVideoDeviceDepthFilterWidget.cpp
 
 RESOURCES += \
     resource/resource.qrc

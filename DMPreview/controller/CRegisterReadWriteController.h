@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <QTime>
 #include "RegisterReadWriteOptions.h"
+#include <QDebug>
 
 class CVideoDeviceModel;
 class CTaskInfo;
@@ -34,6 +35,9 @@ public:
     int ReadRegister();
     int WriteRegister();
 
+    bool GetSwapBytesOrderStatus() { return m_SwapBytesOrder; }
+    void SetSwapBytesOrderStatus(bool swapBytesOrder) { m_SwapBytesOrder = swapBytesOrder; }
+
 private:
     CVideoDeviceModel *m_pVideoDeviceModel;
     RegisterReadWriteOptions *m_pRegisterReadWriteOptions;
@@ -45,6 +49,7 @@ private:
 
     FILE *m_pLogFile = nullptr;
     char m_pLogFileName[256] = {0};
+    bool m_SwapBytesOrder;
 };
 
 #endif // CREGISTERREADWRITECONTROLLER_H

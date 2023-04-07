@@ -15,6 +15,10 @@
 #include "eSPDI_def.h"
 #include "eSPDI_version.h"
 #include <stdlib.h>
+
+#include <vector>
+#include <cstdint>
+
 extern "C" {
 
 /*! \fn int APC_Init(
@@ -1137,19 +1141,6 @@ int APC_GetDepthImageWithTimestamp(
 */
 int APC_SetupBlock(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, bool enable);
 
-/*! \fn int APC_SetupContinueModek(
-        void *pHandleEYSD,
-        PDEVSELINFO pDevSelInfo,
-        bool enable)
-    \brief get color or depth pin image
-        by issuing V4L2's IOCTL to get frame data
-    \param void *pHandleEYSD	handle
-    \param PDEVSELINFO pDevSelInfo	pointer of device select index
-    \param bool enable Enable the MIPI clock continue mode or not)
-    \return success: APC_OK, others: see eSPDI_def.h
-*/
-int APC_SetupContinueMode(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, bool enable);
-
 /*! \fn int APC_Get_Color_30_mm_depth(
         void *pHandleEYSD,
         PDEVSELINFO pDevSelInfo,
@@ -1379,6 +1370,70 @@ int  APC_GetGlobalGain(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, int nSensorMo
     \return success: APC_OK, others: see eSPDI_def.h
 */
 int  APC_SetGlobalGain(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, int nSensorMode, float fGlobalGain);
+
+/*! \fn int APC_SetAnalogGain(
+        void *pHandleEYSD,
+        PDEVSELINFO pDevSelInfo,
+        int nSensorMode,
+        float fGlobalGain)
+    \brief set analog gain of ISP sensor setting
+        the target sensor type was set in APC_SetSensorTypeName()
+    \param void *pHandleEYSD	handle
+    \param PDEVSELINFO pDevSelInfo	pointer of device select index
+    \param int nSensorMode	which sensor(sensor A, B or Both) to get
+        A is 0, B is 1, Both is 2
+    \param float fGlobalGain	pointer of global gain value
+    \return success: APC_OK, others: see eSPDI_def.h
+*/
+int  APC_SetAnalogGain(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, int nSensorMode, float fGlobalGain);
+
+/*! \fn int APC_GetAnalogGain(
+        void *pHandleEYSD,
+        PDEVSELINFO pDevSelInfo,
+        int nSensorMode,
+        float *pfGlobalGain)
+    \brief get analog gain of ISP setting
+        the target sensor type was set in APC_SetSensorTypeName()
+    \param void *pHandleEYSD	handle
+    \param PDEVSELINFO pDevSelInfo	pointer of device select index
+    \param int nSensorMode	which sensor(sensor A, B or Both) to get
+        A is 0, B is 1, Both is 2
+    \param float *pfGlobalGain	pointer of global gain value
+    \return success: APC_OK, others: see eSPDI_def.h
+*/
+int  APC_GetAnalogGain(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, int nSensorMode, float *pfGlobalGain);
+
+/*! \fn int APC_SetDigitalGain(
+        void *pHandleEYSD,
+        PDEVSELINFO pDevSelInfo,
+        int nSensorMode,
+        float fGlobalGain)
+    \brief set digital gain of ISP sensor setting
+        the target sensor type was set in APC_SetSensorTypeName()
+    \param void *pHandleEYSD	handle
+    \param PDEVSELINFO pDevSelInfo	pointer of device select index
+    \param int nSensorMode	which sensor(sensor A, B or Both) to get
+        A is 0, B is 1, Both is 2
+    \param float fGlobalGain	pointer of global gain value
+    \return success: APC_OK, others: see eSPDI_def.h
+*/
+int  APC_SetDigitalGain(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, int nSensorMode, float fGlobalGain);
+
+/*! \fn int APC_GetDigitalGain(
+        void *pHandleEYSD,
+        PDEVSELINFO pDevSelInfo,
+        int nSensorMode,
+        float *pfGlobalGain)
+    \brief get digital gain of ISP setting
+        the target sensor type was set in APC_SetSensorTypeName()
+    \param void *pHandleEYSD	handle
+    \param PDEVSELINFO pDevSelInfo	pointer of device select index
+    \param int nSensorMode	which sensor(sensor A, B or Both) to get
+        A is 0, B is 1, Both is 2
+    \param float *pfGlobalGain	pointer of global gain value
+    \return success: APC_OK, others: see eSPDI_def.h
+*/
+int  APC_GetDigitalGain(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, int nSensorMode, float *pfGlobalGain);
 
 /*! \fn int APC_SetSensorTypeName(
         void *pHandleEYSD,
@@ -1756,6 +1811,71 @@ int APC_SetDepthDataType(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, unsigned sh
 */
 int APC_GetDepthDataType(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, unsigned short *pValue);
 
+/*! \fn APC_SetHWVirtualChannel(
+        void *pHandleEYSD,
+        PDEVSELINFO pDevSelInfo,
+        int channel)
+    \brief set depth data type, 11 bit for disparity data, 14 bit for Z data
+        notice: only PUMA type IC can support this setting
+    \param void *pHandleEYSD	handle
+    \param PDEVSELINFO pDevSelInfo	pointer of device select index
+    \param int channel	Virtual Channel you want to set
+        see APC_DEPTH_DATA_xxx in eSPDI_def.h
+    \return success: APC_OK, others: see eSPDI_def.h
+*/
+int APC_SetHWVirtualChannel(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, int channel);
+
+/*! \fn int APC_GetHWVirtualChannel(
+        void *pHandleEYSD,
+        PDEVSELINFO pDevSelInfo,
+        int *pValue)
+    \brief get current depth data type setting
+    \param void *pHandleEYSD	handle
+    \param PDEVSELINFO pDevSelInfo	pointer of device select index
+    \param bool *pValue0	pointer of Virtual Channel in device
+    \param bool *pValue1	pointer of Virtual Channel in device
+    \return success: APC_OK, others: see eSPDI_def.h
+*/
+int APC_GetHWVirtualChannel(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, int *pValue0, int *pValue1);
+
+/*! \fn int APC_GetHWContinueMode(
+        void *pHandleEYSD,
+        PDEVSELINFO pDevSelInfo,
+        bool *pValue)
+    \brief get color or depth pin image
+        by issuing V4L2's IOCTL to get frame data
+    \param void *pHandleEYSD	handle
+    \param PDEVSELINFO pDevSelInfo	pointer of device select index
+    \param bool *pValue	pointer of enable/disable status in device
+    \return success: APC_OK, others: see eSPDI_def.h
+*/
+int APC_GetHWContinueMode(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, bool *pValue);
+
+/*! \fn APC_SetFWContinueMode(
+        void *pHandleEYSD,
+        PDEVSELINFO pDevSelInfo,
+        bool enable)
+    \brief set depth data type, 11 bit for disparity data, 14 bit for Z data
+        notice: only PUMA type IC can support this setting
+    \param void *pHandleEYSD	handle
+    \param PDEVSELINFO pDevSelInfo	pointer of device select index
+    \param bool enable	enable/disable MIPI clock continue mode
+        see APC_DEPTH_DATA_xxx in eSPDI_def.h
+    \return success: APC_OK, others: see eSPDI_def.h
+*/
+int APC_SetFWContinueMode(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, bool enable);
+
+/*! \fn int APC_GetFWContinueMode(
+        void *pHandleEYSD,
+        PDEVSELINFO pDevSelInfo,
+        bool *pValue)
+    \brief get current depth data type setting
+    \param void *pHandleEYSD	handle
+    \param PDEVSELINFO pDevSelInfo	pointer of device select index
+    \param bool *pValue	pointer of enable/disable status in device
+    \return success: APC_OK, others: see eSPDI_def.h
+*/
+int APC_GetFWContinueMode(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, bool *pValue);
 
 /*! \fn APC_SetInterleaveMode(
         void *pHandleEYSD,
@@ -2896,7 +3016,7 @@ int APC_ReleasePostProcess(void *pPostProcessHandle);
  * @param inHeight input disparity height
  * @param outWidth scale down image width
  * @param outHeight scale down image height
- * @param imageType Currently only support APCImageType::DEPTH_11BITS
+ * @param imageType Currently only support APCImageType::DEPTH_11BITS APCImageType::DEPTH_14BITS
  * @param decimationParams Divide resolutions by the factor and round to 4-divisible number. Ex. 1280 / 3 ~= 428
  * @return APC_POSTPROCESS_INIT_FAIL when null pointers is passed in. APC_OK if no problem.
  */
@@ -2922,6 +3042,29 @@ int APC_DecimationFilter(void *pDecimationFilterHandle, unsigned char *pDepthDat
  * @return APC_NullPtr when parameter is nullptr. APC_OK if no problem.
  */
 int APC_ReleaseDecimationFilter(void *pDecimationFilterHandle);
+
+/**
+ *
+ * @param ppResizeProcessHandle
+ * @param inWidth the pImageData width.
+ * @param inHeight the pImageData height.
+ * @param outWidth if user did not specify this value. We would fill in this value into inWidth * factor
+ * @param outHeight if user did not specify this value. We would fill in this value into inHeight * factor
+ * @param imageType Reference APCImageType for more info. Currently support APCImageType::COLOR_YUY2.
+ * @param factor greater than 1 is enlarge the image, otherwise shrink the image.
+ * @return APC_OK
+ */
+int APC_InitResizeProcess(void **ppResizeProcessHandle, size_t inWidth, size_t inHeight,
+                          size_t *outWidth, size_t *outHeight, APCImageType::Value imageType,
+                          float factor);
+
+int APC_ResizeProcess(void *pResizeProcessHandle, unsigned char *pImageData, unsigned char *resizedFrame,
+                      APCImageType::Value imageType);
+
+int APC_ResizeProcess(void *pResizeProcessHandle, const std::vector<uint8_t>& srcBuffer, std::vector<uint8_t>& dstBuffer,
+                      APCImageType::Value imageType);
+
+int APC_ReleaseResizeProcess(void *pResizeProcessHandle);
 
 /*! \fn int APC_SetRootCipher(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, const char* cipher)
     \brief Set the correct root to do un-protect flash when writing parameters of camera.

@@ -45,6 +45,7 @@ int CVideoDeviceModel_8036::GetRectifyLogData(int nDevIndex, int nRectifyLogInde
 int CVideoDeviceModel_8036::TransformDepthDataType(int nDepthDataType, bool bRectifyData)
 {
     int ret = APC_OK;
+
     int depthDataType = CVideoDeviceModel::TransformDepthDataType(nDepthDataType, bRectifyData);
 
     std::vector<APC_STREAM_INFO> depthStreamInfo = GetStreamInfoList(STREAM_DEPTH);
@@ -67,7 +68,13 @@ int CVideoDeviceModel_8036::TransformDepthDataType(int nDepthDataType, bool bRec
                 if (!FindFwVer)
                     depthDataType += APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET;
             }
-        }
+        } else if ((PidBuf == APC_PID_8036) && (320 == depthStreamInfo[nDepthIndex].nWidth && 180 == depthStreamInfo[nDepthIndex].nHeight)
+                   && IsInterleaveMode()) {
+            depthDataType += APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET;
+        } else if ((PidBuf == APC_PID_8036) && (320 == depthStreamInfo[nDepthIndex].nWidth && 180 == depthStreamInfo[nDepthIndex].nHeight)
+                  && !IsInterleaveMode()) {
+           depthDataType += APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET + APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET;
+       }
     }
 
     return depthDataType;

@@ -116,6 +116,7 @@ int CVideoDeviceModel_ColorWithDepth::PrepareOpenDevice()
         unsigned int nBufferSize = m_colorWithDepthImageData.nWidth * m_colorWithDepthImageData.nHeight * nBytePerPixel;
         if (m_colorWithDepthImageData.imageBuffer.size() != nBufferSize){
             m_colorWithDepthImageData.imageBuffer.resize(nBufferSize);
+            m_colorWithDepthImageData.processedBuffer.resize(nBufferSize);
         }
         memset(&m_colorWithDepthImageData.imageBuffer[0], 0, sizeof(nBufferSize));
     }

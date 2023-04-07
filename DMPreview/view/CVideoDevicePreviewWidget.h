@@ -84,6 +84,19 @@ private slots:
 
     void on_spinBox_z_value_far_valueChanged(int nValue);
 
+    void on_checkBox_mipi_split_toggled(bool checked);
+
+    void on_checkBox_mipi_clk_continue_mode_toggled(bool checked);
+
+    void on_checkBox_auto_reconnet_stateChanged(int arg1);
+
+    void on_comboBox_color_resize_rate_currentIndexChanged(int index);
+
+    void on_comboBox_depth_resize_rate_currentIndexChanged(int index);
+    void on_comboBox_toggle_mode_currentIndexChanged(int index);
+
+    void on_horizontalSlider_flood_led_valueChanged(int value);
+
 private:
     virtual void paintEvent(QPaintEvent *event);
     void UpdateUSBPort();
@@ -97,6 +110,7 @@ private:
     void UpdateDepthmapBits();
     void UpdateZValue();
     void UpdateIRLevel();
+    void UpdateFloodIRLevel();
     void UpdateDepthROI();
     void UpdateRectify();
     void UpdateHWPP();
@@ -104,6 +118,12 @@ private:
     void UpdateInterleaveMode();
     void UpdatePlyFilter();
     void UpdatePointCloudViewer();
+    void UpdateMIPISplitCheckBox();
+    void UpdateMIPIClkContinueModeCheckBox();
+    void UpdateAutoReconnetCheckBox();
+    void UpdateResizeWidgets();
+    void UpdateComboBoxColorResize();
+    void UpdateComboBoxDepthResize();
 
 private:
     CVideoDeviceController *m_pVideoDeviceController;

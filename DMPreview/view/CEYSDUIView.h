@@ -49,7 +49,7 @@ public:
     virtual int ImageCallback(APCImageType::Value imageType, CVideoDeviceModel::STREAM_TYPE streamType,
                               BYTE *pImageBuffer, int nImageSize,
                               int nWidth, int nHeight, int nSerialNumber,
-                              void *pUserData){ return APC_OK; }
+                              void *pUserData, bool bIsMIPISplit){ return APC_OK; }
 
     virtual void ClosePointCloud(){ return; }
     virtual int PointCloudCallback(std::vector<float> &cloudPoints, std::vector<BYTE> &colors){ return APC_OK; }

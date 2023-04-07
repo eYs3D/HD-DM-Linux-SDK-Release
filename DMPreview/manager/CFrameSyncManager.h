@@ -18,7 +18,8 @@ public:
     typedef int (CEYSDUIView::*ImageCallback)(APCImageType::Value imageType, CVideoDeviceModel::STREAM_TYPE streamType,
                                                BYTE *pImageBuffer, int nImageSize,
                                                int nWidth, int nHeight, int nSerialNumber,
-                                               void *pUserData);
+                                               void *pUserData,
+                                               bool bIsMIPISplit);
 
     typedef int (CIMUDataController::*IMUCallback)(IMUData *pData, int status);
 

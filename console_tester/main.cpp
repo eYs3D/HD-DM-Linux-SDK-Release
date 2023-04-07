@@ -11,12 +11,17 @@
 #include <math.h>
 #include <thread>
 #include <cstring>
+#include <linux/input.h>
+#include <sys/stat.h>
+#include <glob.h>
 
 #include "PlyWriter.h"
 #include "eSPDI.h"
 
 #include "ColorPaletteGenerator.h"
 #include "RegisterSettings.h"
+#include "hidapi.h"
+#include "imu8062/CIMUModel.h"
 
 #define CT_DEBUG_CT_DEBUG(format, ...) \
     printf("[CT][%s][%d]" format, __func__, __LINE__, ##__VA_ARGS__)
@@ -57,8 +62,14 @@
 #define APC_DEPTH_DATA_SCALE_DOWN_11_BITS           (APC_DEPTH_DATA_11_BITS + APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET)/* rectify, 2 byte per pixel but using 11 bit only */
 #define APC_DEPTH_DATA_SCALE_DOWN_14_BITS           (APC_DEPTH_DATA_14_BITS + APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET) /* rectify, 2 byte per pixel */
 
-#define TEST_RUN_NUMBER                             10
+#define TEST_RUN_NUMBER                             20
 #define TEST_FRAME_COUNTER                          100
+#define ABORT_FRAME_COUNTER                         5
+#define TEST_RUN_NUMBER_MIPI                        TEST_FRAME_COUNTER + ABORT_FRAME_COUNTER_MIPI
+#define TEST_FRAME_COUNTER_MIPI                     1
+#define ABORT_FRAME_COUNTER_MIPI                    50
+#define V4L2_BUFFER_QUQUE_SIZE                      32
+#define V4L2_BUFFER_QUQUE_SIZE_FOR_INTERLEAVE       2
 #define SAVE_FILE_PATH                              "./out_img/"
 
 //s:[eys3D] 20200615 implement ZD table
@@ -75,9 +86,9 @@
     &gsDevSelInfo; \
 })
 
-static int g_v4l2_buffer_quque_size = 32;
+static int g_v4l2_buffer_quque_size = V4L2_BUFFER_QUQUE_SIZE;
 
-bool DEBUG_LOG = false;
+bool DEBUG_LOG = true;
 
 DEPTH_TRANSFER_CTRL g_depth_output = DEPTH_IMG_COLORFUL_TRANSFER;
 BYTE g_pzdTable[APC_ZD_TABLE_FILE_SIZE_11_BITS];
@@ -104,7 +115,9 @@ static int gColorWidth      = 1280;
 static int gColorHeight     = 720;
 
 static bool snapShot_color  = true;
+static bool snapShot_raw    = true;
 static bool snapShot_depth  = true;
+static bool snapShot_rgb    = true;
 static bool snapShot_mipi   = true;
 static bool bTesting_color  = true;
 static bool bTesting_depth  = true;
@@ -112,8 +125,12 @@ static bool bTesting_mipi   = true;
 static bool bTestEnd_color  = false;
 static bool bTestEnd_depth  = false;
 static bool bTestEnd_mipi   = false;
-static bool bInterleave     = false;
-static bool bSplitImage     = false;
+static bool gInterleave     = false;
+static bool gSplitImage     = false;
+static bool gRectifyData    = true;
+static bool gContinueMode   = false;
+static bool gIgnoreDataTime = false;
+static bool bKeepStreaming  = false;
 
 typedef enum {
     ERROR_NONE                  =  0, /**< Successful */
@@ -130,6 +147,14 @@ typedef enum {
     ERROR_TIMED_OUT             = -11,/**< Time out */
     ERROR_UNKNOWN               = -12,/**< Unknown */
 } error_e;
+
+typedef struct {
+    int i2c_bus;
+    uint16_t i2c_slave_addr;
+    int vc_id;
+} MipiInfo;
+
+MipiInfo *g_pMipiInfo = nullptr;
 
 DEPTH_TRANSFER_CTRL gDepth_Transfer_ctrl = DEPTH_IMG_NON_TRANSFER;
 
@@ -153,7 +178,6 @@ static int gDepthDataType               = APC_DEPTH_DATA_8_BITS;
 static int gColorSerial                 = 0;
 static int gDepthSerial                 = 0;
 static unsigned short gSetupIRValue     = 0xff;
-static bool gSetupContinueMode          = false;
 
 #define CT_CTRL_SEL_NUM                 18
 #define PU_CTRL_SEL_NUM                 19
@@ -201,10 +225,11 @@ char *gPuCtrlSelectors[PU_CTRL_SEL_NUM] = {
 
 static constexpr int APC_USER_SETTING_OFFSET = 5;
 static void copy_file_to_g2(int index);
+int saveRawFile(const char *pFilePath, BYTE *pBuffer, unsigned int sizeByte);
 
 //s:[eys3D] 20200610 definition functions
 int convert_yuv_to_rgb_pixel(int y, int u, int v);
-int convert_yuv_to_rgb_buffer(unsigned char *yuv, unsigned char *rgb, unsigned int width, unsigned int height);
+int convert_yuv_to_rgb_buffer(unsigned char *yuv, unsigned char *rgb, unsigned int width, unsigned int height, bool isMIPI);
 int save_file(unsigned char *buf, int size, int width, int height,int type, bool isRGBNamed);
 int get_product_name(char *path, char *out);
 void print_APC_error(int error);
@@ -241,7 +266,9 @@ static void *get_AE_target_func(void *arg);
 static void *set_AE_target_func(void *arg);
 static void *get_property_bar_info_func(void *arg);
 static void *property_bar_test_func(void *arg);
+static void *mipi_point_cloud_test_func(void *arg);
 static void *get_thermal_sensor_2075_temperature_test_func(void *arg);
+static void *imu_test_func_for_YX8062(void *arg);
 
 static int init_device(bool is_select_dev);
 static void *test_color_time_stamp(void *arg);
@@ -287,21 +314,171 @@ void* ppPostProcessHandle = nullptr;
 void* ppDecimationFilterHandle = nullptr;
 static unsigned char *alloc_single_depth(void *arg);
 static int release_single_depth(void *arg);
-
+//kbhit
+static int keycode_of_key_being_pressed();
+static void *pfunc_thread_keyboard_handler(void *arg);
+//Test Pause/Resume
+static void test_pause_resume_streaming(void);
+static void pause_streaming();
+static void resume_streaming();
+static int high_low_exchange(int data);
+static void *set_analog_gain_test_func(void *arg);
+static void *set_digital_gain_test_func(void *arg);
 static unsigned int gCameraPID = 0xffff;
 
 #define _ENABLE_INTERACTIVE_UI_ 1
-#define _ENABLE_PROFILE_UI_ 1
 //#define _ENABLE_FILESAVING_DEMO_UI_ 1
 //#define _ENABLE_FILESAVING_DEMO_POINT_CLOUD_UI_ 1
 #define DEFAULT_SAVING_FRAME_COUNT 150
+
+#include <thread>
+#include <functional>
+
+namespace libeys3dsample {
+class Frame {
+public:
+    Frame(size_t dataBufferSize) {
+        dataVec.resize(dataBufferSize);
+    }
+    // Move constructor + assignment
+    Frame(Frame&& f) = default;
+    Frame& operator=(Frame&& f) = default;
+    // Copy ctor + assignment disallow
+    Frame (const Frame&) = delete;
+    Frame& operator=(Frame& f) = delete;
+    int32_t width;
+    int32_t height;
+    uint64_t actualImageSize;
+    int sn = 0;
+    std::vector<u_int8_t> dataVec;
+    int status = 0;
+    int64_t ts_s = 0;
+    int64_t ts_us = 0;
+};
+
+/***
+ * FrameCallbackHelper a simple class to implement get image raw data. (Color|Depth)CallbackHelper inherit basic
+ * behaviors except runner. Provided that APC_SetupBlock already set to true, the APC_Get(Color|Depth)Image will
+ * get an image when image is ready.
+ */
+
+class FrameCallbackHelper {
+private:
+    bool mIsStart = false;
+    std::thread mCallbackLooper;
+    Frame* mFrame = nullptr;
+protected:
+    void* mDeviceHandle = nullptr;
+    DEVSELINFO mDevSelInfo;
+public:
+    using Callback = std::function<bool(const Frame* frame)>;
+    Callback mCallback;
+    explicit FrameCallbackHelper(void* handle, DEVSELINFO devSelInfo, size_t w, size_t h, size_t bpp, Callback& cb) {
+        mDeviceHandle = handle;
+        mDevSelInfo.index = devSelInfo.index;
+        mCallback = cb;
+        mFrame = new libeys3dsample::Frame(w * h * bpp);
+        mFrame->width = w;
+        mFrame->height = h;
+    }
+
+    inline bool isStart() { return mIsStart; }
+
+    ~FrameCallbackHelper() {
+        stopThreadAndJoin();
+        delete mFrame;
+    }
+
+    // Delete copy assignment and ctor
+    FrameCallbackHelper (const FrameCallbackHelper&) = delete;
+    FrameCallbackHelper& operator=(FrameCallbackHelper& helper) = delete;
+
+    void stopThreadAndJoin(){
+        if (isStart()) {
+            mIsStart = false;
+            mCallbackLooper.join();
+        }
+    }
+
+    virtual void runner(Frame* f) = 0;
+
+    void start() {
+        if (!isStart()) {
+            mIsStart = true;
+            mCallbackLooper = std::thread( [this] { runner(mFrame); } );
+        }
+    }
+
+    void stop() {
+        stopThreadAndJoin();
+    }
+
+};
+
+class ColorCallbackHelper : public FrameCallbackHelper {
+public:
+    explicit ColorCallbackHelper(void* handle, DEVSELINFO info, size_t w, size_t h, size_t bpp, Callback& cb) :
+                FrameCallbackHelper(handle, info, w, h, bpp, cb) {};
+    ColorCallbackHelper (const ColorCallbackHelper&) = delete;
+    ColorCallbackHelper& operator=(ColorCallbackHelper& helper) = delete;
+
+    virtual void runner(Frame *f) override {
+        while (isStart()) {
+            f->status = APC_GetColorImageWithTimestamp(mDeviceHandle, &mDevSelInfo, f->dataVec.data(),
+                                                       &f->actualImageSize, &f->sn, 0, &f->ts_s, &f->ts_us);
+            mCallback(f);
+        }
+    }
+};
+
+class DepthCallbackHelper : public FrameCallbackHelper {
+public:
+    explicit DepthCallbackHelper(void* handle, DEVSELINFO info, size_t w, size_t h, size_t bpp, Callback& cb) :
+                FrameCallbackHelper(handle, info, w, h, bpp, cb) {};
+    DepthCallbackHelper (const DepthCallbackHelper&) = delete;
+    DepthCallbackHelper& operator=(DepthCallbackHelper& helper) = delete;
+
+    virtual void runner(Frame *f) override {
+        while (isStart()) {
+            f->status = APC_GetDepthImageWithTimestamp(mDeviceHandle, &mDevSelInfo, f->dataVec.data(),
+                                                       &f->actualImageSize, &f->sn, 0, &f->ts_s, &f->ts_us);
+            mCallback(f);
+        }
+    }
+};
+
+}; // namespace libeys3d
+
 
 void SelectDevInx(int index) {
     if (g_pDevInfo[index].nDevType != OTHERS && g_pDevInfo[index].nDevType != UNKNOWN_DEVICE_TYPE) {
         gsDevSelInfo.index = index;
         gCameraPID = g_pDevInfo[gsDevSelInfo.index].wPID;
-        CT_DEBUG("Selected Deivce Index is [%d]\n", gsDevSelInfo.index);
+        CT_DEBUG("Selected Deivce [Index, Type] is [%d, %d]\n",
+            gsDevSelInfo.index, g_pDevInfo[gsDevSelInfo.index].nDevType);
     }
+}
+
+int parse_cmd_config(const char *cmd, char *param[], int param_count, const char  *delim, uint32_t *count) {
+    char *found = NULL;
+    int i = 0;
+    char *cmd_tmp = NULL;
+    char **param_tmp = NULL;
+
+    cmd_tmp = (char *)cmd;
+
+    while( (found = strsep(&cmd_tmp,delim)) != NULL ) {
+        if (i >= param_count) {
+            break;
+        }
+        param_tmp =  &param[i];
+        *param_tmp = found;
+        i++;
+    }
+
+    *count = i;
+
+    return APC_OK;
 }
 
 int GetDateTime(char * psDateTime) {
@@ -321,6 +498,26 @@ int GetDateTime(char * psDateTime) {
     return 0;
 }
 
+static void SetSaveFileDefault(void) {
+    snapShot_color = true;
+    snapShot_raw = true;
+    snapShot_depth = true;
+    snapShot_rgb = true;
+}
+
+static void NeedToEnableDebugLog(void) {
+    char input[64];
+
+    printf("Need to enable Debug Log? (Yes/No)\n");
+    scanf("%s", input);
+    
+    if (input[0] == 'Y' || input[0] == 'y') {
+        DEBUG_LOG = true;
+    } else {
+        DEBUG_LOG = false;
+    }
+}
+
 static void NeedToSaveFile(void) {
     char input[64];
 
@@ -336,6 +533,8 @@ static void NeedToSaveFile(void) {
         snapShot_depth = false;
         snapShot_mipi  = false;
     }
+    snapShot_raw = false;
+    snapShot_rgb = false;
 }
 
 static void NeedToEnableInterleaveMode(void) {
@@ -345,9 +544,9 @@ static void NeedToEnableInterleaveMode(void) {
     scanf("%s", input);
     
     if (input[0] == 'Y' || input[0] == 'y') {
-        bInterleave = true;
+        gInterleave = true;
     } else {
-        bInterleave = false;
+        gInterleave = false;
     }
 }
 
@@ -358,9 +557,9 @@ static void NeedToSetupContinueMode(void) {
     scanf("%s", input);
     
     if (input[0] == 'Y' || input[0] == 'y') {
-        gSetupContinueMode = true;
+        gContinueMode = true;
     } else {
-        gSetupContinueMode = false;
+        gContinueMode = false;
     }
 }
 
@@ -371,15 +570,116 @@ static void NeedToSplitImage(void) {
     scanf("%s", input);
     
     if (input[0] == 'Y' || input[0] == 'y') {
-        bSplitImage = true;
+        gSplitImage = true;
     } else {
-        bSplitImage = false;
+        gSplitImage = false;
     }
+}
+
+static void NeedToRectifyData(void) {
+    char input[64];
+
+    printf("Need to enable Rectify Data? (Yes/No)\n");
+    scanf("%s", input);
+    
+    if (input[0] == 'Y' || input[0] == 'y') {
+        gRectifyData = true;
+    } else {
+        gRectifyData = false;
+    }
+}
+
+static int SetContinueMode(void) {
+    int ret = APC_OK;
+    bool bContinueMode = false;
+
+    ret = APC_GetFWContinueMode(EYSD, GetDevSelectIndexPtr(), &bContinueMode);
+    if (ret != APC_OK) {
+        CT_DEBUG("Failed to call APC_GetFWContinueMode()(%d)\n", ret);
+    } else {
+        if (DEBUG_LOG) CT_DEBUG("Call APC_GetFWContinueMode() (%d, %s)\n", ret, bContinueMode ? "ENABLE" : "DISABLE");
+    }
+
+    ret = APC_SetFWContinueMode(EYSD, GetDevSelectIndexPtr(), gContinueMode);
+    if (ret == APC_OK) {
+        if (DEBUG_LOG) CT_DEBUG("Call APC_SetFWContinueMode() (%d, %s)\n", ret, gContinueMode ? "ENABLE" : "DISABLE");
+        ret = APC_GetFWContinueMode(EYSD, GetDevSelectIndexPtr(), &bContinueMode);
+        if (ret != APC_OK) {
+            CT_DEBUG("Failed to call APC_GetFWContinueMode()(%d)\n", ret);
+        } else {
+            CT_DEBUG("Call APC_GetFWContinueMode() (%d, %s)\n", ret, bContinueMode ? "ENABLE" : "DISABLE");
+        }
+    } else {
+        CT_DEBUG("Failed to call APC_SetFWContinueMode()(%d)\n", ret);
+    }
+
+    return ret;
+}
+
+static int SetVirtualChannel(void) {
+    int ret = APC_OK;
+    int nVirtualChannelID0 = 0, nVirtualChannelID1 = 0;
+
+    ret = APC_GetHWVirtualChannel(EYSD, GetDevSelectIndexPtr(), &nVirtualChannelID0, &nVirtualChannelID1);
+    if (ret != APC_OK) {
+        CT_DEBUG("Failed to call APC_GetHWVirtualChannel()(%d)\n", ret);
+    } else {
+        if (DEBUG_LOG) CT_DEBUG("Call APC_GetHWVirtualChannel() (%d, %d, %d)\n", ret, nVirtualChannelID0, nVirtualChannelID1);
+    }
+
+    ret = APC_SetHWVirtualChannel(EYSD, GetDevSelectIndexPtr(), g_pMipiInfo[gsDevSelInfo.index].vc_id);
+    if (ret == APC_OK) {
+        if (DEBUG_LOG) CT_DEBUG("Call APC_SetHWVirtualChannel() (%d, %d)\n", ret, g_pMipiInfo[gsDevSelInfo.index].vc_id);
+        ret = APC_GetHWVirtualChannel(EYSD, GetDevSelectIndexPtr(), &nVirtualChannelID0, &nVirtualChannelID1);
+        if (ret != APC_OK) {
+            CT_DEBUG("Failed to call APC_GetHWVirtualChannel()(%d)\n", ret);
+        } else {
+            CT_DEBUG("Call APC_GetHWVirtualChannel() (%d, %d, %d)\n", ret, nVirtualChannelID0, nVirtualChannelID1);
+        }
+    } else {
+        CT_DEBUG("Failed to call APC_SetHWVirtualChannel()(%d)\n", ret);
+    }
+
+    return ret;
+}
+
+static int GetMipiInfo(void) {
+    int ret = APC_OK;
+    char pBusInfo[16] = {0};
+    int nBusInfoLength;
+
+    if (APC_OK == APC_GetBusInfo(EYSD, GetDevSelectIndexPtr(), pBusInfo, &nBusInfoLength)) {
+        char *param_strs[3] = {0};
+        uint32_t count = 0;
+        unsigned long lval = 0;
+        ret = parse_cmd_config(pBusInfo, param_strs, 3, "-", &count);
+        if (ret == APC_OK) {
+            if (!param_strs[0] || !param_strs[1] || !param_strs[2]) {
+                CT_DEBUG("Failed to parse [%s]\n", pBusInfo);
+                return APC_Init_Fail;
+            }
+            lval = strtoul (param_strs[0], NULL, 10);
+            g_pMipiInfo[gsDevSelInfo.index].i2c_bus = (int)lval;
+            lval = strtoul (param_strs[1], NULL, 16);
+            g_pMipiInfo[gsDevSelInfo.index].i2c_slave_addr  = (uint16_t)(lval & 0xff);
+            lval = strtoul (param_strs[2], NULL, 10);
+            g_pMipiInfo[gsDevSelInfo.index].vc_id = (int)lval;
+            if (DEBUG_LOG) CT_DEBUG("Dev#%d: [bus, address, id] = [%d, 0x%02x, %d]\n",
+                gsDevSelInfo.index,
+                g_pMipiInfo[gsDevSelInfo.index].i2c_bus,
+                g_pMipiInfo[gsDevSelInfo.index].i2c_slave_addr,
+                g_pMipiInfo[gsDevSelInfo.index].vc_id);
+        }
+    } else {
+        CT_DEBUG("APC_GetBusInfo() Fail! (%d)\n", ret);
+    }
+
+    return ret;
 }
 
 int main(void)
 {
-    int input = 0;
+    int input = 0, input_idx = 0;
     do {
         printf("\n-----------------------------------------\n");
         printf("Software version: %s\n", APC_VERSION);
@@ -409,19 +709,6 @@ int main(void)
         printf("30. Reset UNPData\n");
         printf("31. Point Cloud FPS Demo\n");
         printf("33. ReadPlugIn\n");
-        printf("34. Get Point Cloud (8063)\n");
-        printf("35. Spatial Filter Demo (1280X720@30, APC_DEPTH_DATA_11_BITS)\n");
-#endif
-#if defined(_ENABLE_PROFILE_UI_)
-        printf("40. Test Color+Depth (1280X720@60, APC_DEPTH_DATA_11_BITS, Time Stamp)\n");
-        printf("41. Test Color       (1280X720@60, APC_DEPTH_DATA_11_BITS, Time Stamp)\n");
-        printf("42. Test Depth       (1280X720@60, APC_DEPTH_DATA_11_BITS, Time Stamp)\n");
-        printf("43. Test Color+Depth (1280X720@60, APC_DEPTH_DATA_11_BITS, Thread)\n");
-        printf("44. Test Color+Depth (1280X720@30, APC_DEPTH_DATA_11_BITS, Time Stamp)\n");
-        printf("45. Test Color       (1280X720@30, APC_DEPTH_DATA_11_BITS, Time Stamp)\n");
-        printf("46. Test Depth       (1280X720@30, APC_DEPTH_DATA_11_BITS, Time Stamp)\n");
-        printf("47. Test Color+Depth (1280X720@30, APC_DEPTH_DATA_11_BITS, Time Stamp, Thread)\n");
-        printf("48. Test Color+Depth (1104x848@60, APC_DEPTH_DATA_14_BITS, Time Stamp, Thread)\n");
 #endif
 #if defined(_ENABLE_FILESAVING_DEMO_UI_)
         printf("50. save file demo   (1280X720@30, APC_DEPTH_DATA_14_BITS)\n");
@@ -429,24 +716,9 @@ int main(void)
 #if defined(_ENABLE_FILESAVING_DEMO_POINT_CLOUD_UI_)
         printf("51. point cloud Demo (1280X720@30, APC_DEPTH_DATA_14_BITS)\n");
 #endif
-        printf("60. Test Color+Depth (1280X720@60, APC_DEPTH_DATA_11_BITS,  USB)\n");
-        printf("61. Test Color+Depth (1280X720@30, APC_DEPTH_DATA_11_BITS,  USB)\n");
-        printf("62. Test Color+Depth (640X360@60,  APC_DEPTH_DATA_11_BITS,  USB)\n");
-        printf("63. Test Color+Depth (640X360@30,  APC_DEPTH_DATA_11_BITS,  USB)\n");
-        printf("64. Test Color+Depth (640X360@60,  APC_DEPTH_DATA_14_BITS,  USB)\n");
-        printf("65. Test Color+Depth (640X360@30,  APC_DEPTH_DATA_14_BITS,  USB)\n");
-        printf("70. Test Color       (1280X720@60, APC_DEPTH_DATA_OFF_RAW, MIPI)\n");
-        printf("71. Test Color       (1280X720@30, APC_DEPTH_DATA_OFF_RAW, MIPI)\n");
-        printf("72. Test Color       (1280X720@15, APC_DEPTH_DATA_OFF_RAW, MIPI)\n");
-        printf("73. Test Color       (1280X720@10, APC_DEPTH_DATA_OFF_RAW, MIPI)\n");
-        printf("74. Test Color+Depth (1280X720@30, APC_DEPTH_DATA_11_BITS, MIPI)\n");
-        printf("75. Test Color+Depth (640X360@60,  APC_DEPTH_DATA_11_BITS, MIPI)\n");
-        printf("76. Test Color+Depth (640X360@30,  APC_DEPTH_DATA_11_BITS, MIPI)\n");
-        printf("77. Test Color+Depth (640X360@60,  APC_DEPTH_DATA_14_BITS, MIPI)\n");
-        printf("78. Test Color+Depth (640X360@30,  APC_DEPTH_DATA_14_BITS, MIPI)\n");
-        printf("79. Test Color+Depth (640X480@15,  APC_DEPTH_DATA_14_BITS, MIPI)\n");
-        printf("80. Get Thermal Sensor Temperature (Device: PCT2075, ID: 0x90)\n");
         printf("81. Force overwrite calibration data G1 section to G2, 30 40 50 240. (Use at your own risk.)\n");
+        printf("85. IVY Camera (2248X1364@30, APC_DEPTH_DATA_OFF_RAW, USB)\n");
+        printf("86. IVY Camera Callback Helper (1104x1104@30, APC_DEPTH_DATA_11_BITS, USB)\n");
         printf("255. EXIT)\n");
         scanf("%d", &input);
         switch (input) {
@@ -469,14 +741,10 @@ int main(void)
             break;
         case 4:
             get_color_image();
-#if defined(qcom)
-            /*
-            NOTE: This is workaround for QCS610 development board.
-                  Because, this board needs more time for the UVC setup time.
-                  So, We add the delay time with the V4L2 UVC setup process.
-            */
-            usleep(3 * 1000 * 1000);
-#endif
+
+            // Ensure that color image open first.
+            usleep(6 * 1000 * 1000);
+
             get_depth_image();
             if (gdepth_thread_id != (pthread_t) - 1)
                 pthread_join(gdepth_thread_id, NULL);
@@ -511,24 +779,64 @@ int main(void)
             readFWRegister();
             break;
         case 22:
+            init_device(false);
+            for (int i = 0; i < APC_GetDeviceNumber(EYSD); i++)
+                CT_DEBUG("Device Count: %d, Device Index List: %d\n", APC_GetDeviceNumber(EYSD), i);
+            for (int i = 0; i < APC_GetSimpleDeviceNumber(EYSD); i++)
+                CT_DEBUG("Simple Device Count: %d, Simple Device Index List: %d\n", APC_GetSimpleDeviceNumber(EYSD), SIMPLE_DEV_START_IDX + i);
+            printf("Select Device Index (0...%d): ",
+                (APC_GetSimpleDeviceNumber(EYSD) > 0) ? (SIMPLE_DEV_START_IDX + APC_GetSimpleDeviceNumber(EYSD) - 1) : (APC_GetDeviceNumber(EYSD) - 1));
+            scanf("%d", &input_idx);
+            printf("Selected Deivce Index is = [%d]\n", input_idx);
+            SelectDevInx(input_idx);
             Read3X();
             break;
         case 23:
             Write3X();
             break;
         case 24:
+            init_device(false);
+            for (int i = 0; i < APC_GetDeviceNumber(EYSD); i++)
+                CT_DEBUG("Device Count: %d, Device Index List: %d\n", APC_GetDeviceNumber(EYSD), i);
+            for (int i = 0; i < APC_GetSimpleDeviceNumber(EYSD); i++)
+                CT_DEBUG("Simple Device Count: %d, Simple Device Index List: %d\n", APC_GetSimpleDeviceNumber(EYSD), SIMPLE_DEV_START_IDX + i);
+            printf("Select Device Index (0...%d): ",
+                (APC_GetSimpleDeviceNumber(EYSD) > 0) ? (SIMPLE_DEV_START_IDX + APC_GetSimpleDeviceNumber(EYSD) - 1) : (APC_GetDeviceNumber(EYSD) - 1));
+            scanf("%d", &input_idx);
+            printf("Selected Deivce Index is = [%d]\n", input_idx);
+            SelectDevInx(input_idx);
             Read4X();
             break;
         case 25:
             Write4X();
             break;
         case 26:
+            init_device(false);
+            for (int i = 0; i < APC_GetDeviceNumber(EYSD); i++)
+                CT_DEBUG("Device Count: %d, Device Index List: %d\n", APC_GetDeviceNumber(EYSD), i);
+            for (int i = 0; i < APC_GetSimpleDeviceNumber(EYSD); i++)
+                CT_DEBUG("Simple Device Count: %d, Simple Device Index List: %d\n", APC_GetSimpleDeviceNumber(EYSD), SIMPLE_DEV_START_IDX + i);
+            printf("Select Device Index (0...%d): ",
+                (APC_GetSimpleDeviceNumber(EYSD) > 0) ? (SIMPLE_DEV_START_IDX + APC_GetSimpleDeviceNumber(EYSD) - 1) : (APC_GetDeviceNumber(EYSD) - 1));
+            scanf("%d", &input_idx);
+            printf("Selected Deivce Index is = [%d]\n", input_idx);
+            SelectDevInx(input_idx);
             Read5X();
             break;
         case 27:
             Write5X();
             break;
         case 28:
+            init_device(false);
+            for (int i = 0; i < APC_GetDeviceNumber(EYSD); i++)
+                CT_DEBUG("Device Count: %d, Device Index List: %d\n", APC_GetDeviceNumber(EYSD), i);
+            for (int i = 0; i < APC_GetSimpleDeviceNumber(EYSD); i++)
+                CT_DEBUG("Simple Device Count: %d, Simple Device Index List: %d\n", APC_GetSimpleDeviceNumber(EYSD), SIMPLE_DEV_START_IDX + i);
+            printf("Select Device Index (0...%d): ",
+                (APC_GetSimpleDeviceNumber(EYSD) > 0) ? (SIMPLE_DEV_START_IDX + APC_GetSimpleDeviceNumber(EYSD) - 1) : (APC_GetDeviceNumber(EYSD) - 1));
+            scanf("%d", &input_idx);
+            printf("Selected Deivce Index is = [%d]\n", input_idx);
+            SelectDevInx(input_idx);
             Read24X();
             break;
         case 29:
@@ -610,73 +918,6 @@ int main(void)
             release_device();
             break;
         }
-#if defined(_ENABLE_PROFILE_UI_)
-        case 40:
-            init_device(false);
-            open_device_default(true, 1280, 720, 1280, 720, 60, APC_DEPTH_DATA_11_BITS, false);
-            test_color_time_stamp(NULL);
-            test_depth_time_stamp(NULL);
-            close_device();
-            release_device();
-            break;
-        case 41:
-            init_device(false);
-            open_device_default(true, 1280, 720, 1280, 720, 60, APC_DEPTH_DATA_11_BITS, false);
-            test_color_time_stamp(NULL);
-            close_device();
-            release_device();
-            break;
-        case 42:
-            init_device(false);
-            open_device_default(true, 1280, 720, 1280, 720, 60, APC_DEPTH_DATA_11_BITS, false);
-            test_depth_time_stamp(NULL);
-            close_device();
-            release_device();
-            break;
-        case 43:
-            init_device(false);
-            open_device_default(true, 1280, 720, 1280, 720, 60, APC_DEPTH_DATA_11_BITS, false);
-            test_color_depth_time_stamp(NULL);
-            close_device();
-            release_device();
-            break;
-        case 44:
-            init_device(false);
-            open_device_default(true, 1280, 720, 1280, 720, 30, APC_DEPTH_DATA_11_BITS, false);
-            test_color_time_stamp(NULL);
-            test_depth_time_stamp(NULL);
-            close_device();
-            release_device();
-            break;
-        case 45:
-            init_device(false);
-            open_device_default(true, 1280, 720, 1280, 720, 30, APC_DEPTH_DATA_11_BITS, false);
-            test_color_time_stamp(NULL);
-            close_device();
-            release_device();
-            break;
-        case 46:
-            init_device(false);
-            open_device_default(true, 1280, 720, 1280, 720, 30, APC_DEPTH_DATA_11_BITS, false);
-            test_depth_time_stamp(NULL);
-            close_device();
-            release_device();
-            break;
-        case 47:
-            init_device(false);
-            open_device_default(true, 1280, 720, 1280, 720, 30, APC_DEPTH_DATA_11_BITS, false);
-            test_color_depth_time_stamp(NULL);
-            close_device();
-            release_device();
-            break;
-        case 48:
-            init_device(false);
-            open_device_default(true, 1104, 848, 1104, 848, 30, APC_DEPTH_DATA_14_BITS, false);
-            test_color_depth_time_stamp(NULL);
-            close_device();
-            release_device();
-            break;
-#endif
 #if defined(_ENABLE_FILESAVING_DEMO_UI_)
         case 50:
             init_device(false);
@@ -697,319 +938,8 @@ int main(void)
             release_device();
         break;
 #endif
-        case 60:
-            NeedToSaveFile();
-            CT_DEBUG("snapShot_color: %s, snapShot_depth: %s\n",
-                snapShot_color ? "TRUE" : "FALSE", snapShot_depth ? "TRUE" : "FALSE");
-            init_device(false);
-            for (int i = 0; i < APC_GetDeviceNumber(EYSD); i++) {
-                CT_DEBUG("######################################################################\n");
-                CT_DEBUG("Device Count: %d, Select Device Index: %d\n", APC_GetDeviceNumber(EYSD), i);
-                SelectDevInx(i);
-                open_device_default(true, 1280, 720, 1280, 720, 60, APC_DEPTH_DATA_11_BITS, true);
-                pfunc_thread_color(NULL);
-                pfunc_thread_depth(NULL);
-                close_device();
-            }
-            CT_DEBUG("######################################################################\n");
-            release_device();
-            snapShot_color = true;
-            snapShot_depth = true;
-            break;
-        case 61:
-            NeedToSaveFile();
-            CT_DEBUG("snapShot_color: %s, snapShot_depth: %s\n",
-                snapShot_color ? "TRUE" : "FALSE", snapShot_depth ? "TRUE" : "FALSE");
-            init_device(false);
-            for (int i = 0; i < APC_GetDeviceNumber(EYSD); i++) {
-                CT_DEBUG("######################################################################\n");
-                CT_DEBUG("Device Count: %d, Select Device Index: %d\n", APC_GetDeviceNumber(EYSD), i);
-                SelectDevInx(i);
-                open_device_default(true, 1280, 720, 1280, 720, 30, APC_DEPTH_DATA_11_BITS, true);
-                pfunc_thread_color(NULL);
-                pfunc_thread_depth(NULL);
-                close_device();
-            }
-            CT_DEBUG("######################################################################\n");
-            release_device();
-            snapShot_color = true;
-            snapShot_depth = true;
-            break;
-        case 62:
-            NeedToSaveFile();
-            CT_DEBUG("snapShot_color: %s, snapShot_depth: %s\n",
-                snapShot_color ? "TRUE" : "FALSE", snapShot_depth ? "TRUE" : "FALSE");
-            init_device(false);
-            for (int i = 0; i < APC_GetDeviceNumber(EYSD); i++) {
-                CT_DEBUG("######################################################################\n");
-                CT_DEBUG("Device Count: %d, Select Device Index: %d\n", APC_GetDeviceNumber(EYSD), i);
-                SelectDevInx(i);
-                open_device_default(true, 640, 360, 640, 360, 60, APC_DEPTH_DATA_11_BITS, true);
-                pfunc_thread_color(NULL);
-                pfunc_thread_depth(NULL);
-                close_device();
-            }
-            CT_DEBUG("######################################################################\n");
-            release_device();
-            snapShot_color = true;
-            snapShot_depth = true;
-            break;
-        case 63:
-            NeedToSaveFile();
-            CT_DEBUG("snapShot_color: %s, snapShot_depth: %s\n",
-                snapShot_color ? "TRUE" : "FALSE", snapShot_depth ? "TRUE" : "FALSE");
-            init_device(false);
-            for (int i = 0; i < APC_GetDeviceNumber(EYSD); i++) {
-                CT_DEBUG("######################################################################\n");
-                CT_DEBUG("Device Count: %d, Select Device Index: %d\n", APC_GetDeviceNumber(EYSD), i);
-                SelectDevInx(i);
-                open_device_default(true, 640, 360, 640, 360, 30, APC_DEPTH_DATA_11_BITS, true);
-                pfunc_thread_color(NULL);
-                pfunc_thread_depth(NULL);
-                close_device();
-            }
-            CT_DEBUG("######################################################################\n");
-            release_device();
-            snapShot_color = true;
-            snapShot_depth = true;
-            break;
-        case 64:
-            NeedToSaveFile();
-            CT_DEBUG("snapShot_color: %s, snapShot_depth: %s\n",
-                snapShot_color ? "TRUE" : "FALSE", snapShot_depth ? "TRUE" : "FALSE");
-            init_device(false);
-            for (int i = 0; i < APC_GetDeviceNumber(EYSD); i++) {
-                CT_DEBUG("######################################################################\n");
-                CT_DEBUG("Device Count: %d, Select Device Index: %d\n", APC_GetDeviceNumber(EYSD), i);
-                SelectDevInx(i);
-                open_device_default(true, 640, 360, 640, 360, 60, APC_DEPTH_DATA_14_BITS, true);
-                pfunc_thread_color(NULL);
-                pfunc_thread_depth(NULL);
-                close_device();
-            }
-            CT_DEBUG("######################################################################\n");
-            release_device();
-            snapShot_color = true;
-            snapShot_depth = true;
-            break;
-        case 65:
-            NeedToSaveFile();
-            CT_DEBUG("snapShot_color: %s, snapShot_depth: %s\n",
-                snapShot_color ? "TRUE" : "FALSE", snapShot_depth ? "TRUE" : "FALSE");
-            init_device(false);
-            for (int i = 0; i < APC_GetDeviceNumber(EYSD); i++) {
-                CT_DEBUG("######################################################################\n");
-                CT_DEBUG("Device Count: %d, Select Device Index: %d\n", APC_GetDeviceNumber(EYSD), i);
-                SelectDevInx(i);
-                open_device_default(true, 640, 360, 640, 360, 30, APC_DEPTH_DATA_14_BITS, true);
-                pfunc_thread_color(NULL);
-                pfunc_thread_depth(NULL);
-                close_device();
-            }
-            CT_DEBUG("######################################################################\n");
-            release_device();
-            snapShot_color = true;
-            snapShot_depth = true;
-            break;
-        case 70:
-            NeedToSaveFile();
-            NeedToSetupContinueMode();
-            if (!bInterleave) gSetupIRValue = 0x00;
-            CT_DEBUG("snapShot_mipi: %s, IRValue: %d\n", snapShot_mipi ? "TRUE" : "FALSE", gSetupIRValue);
-            init_device(false);
-            for (int i = 0; i < APC_GetSimpleDeviceNumber(EYSD); i++) {
-                CT_DEBUG("######################################################################\n");
-                CT_DEBUG("Device Count: %d, Select Simple Device Index: %d\n", APC_GetSimpleDeviceNumber(EYSD), SIMPLE_DEV_START_IDX + i);
-                SelectDevInx(SIMPLE_DEV_START_IDX + i);
-                open_device_default(false, 1280, 720, 0, 0, 60, APC_DEPTH_DATA_OFF_RAW, true);
-                get_property_bar_info_func(NULL);
-                pfunc_thread_mipi(NULL);
-                close_device();
-            }
-            CT_DEBUG("######################################################################\n");
-            release_device();
-            snapShot_mipi = true;
-            break;
-        case 71:
-            NeedToSaveFile();
-            NeedToSetupContinueMode();
-            if (!bInterleave) gSetupIRValue = 0x00;
-            CT_DEBUG("snapShot_mipi: %s, IRValue: %d\n", snapShot_mipi ? "TRUE" : "FALSE", gSetupIRValue);
-            init_device(false);
-            for (int i = 0; i < APC_GetSimpleDeviceNumber(EYSD); i++) {
-                CT_DEBUG("######################################################################\n");
-                CT_DEBUG("Device Count: %d, Select Simple Device Index: %d\n", APC_GetSimpleDeviceNumber(EYSD), SIMPLE_DEV_START_IDX + i);
-                SelectDevInx(SIMPLE_DEV_START_IDX + i);
-                open_device_default(false, 1280, 720, 0, 0, 30, APC_DEPTH_DATA_OFF_RAW, true);
-                get_property_bar_info_func(NULL);
-                pfunc_thread_mipi(NULL);
-                close_device();
-            }
-            CT_DEBUG("######################################################################\n");
-            release_device();
-            snapShot_mipi = true;
-            break;
-        case 72:
-            NeedToSaveFile();
-            NeedToSetupContinueMode();
-            if (!bInterleave) gSetupIRValue = 0x00;
-            CT_DEBUG("snapShot_mipi: %s, IRValue: %d\n", snapShot_mipi ? "TRUE" : "FALSE", gSetupIRValue);
-            init_device(false);
-            for (int i = 0; i < APC_GetSimpleDeviceNumber(EYSD); i++) {
-                CT_DEBUG("######################################################################\n");
-                CT_DEBUG("Device Count: %d, Select Simple Device Index: %d\n", APC_GetSimpleDeviceNumber(EYSD), SIMPLE_DEV_START_IDX + i);
-                SelectDevInx(SIMPLE_DEV_START_IDX + i);
-                open_device_default(false, 1280, 720, 0, 0, 15, APC_DEPTH_DATA_OFF_RAW, true);
-                get_property_bar_info_func(NULL);
-                pfunc_thread_mipi(NULL);
-                close_device();
-            }
-            CT_DEBUG("######################################################################\n");
-            release_device();
-            snapShot_mipi = true;
-            break;
-        case 73:
-            NeedToSaveFile();
-            NeedToSetupContinueMode();
-            if (!bInterleave) gSetupIRValue = 0x00;
-            CT_DEBUG("snapShot_mipi: %s, IRValue: %d\n", snapShot_mipi ? "TRUE" : "FALSE", gSetupIRValue);
-            init_device(false);
-            for (int i = 0; i < APC_GetSimpleDeviceNumber(EYSD); i++) {
-                CT_DEBUG("######################################################################\n");
-                CT_DEBUG("Device Count: %d, Select Simple Device Index: %d\n", APC_GetSimpleDeviceNumber(EYSD), SIMPLE_DEV_START_IDX + i);
-                SelectDevInx(SIMPLE_DEV_START_IDX + i);
-                open_device_default(false, 1280, 720, 0, 0, 10, APC_DEPTH_DATA_OFF_RAW, true);
-                get_property_bar_info_func(NULL);
-                pfunc_thread_mipi(NULL);
-                close_device();
-            }
-            CT_DEBUG("######################################################################\n");
-            release_device();
-            snapShot_mipi = true;
-            break;
-        case 74:
-            NeedToSaveFile();
-            NeedToSetupContinueMode();
-            NeedToSplitImage();
-            if (!bInterleave) gSetupIRValue = 0x00;
-            CT_DEBUG("snapShot_mipi: %s, IRValue: %d\n", snapShot_mipi ? "TRUE" : "FALSE", gSetupIRValue);
-            init_device(false);
-            for (int i = 0; i < APC_GetSimpleDeviceNumber(EYSD); i++) {
-                CT_DEBUG("######################################################################\n");
-                CT_DEBUG("Device Count: %d, Select Simple Device Index: %d\n", APC_GetSimpleDeviceNumber(EYSD), SIMPLE_DEV_START_IDX + i);
-                SelectDevInx(SIMPLE_DEV_START_IDX + i);
-                open_device_default(false, 1280, 720, 1280, 720, 30, APC_DEPTH_DATA_11_BITS, true);
-                get_property_bar_info_func(NULL);
-                pfunc_thread_mipi(NULL);
-                close_device();
-            }
-            CT_DEBUG("######################################################################\n");
-            release_device();
-            snapShot_mipi = true;
-            break;
-        case 75:
-            NeedToSaveFile();
-            NeedToSetupContinueMode();
-            NeedToEnableInterleaveMode();
-            NeedToSplitImage();
-            if (!bInterleave) gSetupIRValue = 0x00;
-            CT_DEBUG("snapShot_mipi: %s, IRValue: %d\n", snapShot_mipi ? "TRUE" : "FALSE", gSetupIRValue);
-            init_device(false);
-            for (int i = 0; i < APC_GetSimpleDeviceNumber(EYSD); i++) {
-                CT_DEBUG("######################################################################\n");
-                CT_DEBUG("Device Count: %d, Select Simple Device Index: %d\n", APC_GetSimpleDeviceNumber(EYSD), SIMPLE_DEV_START_IDX + i);
-                SelectDevInx(SIMPLE_DEV_START_IDX + i);
-                open_device_default(false, 640, 360, 640, 360, 60, APC_DEPTH_DATA_11_BITS, true);
-                get_property_bar_info_func(NULL);
-                pfunc_thread_mipi(NULL);
-                close_device();
-            }
-            CT_DEBUG("######################################################################\n");
-            release_device();
-            snapShot_mipi = true;
-            break;
-        case 76:
-            NeedToSaveFile();
-            NeedToSetupContinueMode();
-            NeedToSplitImage();
-            if (!bInterleave) gSetupIRValue = 0x00;
-            CT_DEBUG("snapShot_mipi: %s, IRValue: %d\n", snapShot_mipi ? "TRUE" : "FALSE", gSetupIRValue);
-            init_device(false);
-            for (int i = 0; i < APC_GetSimpleDeviceNumber(EYSD); i++) {
-                CT_DEBUG("######################################################################\n");
-                CT_DEBUG("Device Count: %d, Select Simple Device Index: %d\n", APC_GetSimpleDeviceNumber(EYSD), SIMPLE_DEV_START_IDX + i);
-                SelectDevInx(SIMPLE_DEV_START_IDX + i);
-                open_device_default(false, 640, 360, 640, 360, 30, APC_DEPTH_DATA_11_BITS, true);
-                get_property_bar_info_func(NULL);
-                pfunc_thread_mipi(NULL);
-                close_device();
-            }
-            CT_DEBUG("######################################################################\n");
-            release_device();
-            snapShot_mipi = true;
-            break;
-        case 77:
-            NeedToSaveFile();
-            NeedToSetupContinueMode();
-            NeedToEnableInterleaveMode();
-            NeedToSplitImage();
-            if (!bInterleave) gSetupIRValue = 0x00;
-            CT_DEBUG("snapShot_mipi: %s, IRValue: %d\n", snapShot_mipi ? "TRUE" : "FALSE", gSetupIRValue);
-            init_device(false);
-            for (int i = 0; i < APC_GetSimpleDeviceNumber(EYSD); i++) {
-                CT_DEBUG("######################################################################\n");
-                CT_DEBUG("Device Count: %d, Select Simple Device Index: %d\n", APC_GetSimpleDeviceNumber(EYSD), SIMPLE_DEV_START_IDX + i);
-                SelectDevInx(SIMPLE_DEV_START_IDX + i);
-                open_device_default(false, 640, 360, 640, 360, 60, APC_DEPTH_DATA_14_BITS, true);
-                get_property_bar_info_func(NULL);
-                pfunc_thread_mipi(NULL);
-                close_device();
-            }
-            CT_DEBUG("######################################################################\n");
-            release_device();
-            snapShot_mipi = true;
-            break;
-        case 78:
-            NeedToSaveFile();
-            NeedToSetupContinueMode();
-            NeedToSplitImage();
-            if (!bInterleave) gSetupIRValue = 0x00;
-            CT_DEBUG("snapShot_mipi: %s, IRValue: %d\n", snapShot_mipi ? "TRUE" : "FALSE", gSetupIRValue);
-            init_device(false);
-            for (int i = 0; i < APC_GetSimpleDeviceNumber(EYSD); i++) {
-                CT_DEBUG("######################################################################\n");
-                CT_DEBUG("Device Count: %d, Select Simple Device Index: %d\n", APC_GetSimpleDeviceNumber(EYSD), SIMPLE_DEV_START_IDX + i);
-                SelectDevInx(SIMPLE_DEV_START_IDX + i);
-                open_device_default(false, 640, 360, 640, 360, 30, APC_DEPTH_DATA_14_BITS, true);
-                get_property_bar_info_func(NULL);
-                pfunc_thread_mipi(NULL);
-                close_device();
-            }
-            CT_DEBUG("######################################################################\n");
-            release_device();
-            snapShot_mipi = true;
-            break;
-        case 79:
-            NeedToSaveFile();
-            NeedToSetupContinueMode();
-            NeedToSplitImage();
-            if (!bInterleave) gSetupIRValue = 0x00;
-            CT_DEBUG("snapShot_mipi: %s, IRValue: %d\n", snapShot_mipi ? "TRUE" : "FALSE", gSetupIRValue);
-            init_device(false);
-            for (int i = 0; i < APC_GetSimpleDeviceNumber(EYSD); i++) {
-                CT_DEBUG("######################################################################\n");
-                CT_DEBUG("Device Count: %d, Select Simple Device Index: %d\n", APC_GetSimpleDeviceNumber(EYSD), SIMPLE_DEV_START_IDX + i);
-                SelectDevInx(SIMPLE_DEV_START_IDX + i);
-                open_device_default(false, 640, 480, 640, 480, 15, APC_DEPTH_DATA_14_BITS, true);
-                get_property_bar_info_func(NULL);
-                pfunc_thread_mipi(NULL);
-                close_device();
-            }
-            CT_DEBUG("######################################################################\n");
-            release_device();
-            snapShot_mipi = true;
-            break;
         case 80:
+            NeedToEnableDebugLog();
             init_device(false);
             for (int i = 0; i < APC_GetDeviceNumber(EYSD); i++) {
                 CT_DEBUG("######################################################################\n");
@@ -1032,10 +962,387 @@ int main(void)
             for (int index = 0; index < APC_USER_SETTING_OFFSET; ++index) {
                 copy_file_to_g2(index);
             }
-
             CT_DEBUG("######################################################################\n");
             break;
         }
+        case 82: {
+            init_device(false);
+            open_device_default(false, 1280, 720, 1280, 720, 30, APC_DEPTH_DATA_14_BITS, true);
+            void* handle = nullptr;
+            size_t outW, outH;
+            float factor = 0.5f;
+            APC_InitResizeProcess(&handle, 1280, 720, &outW, &outH, APCImageType::COLOR_YUY2, factor);
+
+            std::vector<uint8_t> colorImageVec(gColorWidth * gColorHeight * 2);
+            int ret = APC_GetColorImage(EYSD, GetDevSelectIndexPtr(), (BYTE*)colorImageVec.data(), &gColorImgSize, &gColorSerial);
+
+            std::vector<uint8_t> colorImageResizeVec(gColorWidth * gColorHeight * ((size_t) 2 * factor));
+            ret = APC_ResizeProcess(handle, colorImageVec, colorImageResizeVec, APCImageType::COLOR_YUY2);
+            CT_DEBUG("APC_ResizeProcess YUYV to YUYV %d\n", ret);
+
+            std::vector<uint8_t> colorImageRGBResizeVec(gColorWidth * gColorHeight * 3 * factor /*Resolution will be even */);
+            ret = APC_ResizeProcess(handle, colorImageVec, colorImageRGBResizeVec, APCImageType::COLOR_RGB24);
+            CT_DEBUG("APC_ResizeProcess YUYV to RGB %d\n", ret);
+
+            APC_ReleaseResizeProcess(handle);
+            break;
+        }
+        case 83:
+            NeedToEnableDebugLog();
+            NeedToSplitImage();
+            init_device(false);
+            for (int i = 0; i < APC_GetSimpleDeviceNumber(EYSD); i++) {
+                CT_DEBUG("######################################################################\n");
+                CT_DEBUG("Simple Device Count: %d, Select Simple Device Index: %d\n", APC_GetSimpleDeviceNumber(EYSD), SIMPLE_DEV_START_IDX + i);
+                SelectDevInx(SIMPLE_DEV_START_IDX + i);
+                open_device_default(false, 1280, 720, 1280, 720, 30, APC_DEPTH_DATA_11_BITS, true);
+                mipi_point_cloud_test_func(NULL);
+                close_device();
+            }
+            CT_DEBUG("######################################################################\n");
+            release_device();
+            snapShot_mipi = true;
+            break;
+        case 84:
+            NeedToEnableDebugLog();
+            NeedToSplitImage();
+            init_device(false);
+            for (int i = 0; i < APC_GetSimpleDeviceNumber(EYSD); i++) {
+                CT_DEBUG("######################################################################\n");
+                CT_DEBUG("Simple Device Count: %d, Select Simple Device Index: %d\n", APC_GetSimpleDeviceNumber(EYSD), SIMPLE_DEV_START_IDX + i);
+                SelectDevInx(SIMPLE_DEV_START_IDX + i);
+                open_device_default(false, 1280, 720, 1280, 720, 30, APC_DEPTH_DATA_14_BITS, true);
+                mipi_point_cloud_test_func(NULL);
+                close_device();
+            }
+            CT_DEBUG("######################################################################\n");
+            release_device();
+            snapShot_mipi = true;
+            break;
+        case 85:
+            NeedToSaveFile();
+            CT_DEBUG("snapShot_color: %s, snapShot_depth: %s\n",
+                     snapShot_color ? "TRUE" : "FALSE", snapShot_depth ? "TRUE" : "FALSE");
+            init_device(false);
+            for (int i = 0; i < APC_GetDeviceNumber(EYSD); i++)
+                CT_DEBUG("Device Count: %d, Device Index List: %d\n", APC_GetDeviceNumber(EYSD), i);
+            printf("Select Device Index (0...%d): ", APC_GetDeviceNumber(EYSD) - 1);
+            scanf("%d", &input_idx);
+            printf("Selected Deivce Index is = [%d]\n", input_idx);
+            for (int i = 0; i < APC_GetDeviceNumber(EYSD); i++) {
+                if (input_idx != -1 && input_idx != i)
+                    continue;
+                CT_DEBUG("######################################################################\n");
+                CT_DEBUG("Device Count: %d, Select Device Index: %d\n", APC_GetDeviceNumber(EYSD), i);
+                SelectDevInx(i);
+                open_device_default(true, 2248, 1364, 0, 0, 30, APC_DEPTH_DATA_OFF_RAW, true);
+                gSetupIRValue = 60;
+                get_color_image();
+
+                // Workaround for IVY if open color only. Enable this block.
+                if (false) {
+                    RegisterSettings::DM_Quality_Register_Setting(EYSD, GetDevSelectIndexPtr(),
+                                                                  g_pDevInfo[gsDevSelInfo.index].wPID);
+                }
+
+                set_digital_gain_test_func(nullptr);
+                set_analog_gain_test_func(nullptr);
+                if (gcolor_thread_id != (pthread_t) - 1)
+                    pthread_join(gcolor_thread_id, NULL);
+                close_device();
+            }
+            CT_DEBUG("######################################################################\n");
+            release_device();
+            SetSaveFileDefault();
+            break;
+        case 86: {
+            init_device(false);
+            for (int i = 0; i < APC_GetDeviceNumber(EYSD); i++)
+                CT_DEBUG("Device Count: %d, Device Index List: %d\n", APC_GetDeviceNumber(EYSD), i);
+            printf("Select Device Index (0...%d): ", APC_GetDeviceNumber(EYSD) - 1);
+            scanf("%d", &input_idx);
+            printf("Selected Deivce Index is = [%d]\n", input_idx);
+            for (int i = 0; i < APC_GetDeviceNumber(EYSD); i++) {
+                if (input_idx != -1 && input_idx != i)
+                    continue;
+                CT_DEBUG("######################################################################\n");
+                CT_DEBUG("Device Count: %d, Select Device Index: %d\n", APC_GetDeviceNumber(EYSD), i);
+                SelectDevInx(i);
+
+                int cw = 1104;
+                int ch = 1104;
+                int dw = 1104;
+                int dh = 1104;
+                int f0 = APC_DEPTH_DATA_11_BITS;
+                int fps = 30;
+                printf("Choose color width ");
+                scanf("%d", &cw);
+                printf("Choose color height ");
+                scanf("%d", &ch);
+                printf("Choose depth width ");
+                scanf("%d", &dw);
+                printf("Choose depth height ");
+                scanf("%d", &dh);
+                printf("Choose FPS \n");
+                scanf("%d", &fps);
+                printf("Choose Depth data type\nD(11Bits)=4\nZ(14Bits)=2\nColor Only L'+R'=5\nColor Only L+R=0\n");
+                scanf("%d", &f0);
+
+                open_device_default(true, cw, ch, dw, dh, fps, f0, true);
+                // For IVY1DVT
+                setupIR(20);
+
+                auto grabColorImages = std::thread([=] () {
+                    if (!cw || !ch) return ;
+
+                    libeys3dsample::FrameCallbackHelper::Callback colorCallbackFn([] (const libeys3dsample::Frame *f) {
+                        static int64_t lastTimeUs = 0;
+                        int64_t curTimeUs = f->ts_s * 1000000 + f->ts_us;
+                        if (lastTimeUs > 0) {
+                            fprintf(stderr, "Inside color callback frame.sn=%d status=%d diffMs=%f\n", f->sn, f->status,
+                                    (curTimeUs - lastTimeUs) / 1000.0f);
+                        }
+                        lastTimeUs = curTimeUs;
+                        return f->status == APC_OK;
+                    });
+
+                    libeys3dsample::ColorCallbackHelper cbColorHelper(EYSD, *GetDevSelectIndexPtr(), cw, ch, 2,
+                                                                      colorCallbackFn);
+
+                    cbColorHelper.start();
+                    sleep(20);
+                    cbColorHelper.stop();
+                });
+
+                // Workaround for QCS610 IVY1DVT
+                sleep(6);
+
+                auto grabDepthImages = std::thread([=] () {
+                    if (!dw || !dh) return ;
+
+                    libeys3dsample::FrameCallbackHelper::Callback depthCallbackFn([] (const libeys3dsample::Frame *f) {
+                        static int64_t lastTimeUs = 0;
+                        int64_t curTimeUs = f->ts_s * 1000000 + f->ts_us;
+                        if (lastTimeUs > 0) {
+                            fprintf(stderr, "Inside depth callback frame.sn=%d status=%d diffMs=%f\n", f->sn, f->status,
+                                    (curTimeUs - lastTimeUs) / 1000.0f);
+                        }
+                        lastTimeUs = curTimeUs;
+                        return f->status == APC_OK;
+                    });
+
+                    libeys3dsample::DepthCallbackHelper cbDepthHelper(EYSD, *GetDevSelectIndexPtr(), dw, dh, 2,
+                                                                      depthCallbackFn);
+
+                    cbDepthHelper.start();
+                    sleep(20);
+                    cbDepthHelper.stop();
+                });
+
+                grabDepthImages.join();
+                grabColorImages.join();
+
+                close_device();
+                CT_DEBUG("######################################################################\n");
+            }
+
+            release_device();
+            break;
+        }
+        case 90:
+            CT_DEBUG("######################################################################\n");
+            imu_test_func_for_YX8062(NULL);
+            CT_DEBUG("######################################################################\n");
+            break;
+        case 91: {
+            // Only test for YX8062 other module might need to modify the flow !!
+            void* cameraHandle = nullptr;
+            DEVSELINFO devSelInfo;
+            devSelInfo.index = 0;
+            int fps = 30;
+            int cw = 1280; int ch = 720;
+            int dw = 1280; int dh = 720;
+            int depthDataType = 4;
+            int isMjpeg = 0;
+
+            printf("Choose YUYV:0 MJPEG:1 \n");
+            scanf("%d", &isMjpeg);
+            printf("Color width:\n");
+            scanf("%d", &cw);
+            printf("Color height:\n");
+            scanf("%d", &ch);
+            printf("Depth width:\n");
+            scanf("%d", &dw);
+            printf("Depth height:\n");
+            scanf("%d", &dh);
+            printf("Choose FPS:\n");
+            scanf("%d", &fps);
+            printf("Choose Depth Data Type\n");
+            scanf("%d", &depthDataType);
+
+            APC_Init(&cameraHandle, false);
+
+            APC_SetDepthDataType(cameraHandle, &devSelInfo, depthDataType);
+
+            APC_OpenDevice2(cameraHandle, &devSelInfo, cw, ch, isMjpeg, dw, dh, DEPTH_IMG_NON_TRANSFER, false, nullptr,
+                            &fps);
+
+            libeys3dsample::FrameCallbackHelper::Callback colorCallbackFn([] (const libeys3dsample::Frame *f) {
+                static bool everEnter = false;
+                if (!everEnter) {
+                    fprintf(stderr, "Inside color callback frame.sn=%d status=%d\n", f->sn, f->status);
+                    everEnter = true;
+                }
+                return f->status;
+            });
+
+            libeys3dsample::FrameCallbackHelper::Callback depthCallbackFn([] (const libeys3dsample::Frame *f) {
+                static bool everEnter = false;
+                if (!everEnter) {
+                    fprintf(stderr, "Inside depth callback frame.sn=%d status=%d\n", f->sn, f->status);
+                    everEnter = true;
+                }
+                return f->status;
+            });
+
+            libeys3dsample::ColorCallbackHelper colorCallback(cameraHandle, devSelInfo, cw, ch, 2, colorCallbackFn);
+            libeys3dsample::DepthCallbackHelper depthCallback(cameraHandle, devSelInfo, dw, dh, 2, depthCallbackFn);
+
+            colorCallback.start();
+            sleep(6);
+            depthCallback.start();
+
+            fprintf(stderr, "IMU++++\n");
+            unsigned short nVID = 0x1E4E, nPID = 0x0163;
+
+            CIMUModel::INFO info {
+                    .nVID = nVID,
+                    .nPID = nPID,
+                    .axis = CIMUModel::IMU_9_AXIS
+            };
+
+            CIMUModel imuModel = CIMUModel(info, cameraHandle);
+
+            std::string serialNumber = imuModel.GetCameraSerialNumber(cameraHandle, devSelInfo);
+            fprintf(stderr, "Camera serialNumber:[%s]\n", serialNumber.c_str());
+            std::string imuModuleName = imuModel.GetModuleName();
+            fprintf(stderr, "GetModuleName[%s] CMD1-CMD4 \n", imuModuleName.c_str());
+            std::string imuFWVersion = imuModel.GetFWVersion();
+            fprintf(stderr, "GetFWVersion [%s] CMD5-CMD12\n", imuFWVersion.c_str());
+            std::string imuOutputStatus = imuModel.GetStatus();
+            fprintf(stderr, "GetOutputStatus[%s] CMD13 \n", imuOutputStatus.c_str());
+            imuModel.EnableDataOutput(false);
+            imuOutputStatus = imuModel.GetStatus();
+            fprintf(stderr, "SetOutputStatus Disable [%s] CMD14 \n", imuOutputStatus.c_str());
+            imuModel.EnableDataOutput(true);
+            imuOutputStatus = imuModel.GetStatus();
+            fprintf(stderr, "SetOutputStatus Enable [%s] CMD15 \n", imuOutputStatus.c_str());
+
+            if (info.axis != CIMUModel::IMU_9_AXIS) {
+                int imuDataOutputFormat = imuModel.ReadDataOutputFormat();
+                fprintf(stderr, "ReadDataOutputFormat [%d] CMD16 \n", imuDataOutputFormat);
+
+                imuModel.SelectDataFormat(CIMUModel::RAW_DATA_WITHOUT_OFFSET);
+                fprintf(stderr, "SelectDataFormat RAW_DATA_WITHOUT_OFFSET 0x01 "
+                                "[%d] CMD17-19 \n", imuModel.ReadDataOutputFormat());
+                imuModel.SelectDataFormat(CIMUModel::RAW_DATA_WITH_OFFSET);
+                fprintf(stderr, "SelectDataFormat RAW_DATA_WITH_OFFSET 0x02 "
+                                "[%d] CMD17-19 \n", imuModel.ReadDataOutputFormat());
+
+                imuModel.SelectDataFormat(CIMUModel::OFFSET_DATA);
+                fprintf(stderr, "SelectDataFormat OFFSET_DATA 0x03 "
+                                "[%d] CMD17-19 \n", imuModel.ReadDataOutputFormat());
+
+                imuModel.SelectDataFormat(CIMUModel::DMP_DATA_WITHOT_OFFSET);
+                fprintf(stderr, "SelectDataFormat DMP_DATA_WITHOT_OFFSET 0x04 "
+                                "[%d] CMD17-19 \n", imuModel.ReadDataOutputFormat());
+
+                imuModel.SelectDataFormat(CIMUModel::DMP_DATA_WITH_OFFSET);
+                fprintf(stderr, "SelectDataFormat DMP_DATA_WITHOT_OFFSET 0x05 "
+                                "[%d] CMD17-19 \n", imuModel.ReadDataOutputFormat());
+
+                char checkIMUCalibrated;
+                imuModel.CheckCalibratingStatus(&checkIMUCalibrated);
+                fprintf(stderr, "CheckCalibratingStatus [%d] CMD22 \n", checkIMUCalibrated);
+                imuModel.StartCalibration();
+
+                imuModel.CheckCalibratingStatus(&checkIMUCalibrated);
+                fprintf(stderr, "CheckCalibratingStatus StartCalibration CMD23 [CMD22:%d]  \n", checkIMUCalibrated);
+
+                imuModel.ReadCalibrated(&checkIMUCalibrated);
+                fprintf(stderr, "ReadCalibrated CMD24 [%d]\n", checkIMUCalibrated);
+            }
+
+            uint8_t readIMURegData = 0x0;
+            int readIMURegStatus;
+            readIMURegStatus = imuModel.ReadRegister(0x0, 0x0 /* REG_WHO_AM_I */, &readIMURegData);
+            fprintf(stderr, "ReadRegister CMD25 status[%d] value[0x%x]\n", readIMURegStatus, readIMURegData);
+
+            uint8_t writeIMURegData = 0xff;
+            int writeIMURegStatus = imuModel.WriteRegister(0x0, 0x0, writeIMURegData);
+            fprintf(stderr, "WriteRegister CMD26 status[%d] value[0x%x]\n", writeIMURegStatus, writeIMURegData);
+
+            if (info.axis != CIMUModel::IMU_9_AXIS) {
+                std::string imuModuleSN = imuModel.GetSerialNumber();
+                fprintf(stderr, "GetSerialNumber[%s] CMD27-CMD31\n", imuModuleSN.c_str());
+
+                imuModel.SetSerialNumber(imuModuleSN);
+                fprintf(stderr, "SetSerialNumber[%s] CMD32-CMD39\n", imuModuleSN.c_str());
+            }
+
+            {
+                FILE* imuLog = fopen("imulog.txt", "a+");
+                // 1. Setup callback
+                CIMUModel::Callback printCallback([&] (const IMUData *data) {
+                    fprintf(imuLog, "CB FrameSN:[%d] mModID[%d] Time:%2d,%2d,%5d Quaternion:%5f,%5f,%5f,%5f _accuracy_FLAG:%d\n",
+                            data->_frameCount, data->_moduleID, data->_min, data->_sec, data->_subSecond,
+                            data->_quaternion[0], data->_quaternion[1], data->_quaternion[2], data->_quaternion[3],
+                            data->_accuracy_FLAG);
+                    return true;
+                });
+
+                // 2. Enable callback looper
+                imuModel.EnableDataCallback(printCallback);
+                sleep(10);
+
+                // 3. Disable callback looper after use.
+                imuModel.DisableDataCallback();
+
+                time_t now = time(nullptr);
+                fprintf(imuLog, "CB End %ld\n", now);
+                fflush(imuLog);
+                fclose(imuLog);
+                fprintf(stderr, "CB End %ld\n", now);
+            }
+            fprintf(stderr, "IMU----\n");
+
+            sleep(5);
+            colorCallback.stop();
+            depthCallback.stop();
+
+            APC_CloseDevice(cameraHandle, &devSelInfo);
+            APC_Release(&cameraHandle);
+            break;
+        }
+        case 100:
+            CT_DEBUG("test pause/resume streaming\n");
+            snapShot_color = false;
+            snapShot_depth = false;
+            bKeepStreaming = true;
+
+            init_device(false);
+            for (int i = 0; i < APC_GetDeviceNumber(EYSD); i++) {
+                CT_DEBUG("######################################################################\n");
+                CT_DEBUG("Device Count: %d, Select Device Index: %d\n", APC_GetDeviceNumber(EYSD), i);
+                SelectDevInx(i);
+                open_device_default(true, 1280, 720, 1280, 720, 60, APC_DEPTH_DATA_11_BITS, false);
+            }
+            test_pause_resume_streaming();
+            close_device();
+            release_device();
+            CT_DEBUG("finish test.\n");
+            exit(0);
+            break;
         case 255:
             close_device();
             release_device();
@@ -1061,7 +1368,7 @@ static void copy_file_to_g2(int fileIndex) {
     int ret = APC_GetYOffset(EYSD, devSelInfo, bufferYOffset, APC_Y_OFFSET_FILE_SIZE, &actualYOffsetBufLen, fileIndex);
 
     if (APC_OK != ret || actualYOffsetBufLen != APC_Y_OFFSET_FILE_SIZE) {
-        CT_DEBUG("### [Stage-YOffset] Read error \n");
+        CT_DEBUG("### [Stage-YOffset] Read error\n");
     } else {
         CT_DEBUG("### [Stage-YOffset] Read actualYOffsetBufLen %d file 3%d ret=%d\n", actualYOffsetBufLen, fileIndex, ret);
 
@@ -1073,7 +1380,7 @@ static void copy_file_to_g2(int fileIndex) {
                              fileIndex + APC_USER_SETTING_OFFSET);
 
         if (ret != APC_OK || actualYOffsetBufLen != APC_Y_OFFSET_FILE_SIZE) {
-            CT_DEBUG("### [Stage-YOffset] Write error \n");
+            CT_DEBUG("### [Stage-YOffset] Write error\n");
         } else {
             CT_DEBUG("### [Stage-YOffset] Write actualYOffsetBufLen %d file %d ret=%d\n", actualYOffsetBufLen,
                      APC_Y_OFFSET_FILE_ID_0 + fileIndex + APC_USER_SETTING_OFFSET,
@@ -1085,9 +1392,9 @@ static void copy_file_to_g2(int fileIndex) {
 
             if (ret != APC_OK || actualYOffsetBufLen != APC_Y_OFFSET_FILE_SIZE ||
                 memcmp(bufferYOffset, bufferYOffsetBackup, actualYOffsetBufLen)) {
-                CT_DEBUG("### [Stage-YOffset] Verify error. Please check. \n");
+                CT_DEBUG("### [Stage-YOffset] Verify error. Please check.\n");
             } else {
-                CT_DEBUG("### [Stage-YOffset] Verify successfully. \n");
+                CT_DEBUG("### [Stage-YOffset] Verify successfully.\n");
             }
         }
     }
@@ -1101,7 +1408,7 @@ static void copy_file_to_g2(int fileIndex) {
     ret = APC_GetRectifyTable(EYSD, devSelInfo, bufferRectifyTable, APC_RECTIFY_FILE_SIZE,
                               &actualRectifyBufLen, fileIndex);
     if (ret != APC_OK || actualRectifyBufLen != APC_RECTIFY_FILE_SIZE) {
-        CT_DEBUG("### [Stage-Rectify] Read error \n");
+        CT_DEBUG("### [Stage-Rectify] Read error\n");
     } else {
         CT_DEBUG("### [Stage-Rectify] Read actualRectifyBufLen %d file 4%d ret=%d\n", actualRectifyBufLen,
                  fileIndex, ret);
@@ -1114,7 +1421,7 @@ static void copy_file_to_g2(int fileIndex) {
                                   &actualRectifyBufLen, fileIndex + APC_USER_SETTING_OFFSET);
 
         if (ret != APC_OK || actualRectifyBufLen != APC_RECTIFY_FILE_SIZE) {
-            CT_DEBUG("### [Stage-Rectify] Write error \n");
+            CT_DEBUG("### [Stage-Rectify] Write error\n");
         } else {
             CT_DEBUG("### [Stage-Rectify] Write actualRectifyBufLen %d file %d ret=%d\n", actualRectifyBufLen,
                      APC_RECTIFY_FILE_ID_0 + fileIndex + APC_USER_SETTING_OFFSET, ret);
@@ -1126,9 +1433,9 @@ static void copy_file_to_g2(int fileIndex) {
 
             if (ret != APC_OK || actualRectifyBufLen != APC_RECTIFY_FILE_SIZE ||
                 memcmp(bufferRectifyTable, bufferRectifyTableBackup, actualRectifyBufLen)) {
-                CT_DEBUG("### [Stage-Rectify] Verify error. Please check. \n");
+                CT_DEBUG("### [Stage-Rectify] Verify error. Please check.\n");
             } else {
-                CT_DEBUG("### [Stage-Rectify] Verify successfully. \n");
+                CT_DEBUG("### [Stage-Rectify] Verify successfully.\n");
             }
         }
     }
@@ -1148,7 +1455,7 @@ static void copy_file_to_g2(int fileIndex) {
                          &actualZDBufLen, &tableInfo);
 
     if (ret != APC_OK || actualZDBufLen != APC_ZD_TABLE_FILE_SIZE_11_BITS) {
-        CT_DEBUG("### [Stage-ZD] Read error \n");
+        CT_DEBUG("### [Stage-ZD] Read error\n");
     } else {
         CT_DEBUG("### [Stage-ZD] Read actualZDBufLen %d file 5%d ret=%d\n", actualZDBufLen,
                  fileIndex, ret);
@@ -1162,7 +1469,7 @@ static void copy_file_to_g2(int fileIndex) {
                              &actualZDBufLen, &tableInfo);
 
         if (ret != APC_OK || actualZDBufLen != APC_ZD_TABLE_FILE_SIZE_11_BITS) {
-            CT_DEBUG("### [Stage-ZD] Write error \n");
+            CT_DEBUG("### [Stage-ZD] Write error\n");
         } else {
             CT_DEBUG("### [Stage-ZD] Write actualZDBufLen %d file %d ret=%d\n", actualZDBufLen,
                      APC_ZD_TABLE_FILE_ID_0 + fileIndex + APC_USER_SETTING_OFFSET, ret);
@@ -1174,9 +1481,9 @@ static void copy_file_to_g2(int fileIndex) {
 
             if (ret != APC_OK || actualZDBufLen != APC_ZD_TABLE_FILE_SIZE_11_BITS ||
                 memcmp(bufferZDTable, bufferZDTableBackup, APC_ZD_TABLE_FILE_SIZE_11_BITS)) {
-                CT_DEBUG("### [Stage-ZD] Verify error. Please check. \n");
+                CT_DEBUG("### [Stage-ZD] Verify error. Please check.\n");
             } else {
-                CT_DEBUG("### [Stage-ZD] Verify successfully. \n");
+                CT_DEBUG("### [Stage-ZD] Verify successfully.\n");
             }
         }
     }
@@ -1192,7 +1499,7 @@ static void copy_file_to_g2(int fileIndex) {
                          &actualCalibrationLogDataBufLen, fileIndex, ALL_LOG);
 
     if (APC_OK != ret || actualCalibrationLogDataBufLen != APC_CALIB_LOG_FILE_SIZE) {
-        CT_DEBUG("### [Stage-LOG] Read error \n");
+        CT_DEBUG("### [Stage-LOG] Read error\n");
     } else {
         CT_DEBUG("### [Stage-LOG] Read actualCalibrationLogDataBufLen %d file 24%d ret=%d\n",
                  actualCalibrationLogDataBufLen, fileIndex, ret);
@@ -1205,7 +1512,7 @@ static void copy_file_to_g2(int fileIndex) {
                              &actualCalibrationLogDataBufLen, fileIndex + APC_USER_SETTING_OFFSET);
 
         if (actualCalibrationLogDataBufLen != APC_CALIB_LOG_FILE_SIZE || ret != APC_OK) {
-            CT_DEBUG("### [Stage-LOG] Write error \n");
+            CT_DEBUG("### [Stage-LOG] Write error\n");
         } else {
             CT_DEBUG("### [Stage-LOG] Write actualCalibrationLogDataBufLen %d file %d ret=%d\n",
                      actualCalibrationLogDataBufLen, APC_CALIB_LOG_FILE_ID_0 + fileIndex + APC_USER_SETTING_OFFSET, ret);
@@ -1216,9 +1523,9 @@ static void copy_file_to_g2(int fileIndex) {
 
             if (ret != APC_OK || actualCalibrationLogDataBufLen != APC_CALIB_LOG_FILE_SIZE ||
                 memcmp(bufferCalibrationLogData, bufferCalibrationLogDataBackup, APC_CALIB_LOG_FILE_SIZE)) {
-                CT_DEBUG("### [Stage-LOG] Verify error. Please check. \n");
+                CT_DEBUG("### [Stage-LOG] Verify error. Please check.\n");
             } else {
-                CT_DEBUG("### [Stage-LOG] Verify successfully. \n");
+                CT_DEBUG("### [Stage-LOG] Verify successfully.\n");
             }
         }
     }
@@ -1418,7 +1725,9 @@ static void *test_color_time_stamp(void *arg)
                 CT_DEBUG("[%s] %lu usec per %ufs (%6f)\n", pre_str,
                        (unsigned long)fltotal_time, max_calc_frame_count, (1000000 * max_calc_frame_count)/fltotal_time);
                 frame_rate_count = 0;
-                mCount++;
+                if (!bKeepStreaming) {
+                    mCount++;
+                }
             } else {
                 frame_rate_count++;
             }
@@ -1570,7 +1879,9 @@ static void *test_depth_time_stamp(void *arg)
                 CT_DEBUG("[%s] %lu usec per %ufs (%6f)\n", pre_str,
                        (unsigned long)fltotal_time, max_calc_frame_count, (1000000 * max_calc_frame_count)/fltotal_time);
                 frame_rate_count = 0;
-                mCount++;
+                if(!bKeepStreaming) {
+                    mCount++;
+                }
             } else {
                 frame_rate_count++;
             }
@@ -1931,9 +2242,9 @@ static int init_device(bool is_select_dev)
     char devBuf_v4l[128];
     char devBuf_name[128];
 
-    ret = APC_Init(&EYSD, true);
+    ret = APC_Init(&EYSD, DEBUG_LOG);
     if (ret == APC_OK) {
-        CT_DEBUG("APC_Init() Success! (EYSD: %p)\n", EYSD);
+        if (DEBUG_LOG) CT_DEBUG("APC_Init() Success! (EYSD: %p)\n", EYSD);
     } else {
         CT_DEBUG("APC_Init() Fail! (ret: %d, EYSD: %p)\n", ret, EYSD);
         print_APC_error(ret);
@@ -1948,25 +2259,31 @@ static int init_device(bool is_select_dev)
     }
 
     g_pDevInfo = (DEVINFORMATION*)malloc(sizeof(DEVINFORMATION) * MAX_TOTAL_DEV_CONT);
+    g_pMipiInfo = (MipiInfo*)malloc(sizeof(MipiInfo) * MAX_TOTAL_DEV_CONT);
 
     CT_DEBUG("======================================================================\n");
     CT_DEBUG("nDevCount: %d\n", nDevCount);
     for(i = 0; i < nDevCount; i++) {
         CT_DEBUG("Select Index: %d\n", i);
         gsDevSelInfo.index = i;
-        APC_GetDeviceInfo(EYSD, GetDevSelectIndexPtr(), g_pDevInfo + i);
-        CT_DEBUG("Device Name: %s\n", g_pDevInfo[i].strDevName);
-        CT_DEBUG("PID: 0x%04x\n", g_pDevInfo[i].wPID);
-        CT_DEBUG("VID: 0x%04x\n", g_pDevInfo[i].wVID);
-        CT_DEBUG("ChipID: 0x%x\n", g_pDevInfo[i].nChipID);
-        CT_DEBUG("Device Type: %d\n", g_pDevInfo[i].nDevType);
+        if (APC_OK == APC_GetDeviceInfo(EYSD, GetDevSelectIndexPtr(), g_pDevInfo + gsDevSelInfo.index)) {
+            CT_DEBUG("Device Name: %s\n", g_pDevInfo[gsDevSelInfo.index].strDevName);
+            if (DEBUG_LOG) CT_DEBUG("PID: 0x%04x\n", g_pDevInfo[gsDevSelInfo.index].wPID);
+            if (DEBUG_LOG) CT_DEBUG("VID: 0x%04x\n", g_pDevInfo[gsDevSelInfo.index].wVID);
+            if (DEBUG_LOG) CT_DEBUG("ChipID: 0x%x\n", g_pDevInfo[gsDevSelInfo.index].nChipID);
+            if (DEBUG_LOG) CT_DEBUG("Device Type: %d\n", g_pDevInfo[gsDevSelInfo.index].nDevType);
+        } else {
+            CT_DEBUG("APC_GetDeviceInfo() Fail! (%d)\n", ret);
+        }
 
         int nActualLength = 0;
         if (APC_OK == APC_GetFwVersion(EYSD, GetDevSelectIndexPtr(), FWVersion, 256, &nActualLength)) {
             CT_DEBUG("FW Version: %s\n", FWVersion);
-            strcpy(devBuf, &g_pDevInfo[i].strDevName[strlen("/dev/")]);
+            strcpy(devBuf, &g_pDevInfo[gsDevSelInfo.index].strDevName[strlen("/dev/")]);
             sprintf(devBuf_v4l, "/sys/class/video4linux/%s/name", devBuf);
             get_product_name(devBuf_v4l, devBuf_name);
+        } else {
+            CT_DEBUG("APC_GetFwVersion() Fail! (%d)\n", ret);
         }
     }
     CT_DEBUG("======================================================================\n");
@@ -1974,33 +2291,45 @@ static int init_device(bool is_select_dev)
     for (i = SIMPLE_DEV_START_IDX; i < (SIMPLE_DEV_START_IDX + nDevSimpleCount); i++) {
         CT_DEBUG("Select Index: %d\n", i);
         gsDevSelInfo.index = i;
-        APC_GetDeviceInfo(EYSD, GetDevSelectIndexPtr(), g_pDevInfo + i);
-        CT_DEBUG("Device Name: %s\n", g_pDevInfo[i].strDevName);
-        CT_DEBUG("PID: 0x%04x\n", g_pDevInfo[i].wPID);
-        CT_DEBUG("VID: 0x%04x\n", g_pDevInfo[i].wVID);
-        CT_DEBUG("ChipID: 0x%x\n", g_pDevInfo[i].nChipID);
-        CT_DEBUG("Device Type: %d\n", g_pDevInfo[i].nDevType);
+        if (APC_OK == APC_GetDeviceInfo(EYSD, GetDevSelectIndexPtr(), g_pDevInfo + gsDevSelInfo.index)) {
+            CT_DEBUG("Device Name: %s\n", g_pDevInfo[gsDevSelInfo.index].strDevName);
+            if (DEBUG_LOG) CT_DEBUG("PID: 0x%04x\n", g_pDevInfo[gsDevSelInfo.index].wPID);
+            if (DEBUG_LOG) CT_DEBUG("VID: 0x%04x\n", g_pDevInfo[gsDevSelInfo.index].wVID);
+            if (DEBUG_LOG) CT_DEBUG("ChipID: 0x%x\n", g_pDevInfo[gsDevSelInfo.index].nChipID);
+            if (DEBUG_LOG) CT_DEBUG("Device Type: %d\n", g_pDevInfo[gsDevSelInfo.index].nDevType);
+        } else {
+            CT_DEBUG("APC_GetDeviceInfo() Fail! (%d)\n", ret);
+        }
 
-        int nActualLength = 0;
-        if (APC_OK == APC_GetFwVersion(EYSD, GetDevSelectIndexPtr(), FWVersion, 256, &nActualLength)) {
-            CT_DEBUG("FW Version: %s\n", FWVersion);
-            strcpy(devBuf, &g_pDevInfo[i].strDevName[strlen("/dev/")]);
-            sprintf(devBuf_v4l, "/sys/class/video4linux/%s/name", devBuf);
-            get_product_name(devBuf_v4l, devBuf_name);
+        ret = GetMipiInfo();
+        if (ret != APC_OK) {
+            CT_DEBUG("Failed to call GetMipiInfo()(%d)\n", ret);
+        }
+
+        if (g_pMipiInfo[gsDevSelInfo.index].vc_id == 0) {
+            int nActualLength = 0;
+            if (APC_OK == APC_GetFwVersion(EYSD, GetDevSelectIndexPtr(), FWVersion, 256, &nActualLength)) {
+                CT_DEBUG("FW Version: %s\n", FWVersion);
+                strcpy(devBuf, &g_pDevInfo[gsDevSelInfo.index].strDevName[strlen("/dev/")]);
+                sprintf(devBuf_v4l, "/sys/class/video4linux/%s/name", devBuf);
+                get_product_name(devBuf_v4l, devBuf_name);
+            } else {
+                CT_DEBUG("APC_GetFwVersion() Fail! (%d)\n", ret);
+            }
         }
     }
     CT_DEBUG("======================================================================\n");
 
     //s:[eys3D] 20200615 implement ZD table
     if (g_ColorPaletteZ14 == NULL) {
-            g_ColorPaletteZ14 = (RGBQUAD *)calloc(16384, sizeof(RGBQUAD));
+        g_ColorPaletteZ14 = (RGBQUAD *)calloc(16384, sizeof(RGBQUAD));
     }
     if (g_ColorPaletteZ14 == NULL) {
-            CT_DEBUG("Alloc g_ColorPaletteZ14 Fail!\n");
+        CT_DEBUG("Alloc g_ColorPaletteZ14 Fail!\n");
     }
     
     if (g_GrayPaletteZ14 == NULL) {
-            g_GrayPaletteZ14 = (RGBQUAD *)calloc(16384, sizeof(RGBQUAD));
+        g_GrayPaletteZ14 = (RGBQUAD *)calloc(16384, sizeof(RGBQUAD));
     }
     if (g_GrayPaletteZ14 == NULL) {
         CT_DEBUG("Alloc g_GrayPaletteZ14 Fail!\n");
@@ -2011,7 +2340,6 @@ static int init_device(bool is_select_dev)
         //NOTICE: The following code want that the gsDevSelInfo.index will be set as 0.
         if (gsDevSelInfo.index > 0) {
             for (int i = 0; i < gsDevSelInfo.index + 1; i++) {
-                CT_DEBUG("Index: %d\n", i);
                 char* module = PidToModuleName(g_pDevInfo[i].wPID);
                 if (module == nullptr) {
                     module = g_pDevInfo[i].strDevName;
@@ -2021,7 +2349,7 @@ static int init_device(bool is_select_dev)
         }
     } else {
         if (nDevCount > 1) {
-            if (nDevSimpleCount > APC_OK)
+            if (nDevSimpleCount > 0)
                 printf("Please Select Device Index (0...%d):", (SIMPLE_DEV_START_IDX + nDevSimpleCount - 1));
             else
                 printf("Please Select Device Index (0...%d):", (nDevCount - 1));
@@ -2033,9 +2361,12 @@ static int init_device(bool is_select_dev)
         }
     }
 
-    CT_DEBUG("[%d]: [nDevType, device_node, pid, vid]= [%d, %s, 0x%04x, 0x%04x]\n",
-             gsDevSelInfo.index, g_pDevInfo[gsDevSelInfo.index].nDevType,
-             g_pDevInfo[gsDevSelInfo.index].strDevName, g_pDevInfo[gsDevSelInfo.index].wPID, g_pDevInfo[gsDevSelInfo.index].wVID);
+    if (DEBUG_LOG) CT_DEBUG("[%d]: [DevType, DevNode, PID, VID] = [%d, %s, 0x%04x, 0x%04x]\n",
+             gsDevSelInfo.index,
+             g_pDevInfo[gsDevSelInfo.index].nDevType,
+             g_pDevInfo[gsDevSelInfo.index].strDevName,
+             g_pDevInfo[gsDevSelInfo.index].wPID,
+             g_pDevInfo[gsDevSelInfo.index].wVID);
 
     return ret;
 }
@@ -2070,23 +2401,23 @@ static int open_device_default(bool two_open, int colorWidth, int colorHeight, i
 
         {
             gDepthDataType = videoMode;
-            TransformDepthDataType(&gDepthDataType, true);
-            CT_DEBUG("APC_SetDepthDataType(%d)\n", gDepthDataType);
+            // TransformDepthDataType(&gDepthDataType, gRectifyData);
+            if (DEBUG_LOG) CT_DEBUG("APC_SetDepthDataType(%d)\n", gDepthDataType);
             ret = APC_SetDepthDataType(EYSD, GetDevSelectIndexPtr(), gDepthDataType); //4 ==> 11 bits
             if (ret == APC_OK) {
-                CT_DEBUG("APC_SetDepthData() Success!\n");
+                if (DEBUG_LOG) CT_DEBUG("APC_SetDepthData() Success!\n");
             } else {
                 CT_DEBUG("APC_SetDepthData() Fail! (%d)\n", ret);
                 print_APC_error(ret);
             }
             ret = APC_GetDepthDataType(EYSD, GetDevSelectIndexPtr(), &DepthDataType);
             if (ret == APC_OK) {
-                CT_DEBUG("APC_GetDepthDataType() Success!\n");
+                if (DEBUG_LOG) CT_DEBUG("APC_GetDepthDataType() Success!\n");
             } else {
                 CT_DEBUG("APC_GetDepthDataType() Fail! (%d)\n", ret);
                 print_APC_error(ret);
             }
-            CT_DEBUG("APC_GetDepthDataType(%d)\n", DepthDataType);
+            if (DEBUG_LOG) CT_DEBUG("APC_GetDepthDataType(%d)\n", DepthDataType);
         }
 
         if (g_pDevInfo[gsDevSelInfo.index].wPID == 0x0124 || g_pDevInfo[gsDevSelInfo.index].wPID == 0x0147) {
@@ -2102,11 +2433,15 @@ static int open_device_default(bool two_open, int colorWidth, int colorHeight, i
     ColorPaletteGenerator::DmColorMode14(g_ColorPaletteZ14, (int)g_maxFar, (int)g_maxNear);
     ColorPaletteGenerator::DmGrayMode14(g_GrayPaletteZ14, (int)g_maxFar, (int)g_maxNear);
 
-    if (APC_OK != APC_Setup_v4l2_requestbuffers(EYSD, GetDevSelectIndexPtr(), g_v4l2_buffer_quque_size)) {
+    if (gInterleave)
+        ret = APC_Setup_v4l2_requestbuffers(EYSD, GetDevSelectIndexPtr(), V4L2_BUFFER_QUQUE_SIZE_FOR_INTERLEAVE);
+    else
+        ret = APC_Setup_v4l2_requestbuffers(EYSD, GetDevSelectIndexPtr(), g_v4l2_buffer_quque_size);
+    if (APC_OK != ret) {
         CT_DEBUG("APC_Setup_v4l2_requestbuffers Fail!\n");
     }
 
-    if (APC_OK != APC_SetInterleaveMode(EYSD, GetDevSelectIndexPtr(), bInterleave)) {
+    if (APC_OK != APC_SetInterleaveMode(EYSD, GetDevSelectIndexPtr(), gInterleave)) {
         CT_DEBUG("APC_SetInterleaveMode Fail!\n");
     }
 
@@ -2117,9 +2452,9 @@ static int open_device_default(bool two_open, int colorWidth, int colorHeight, i
                               gDepthWidth, gDepthHeight,
                               gDepth_Transfer_ctrl, false, NULL, &gActualFps, IMAGE_SN_SYNC);
         if (ret == APC_OK) {
-            CT_DEBUG("APC_OpenDevice2() Success! (%d)\n", gActualFps);
+            if (DEBUG_LOG) CT_DEBUG("APC_OpenDevice2() Success! (%d)\n", gActualFps);
         } else {
-            CT_DEBUG("APC_OpenDevice2() Fail! (%d)\n", ret);
+            CT_DEBUG("APC_OpenDevice2() Fail! (ret: %d, FPS: %d)\n", ret, gActualFps);
             print_APC_error(ret);
         }
     } else {
@@ -2128,21 +2463,32 @@ static int open_device_default(bool two_open, int colorWidth, int colorHeight, i
                             gDepthWidth, gDepthHeight,
                             gDepth_Transfer_ctrl,
                             false, NULL,
-                            &gActualFps, IMAGE_SN_SYNC/*IMAGE_SN_NONSYNC*/);
+                            &gActualFps, gRectifyData ? IMAGE_RECTIFY_DATA : IMAGE_NORECTIFY_DATA);
         if (ret == APC_OK) {
-            CT_DEBUG("APC_OpenDevice() Success! (%d)\n", gActualFps);
+            if (DEBUG_LOG) CT_DEBUG("APC_OpenDevice() Success! (%d)\n", gActualFps);
         } else {
-            CT_DEBUG("APC_OpenDevice() Fail! (%d)\n", ret);
+            CT_DEBUG("APC_OpenDevice() Fail! (ret: %d, FPS: %d)\n", ret, gActualFps);
             print_APC_error(ret);
         }
     }
 
     //s:[eys3D] 20200623, implement IR mode
-    ret = setupIR(gSetupIRValue);//input 0xff, will use default value (min+max)/2. 
+    ret = setupIR(gSetupIRValue);//input 0xff, will use default value (min+max)/2.
     if (APC_OK != ret) {
         CT_DEBUG("Set IR mode Fail! (%d)\n", ret);
     }
     //e:[eys3D] 20200623, implement IR mode
+
+    ret = APC_SetCTPropVal(EYSD, GetDevSelectIndexPtr(), CT_PROPERTY_ID_AUTO_EXPOSURE_MODE_CTRL, AE_MOD_APERTURE_PRIORITY_MODE);
+    if (APC_OK != ret) {
+        CT_DEBUG("Set Auto Exposure mode Fail! (%d)\n", ret);
+    }
+    
+    ret = APC_SetPUPropVal(EYSD, GetDevSelectIndexPtr(), PU_PROPERTY_ID_WHITE_BALANCE_AUTO_CTRL, PU_PROPERTY_ID_AWB_ENABLE);
+    if (APC_OK != ret) {
+        CT_DEBUG("Set Auto White Balance Fail! (%d)\n", ret);
+    }
+
     return ret;
 }
 
@@ -2207,11 +2553,11 @@ static int open_device(void)
         gDepth_Transfer_ctrl = (DEPTH_TRANSFER_CTRL)dtc;
         if (gDepthWidth != 0) {
             setupDepth();
-            TransformDepthDataType(&gDepthDataType, true);
-            CT_DEBUG("APC_SetDepthDataType(%d)\n", gDepthDataType);
+            // TransformDepthDataType(&gDepthDataType, true);
+            if (DEBUG_LOG) CT_DEBUG("APC_SetDepthDataType(%d)\n", gDepthDataType);
             ret = APC_SetDepthDataType(EYSD, GetDevSelectIndexPtr(), gDepthDataType); //4 ==> 11 bits
             if (ret == APC_OK) {
-                CT_DEBUG("APC_SetDepthData() Success!\n");
+                if (DEBUG_LOG) CT_DEBUG("APC_SetDepthData() Success!\n");
             } else {
                 CT_DEBUG("APC_SetDepthData() Fail! (%d)\n", ret);
                 print_APC_error(ret);
@@ -2239,7 +2585,7 @@ static int open_device(void)
     /* APC_OpenDevice2 (Color + Depth) */
     ret = APC_OpenDevice2(EYSD, GetDevSelectIndexPtr(), gColorWidth, gColorHeight, (bool)gColorFormat, gDepthWidth, gDepthHeight, gDepth_Transfer_ctrl, false, NULL, &gActualFps, IMAGE_SN_SYNC);
     if (ret == APC_OK) {
-        CT_DEBUG("APC_OpenDevice2() Success! (%d)\n", gActualFps);
+        if (DEBUG_LOG) CT_DEBUG("APC_OpenDevice2() Success! (%d)\n", gActualFps);
     } else {
         CT_DEBUG("APC_OpenDevice2() Fail! (%d)\n", ret);
         print_APC_error(ret);
@@ -2261,7 +2607,7 @@ static void *pfunc_thread_color(void *arg) {
     long long start_time = calcByGetTimeOfDay();
     long long current_time = 0;
     long cnt_frme = 0;
-    float fps_tmp = 0;
+    float fps_tmp = 0, fps_total = 0;;
     
     UNUSED(arg);
     CT_DEBUG("gColorWidth: %d, gColorHeight: %d\n", gColorWidth, gColorHeight);
@@ -2283,6 +2629,13 @@ static void *pfunc_thread_color(void *arg) {
         ret = APC_GetColorImage(EYSD, GetDevSelectIndexPtr(), (BYTE*)gColorImgBuf, &gColorImgSize, &gColorSerial);
         //CT_DEBUG("[%s][%d] %d, errno: %d(%s)(%d)\n", __func__, __LINE__,ret, errno, strerror(errno), gColorSerial);
         if (ret == APC_OK && gColorSerial > 0) {
+            if (cnt_frme == 0 && mCount == 0) {
+                APC_SetCTPropVal(EYSD, GetDevSelectIndexPtr(), CT_PROPERTY_ID_AUTO_EXPOSURE_MODE_CTRL, AE_MOD_APERTURE_PRIORITY_MODE);
+                APC_SetPUPropVal(EYSD, GetDevSelectIndexPtr(), PU_PROPERTY_ID_WHITE_BALANCE_AUTO_CTRL, PU_PROPERTY_ID_AWB_ENABLE);
+                setupIR(gSetupIRValue);
+                usleep(1 * 1000 * 1000);
+            }
+
             cnt_frme++;
             if (cnt_frme >= TEST_FRAME_COUNTER) {
                 current_time = calcByGetTimeOfDay();
@@ -2305,32 +2658,37 @@ static void *pfunc_thread_color(void *arg) {
                         return NULL;
                     }
 
-                    ret = APC_ColorFormat_to_RGB24(EYSD, GetDevSelectIndexPtr(), gColorRGBImgBuf, gColorImgBuf, gColorImgSize,
-                                                   gColorWidth, gColorHeight,
-                                                   gColorFormat ? APCImageType::Value::COLOR_MJPG : APCImageType::Value::COLOR_YUY2);
+                    if (snapShot_raw) {
+                        ret = APC_ColorFormat_to_RGB24(EYSD, GetDevSelectIndexPtr(), gColorRGBImgBuf, gColorImgBuf, gColorImgSize,
+                                                       gColorWidth, gColorHeight,
+                                                       gColorFormat ? APCImageType::Value::COLOR_MJPG : APCImageType::Value::COLOR_YUY2);
 
-                    if (ret == APC_OK) {
-                        save_file(gColorRGBImgBuf, 3 * gColorWidth * gColorHeight, gColorWidth, gColorHeight, gColorFormat, false);
-                    }
+                        if (ret == APC_OK) {
+                            save_file(gColorRGBImgBuf, 3 * gColorWidth * gColorHeight, gColorWidth, gColorHeight, gColorFormat, false);
+                        }
 
-                    if (gTempImgBuf != NULL) {
-                        if (DEBUG_LOG) {
-                            CT_DEBUG("Free gTempImgBuf: %p\n", gTempImgBuf);
+                        if (gTempImgBuf != NULL) {
+                            if (DEBUG_LOG) {
+                                CT_DEBUG("Free gTempImgBuf: %p\n", gTempImgBuf);
+                            }
+                            free(gTempImgBuf);
+                            gTempImgBuf = NULL;
                         }
-                        free(gTempImgBuf);
-                        gTempImgBuf = NULL;
-                    }
-                    
-                    if (gColorRGBImgBuf != NULL) {
-                        if (DEBUG_LOG) {
-                            CT_DEBUG("Free gColorRGBImgBuf: %p\n", gColorRGBImgBuf);
+                        
+                        if (gColorRGBImgBuf != NULL) {
+                            if (DEBUG_LOG) {
+                                CT_DEBUG("Free gColorRGBImgBuf: %p\n", gColorRGBImgBuf);
+                            }
+                            free(gColorRGBImgBuf);
+                            gColorRGBImgBuf = NULL;
                         }
-                        free(gColorRGBImgBuf);
-                        gColorRGBImgBuf = NULL;
+                        //e:[eys3D] 20200610 implement to save raw data to RGB format
+                        //pthread_mutex_unlock(&save_file_mutex);
                     }
-                    //e:[eys3D] 20200610 implement to save raw data to RGB format
-                    //pthread_mutex_unlock(&save_file_mutex);
                 }
+
+                if (mCount > ABORT_FRAME_COUNTER)
+                    fps_total += fps_tmp;
             }
         } else {
             CT_DEBUG("Failed to call APC_GetColorImage()!\n");
@@ -2353,6 +2711,8 @@ static void *pfunc_thread_color(void *arg) {
         free(gColorImgBuf);
         gColorImgBuf = NULL;
     }
+
+    CT_DEBUG("### Average FPS: %f\n", (float)(fps_total / (TEST_RUN_NUMBER - ABORT_FRAME_COUNTER)));
     //e:[eys3D] 20200610 implement to save raw data to RGB format
     //pthread_exit(NULL);
     return NULL;
@@ -2382,7 +2742,7 @@ static void *pfunc_thread_depth(void *arg) {
     long long start_time = calcByGetTimeOfDay();
     long long current_time = 0;
     long cnt_frme = 0;
-    float fps_tmp = 0;
+    float fps_tmp = 0, fps_total = 0;;
     int mCount = 0;
     unsigned long int m_BufferSize = 0;
     
@@ -2454,10 +2814,15 @@ static void *pfunc_thread_depth(void *arg) {
                     //pthread_mutex_lock(&save_file_mutex);
                     save_file(gDepthImgBuf, gDepthImgSize, gDepthWidth, gDepthHeight, 2, true);
                     //s:[eys3D] 20200615 implement to save raw data to RGB format
-                    saveDepth2rgb(gDepthImgBuf, gDepthRGBImgBuf, gDepthWidth, gDepthHeight);
-                    //e:[eys3D] 20200615 implement to save raw data to RGB format
-                    //pthread_mutex_unlock(&save_file_mutex);
+                    if (snapShot_rgb) {
+                        saveDepth2rgb(gDepthImgBuf, gDepthRGBImgBuf, gDepthWidth, gDepthHeight);
+                        //e:[eys3D] 20200615 implement to save raw data to RGB format
+                        //pthread_mutex_unlock(&save_file_mutex);
+                    }
                 }
+
+                if (mCount > ABORT_FRAME_COUNTER)
+                    fps_total += fps_tmp;
             }
         } else {
             CT_DEBUG("Failed to call APC_GetDepthImage()!\n");
@@ -2488,6 +2853,8 @@ static void *pfunc_thread_depth(void *arg) {
         free(gDepthRGBImgBuf);
         gDepthRGBImgBuf = NULL;
     }
+
+    CT_DEBUG("### Average FPS: %f\n", (float)(fps_total / (TEST_RUN_NUMBER - ABORT_FRAME_COUNTER)));
     //e:[eys3D] 20200610 implement to save raw data to RGB format
     //pthread_exit(NULL);
     EXIT:
@@ -2515,19 +2882,19 @@ static void get_depth_image(void)
 }
 
 static void *pfunc_thread_mipi(void *arg) {
-    int ret;
+    int ret = APC_OK;
     int64_t cur_tv_sec = 0;
     int64_t cur_tv_usec = 0;
     long long start_time = calcByGetTimeOfDay();
     long long current_time = 0;
     long cnt_frme = 0;
-    float fps_tmp = 0;
+    float fps_tmp = 0, fps_total = 0;
     int mCount = 0;
     uint32_t BytesPerPixel = 2; // Only support YUYV
     bool bFirstReceived = true;
-    
+
     UNUSED(arg);
-    if (bSplitImage) {
+    if (gSplitImage) {
         CT_DEBUG("gColorWidth: %d, gColorHeight: %d\n", gColorWidth, gColorHeight);
         if (gColorImgBuf == NULL) {
             gColorImgBuf = (unsigned char*)calloc(BytesPerPixel * gColorWidth * gColorHeight, sizeof(unsigned char));
@@ -2546,7 +2913,7 @@ static void *pfunc_thread_mipi(void *arg) {
         CT_DEBUG("gColorImgBuf: %p\n", gColorImgBuf);
     }
 
-    if (bSplitImage) {
+    if (gSplitImage) {
         CT_DEBUG("gDepthWidth: %d, gDepthHeight: %d\n", gDepthWidth, gDepthHeight);
         if (gDepthImgBuf == NULL) {
             gDepthImgBuf = (unsigned char*)calloc(BytesPerPixel * gDepthWidth * gDepthHeight, sizeof(unsigned char));
@@ -2560,39 +2927,76 @@ static void *pfunc_thread_mipi(void *arg) {
         }
     }
 
-    while (bTesting_mipi == true && mCount < TEST_RUN_NUMBER) {
+    ret = SetContinueMode();
+    if (ret != APC_OK) {
+        CT_DEBUG("Failed to call SetContinueMode()(%d)\n", ret);
+    }
+
+    ret = SetVirtualChannel();
+    if (ret != APC_OK) {
+        CT_DEBUG("Failed to call SetVirtualChannel()(%d)\n", ret);
+    }
+
+    while (bTesting_mipi == true && mCount < TEST_RUN_NUMBER_MIPI) {
+#if 0
+        bool bContinueMode = false;
+        int nVirtualChannelID = 0;
+
+        ret = APC_GetHWContinueMode(EYSD, GetDevSelectIndexPtr(), &bContinueMode);
+        if (ret != APC_OK) {
+            CT_DEBUG("Failed to call APC_GetHWContinueMode()(%d)\n", ret);
+        } else {
+            CT_DEBUG("Call APC_GetHWContinueMode() (%d, %s)\n", ret, bContinueMode ? "ENABLE" : "DISABLE");
+        }
+
+        ret = APC_GetHWVirtualChannel(EYSD, GetDevSelectIndexPtr(), &nVirtualChannelID);
+        if (ret != APC_OK) {
+            CT_DEBUG("Failed to call APC_GetHWVirtualChannel()(%d)\n", ret);
+        } else {
+            CT_DEBUG("Call APC_GetHWVirtualChannel() (%d, %d)\n", ret, nVirtualChannelID);
+        }
+#endif
         bTestEnd_mipi = false;
-        usleep(1000 * 5);
-        if (bSplitImage && (gDepthWidth != 0) && (gDepthHeight != 0))
+        if (gSplitImage && (gDepthWidth != 0) && (gDepthHeight != 0))
             ret = APC_Get2ImageWithTimestamp(EYSD, GetDevSelectIndexPtr(), (BYTE*)gColorImgBuf, (BYTE*)gDepthImgBuf, &gColorImgSize, &gDepthImgSize, &gColorSerial, &gDepthSerial, gDepthDataType, &cur_tv_sec, &cur_tv_usec);
         else
             ret = APC_Get2ImageWithTimestampNoSplit(EYSD, GetDevSelectIndexPtr(), (BYTE*)gColorImgBuf, &gColorImgSize, &gColorSerial, &cur_tv_sec, &cur_tv_usec, snapShot_mipi);
-        //CT_DEBUG("[%s][%d] %d, errno: %d(%s)(%d)\n", __func__, __LINE__,ret, errno, strerror(errno), gDepthSerial);
+
         if (ret == APC_OK) {
             if (cnt_frme == 0 && mCount == 0) {
-                APC_SetupContinueMode(EYSD, GetDevSelectIndexPtr(), gSetupContinueMode);
+                APC_SetInterleaveMode(EYSD, GetDevSelectIndexPtr(), gInterleave);
+                APC_SetCTPropVal(EYSD, GetDevSelectIndexPtr(), CT_PROPERTY_ID_AUTO_EXPOSURE_MODE_CTRL, AE_MOD_APERTURE_PRIORITY_MODE);
+                APC_SetPUPropVal(EYSD, GetDevSelectIndexPtr(), PU_PROPERTY_ID_WHITE_BALANCE_AUTO_CTRL, PU_PROPERTY_ID_AWB_ENABLE);
+                setupIR(gSetupIRValue);
+                usleep(1 * 1000 * 1000);
             }
+
             cnt_frme++;
-            if (cnt_frme >= TEST_FRAME_COUNTER || (cnt_frme >= (TEST_FRAME_COUNTER - 1) && bInterleave)) {
-                if (cnt_frme >= TEST_FRAME_COUNTER) {
-                    current_time = calcByGetTimeOfDay();
-                    fps_tmp = (float)(TEST_FRAME_COUNTER * 1000 * 1000) / (float)((current_time - start_time));
-                    cnt_frme = 0;
-                    start_time = current_time;
-                    CT_DEBUG("Color: FPS: %f (size: %lu, serial: %d)\n", fps_tmp, gColorImgSize, gColorSerial);
-                    if (bSplitImage)
-                        CT_DEBUG("Depth: FPS: %f (size: %lu, serial: %d, datatype: %d)\n", fps_tmp, gDepthImgSize, gDepthSerial, gDepthDataType);
-                    mCount++;
-                }
+            if (cnt_frme == TEST_FRAME_COUNTER_MIPI || (cnt_frme == (TEST_FRAME_COUNTER_MIPI - 1) && gInterleave)) {
+                current_time = calcByGetTimeOfDay();
+                fps_tmp = (float)(TEST_FRAME_COUNTER_MIPI * 1000 * 1000) / (float)((current_time - start_time));
+
+                if (DEBUG_LOG) CT_DEBUG("Color: FPS: %02f (size: %lu, serial: %03d)\n", fps_tmp, gColorImgSize, gColorSerial);
+                if (gSplitImage)
+                    if (DEBUG_LOG) CT_DEBUG("Depth: FPS: %02f (size: %lu, serial: %03d, datatype: %d)\n", fps_tmp, gDepthImgSize, gDepthSerial, gDepthDataType);
 
                 if (snapShot_mipi) {
-                    if (bSplitImage) {
+                    gIgnoreDataTime = true;
+                    if (gSplitImage) {
                         save_file(gColorImgBuf, gColorImgSize, gColorWidth, gColorHeight, gColorFormat, true);
                         save_file(gDepthImgBuf, gDepthImgSize, gDepthWidth, gDepthHeight, 2, true);
                     } else {
                         save_file(gColorImgBuf, gColorImgSize, gColorWidth + gDepthWidth, gColorHeight, gColorFormat, true);
                     }
+                    gIgnoreDataTime = false;
                 }
+
+                start_time = current_time;
+                cnt_frme = 0;
+                mCount++;
+
+                if (mCount >= ABORT_FRAME_COUNTER_MIPI)
+                    fps_total += fps_tmp;
             }
         } else {
             CT_DEBUG("Failed to call APC_Get2ImageWithTimestamp()!\n");
@@ -2612,7 +3016,7 @@ static void *pfunc_thread_mipi(void *arg) {
         gColorImgBuf = NULL;
     }
 
-    if (bSplitImage) {
+    if (gSplitImage) {
         if (gDepthImgBuf != NULL) {
             if (DEBUG_LOG) {
                 CT_DEBUG("Free gDepthImgBuf: %p\n", gDepthImgBuf);
@@ -2621,6 +3025,8 @@ static void *pfunc_thread_mipi(void *arg) {
             gDepthImgBuf = NULL;
         }
     }
+
+    CT_DEBUG("### Average FPS: %f\n", (float)(fps_total / (TEST_RUN_NUMBER_MIPI - ABORT_FRAME_COUNTER_MIPI)));
 
     return NULL;
 }
@@ -2779,7 +3185,7 @@ static void *pfunc_thread_point_cloud(void *arg) {
             ret = APC_ColorFormat_to_RGB24(EYSD, GetDevSelectIndexPtr(), gColorRGBImgBuf, gColorImgBuf, gColorImgSize,
                                              gColorWidth, gColorHeight,
                                              gColorFormat ? APCImageType::Value::COLOR_MJPG : APCImageType::Value::COLOR_YUY2);
-            // convert_yuv_to_rgb_buffer(gColorImgBuf, gColorRGBImgBuf, gColorWidth, gColorHeight);
+            // convert_yuv_to_rgb_buffer(gColorImgBuf, gColorRGBImgBuf, gColorWidth, gColorHeight, false);
             ret = getPointCloud(EYSD, GetDevSelectIndexPtr(), gColorRGBImgBuf, gColorWidth, gColorHeight,
                                 gDepthImgBuf, gDepthWidth, gDepthHeight, gDepthDataType,
                                 pPointCloudRGB, pPointCloudXYZ, g_maxNear, g_maxFar);
@@ -2945,7 +3351,7 @@ static void get_point_cloud_8063(void) {
         sleep(1);
         ret = APC_CloseDevice(EYSD, &kolorDeviceSelInf);
         if (ret == APC_OK) {
-            CT_DEBUG("APC_CloseDevice() Success!\n");
+            if (DEBUG_LOG) CT_DEBUG("APC_CloseDevice() Success!\n");
         } else {
             CT_DEBUG("APC_CloseDevice() Fail! (%d)\n", ret);
             error_msg(ret);
@@ -2957,7 +3363,7 @@ static void get_point_cloud_8063(void) {
         sleep(1);
         ret = APC_CloseDevice(EYSD, &depthDeviceSelInf);
         if (ret == APC_OK) {
-            CT_DEBUG("APC_CloseDevice() Success!\n");
+            if (DEBUG_LOG) CT_DEBUG("APC_CloseDevice() Success!\n");
         } else {
             CT_DEBUG("APC_CloseDevice() Fail! (%d)\n", ret);
             error_msg(ret);
@@ -3009,6 +3415,7 @@ static int getPointCloudInfo(void *pHandleEYSD, DEVSELINFO *pDevSelInfo, PointCl
         pointCloudInfo->centerX = -1.0f * pRectifyLogData->ReProjectMat[3] * ratio_Mat;
         pointCloudInfo->centerY = -1.0f * pRectifyLogData->ReProjectMat[7] * ratio_Mat;
         pointCloudInfo->focalLength = pRectifyLogData->ReProjectMat[11] * ratio_Mat;
+        pointCloudInfo->bIsMIPISplit = gSplitImage;
 
         switch (APCImageType::DepthDataTypeToDepthImageType(depthDataType)) {
             case APCImageType::DEPTH_14BITS: pointCloudInfo->disparity_len = 0; break;
@@ -3039,7 +3446,7 @@ int getPointCloud(void *pHandleEYSD, DEVSELINFO *pDevSelInfo, unsigned char *Img
                   float fNear,
                   float fFar)
 {
-    int ret = 0;
+    int ret = APC_OK;
     PointCloudInfo pointCloudInfo;
     std::vector<CloudPoint> cloud;
     char DateTime[32] = {0};
@@ -3171,7 +3578,7 @@ static void SetCounterMode()
         CT_DEBUG("APC_SetControlCounterMode Fail!\n");
         return;
     }
-    CT_DEBUG("Setup Success!\n");
+    if (DEBUG_LOG) CT_DEBUG("Setup Success!\n");
 }
 
 static void GetCounterMode()
@@ -3482,7 +3889,7 @@ EXIT:
 }
 
 static void *pfunc_thread_point_cloud_fps(void *arg) {
-    int ret = 0;
+    int ret = APC_OK;
     PointCloudInfo pointCloudInfo = {0};
     getPointCloudInfo(EYSD, GetDevSelectIndexPtr(), &pointCloudInfo, gDepthDataType, gDepthHeight);
     if (gColorImgBuf == NULL) {
@@ -3703,7 +4110,7 @@ static void *pfunc_thread_point_cloud_fps(void *arg) {
 
     if (end_time - start_time > 0) {
         float averageFPS = kMaxCount / ((end_time - start_time) / 1000000);
-        CT_DEBUG("Average Point Cloud FPS=[%f] cost: %lld total frames: %d\n", averageFPS, end_time - start_time, kMaxCount);
+        CT_DEBUG("### Average Point Cloud FPS=[%f] cost: %lld total frames: %d\n", averageFPS, end_time - start_time, kMaxCount);
     }
 
     if (gColorImgBuf != NULL) {
@@ -3766,7 +4173,7 @@ static void Write24X()
 
 int save_file(unsigned char *buf, int size, int width, int height, int type, bool isRGBNamed)
 {
-    int ret = 0;
+    int ret = APC_OK;
     int fd = -1;
     char fname[256] = {0};
 
@@ -3778,8 +4185,11 @@ int save_file(unsigned char *buf, int size, int width, int height, int type, boo
     static unsigned int depth_rgb_index = 0;
     char DateTime[32] = {0};
     memset(DateTime, 0, sizeof(DateTime));
-    
-    ret = GetDateTime(DateTime);
+
+    if (gIgnoreDataTime)
+        sprintf(DateTime, "Ignore");
+    else
+        ret = GetDateTime(DateTime);
 
     if (isRGBNamed) {
         switch (type) {
@@ -3811,23 +4221,21 @@ int save_file(unsigned char *buf, int size, int width, int height, int type, boo
         }
     }
 
-    CT_DEBUG("File Name: %s\n", fname);
+    if (DEBUG_LOG) CT_DEBUG("File Name: %s\n", fname);
     fd = open(fname, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
 
     if (fd < 0) {
         CT_DEBUG("file open error (fd: %d)\n", fd);
-        ret = -1;
+        ret = APC_Init_Fail;
     } else if (write(fd, buf, size) != size) {
         CT_DEBUG("write(fd, buf, size) != size\n");
-        ret = -1;
+        ret = APC_Init_Fail;
     }
 
     if (fd >= 0) {
         close(fd);
         sync();
     }
-
-    if (DEBUG_LOG) CT_DEBUG("FILE_NAME = \"%s\"\n", fname);
 
     return ret;
 }
@@ -3859,14 +4267,25 @@ int convert_yuv_to_rgb_pixel(int y, int u, int v)
     return pixel32;
 }
 
-int convert_yuv_to_rgb_buffer(unsigned char *yuv, unsigned char *rgb, unsigned int width, unsigned int height)
+int convert_yuv_to_rgb_buffer(unsigned char *yuv, unsigned char *rgb, unsigned int width, unsigned int height, bool isMIPISplit)
 {
     unsigned int in, out = 0;
     unsigned int pixel_16;
     unsigned char pixel_24[3];
     unsigned int pixel32;
     int y0, u, y1, v;
-    for(in = 0; in < width * height * 2; in += 4) {
+    int src_size = width * height * 2;
+
+    // For MIPI No Split
+    if (!isMIPISplit)
+        src_size = width * height * 2 * 2;
+
+    for(in = 0; in < src_size; in += 4) {
+        // For MIPI No Split
+        if (!isMIPISplit && (in % (width * 2) == 0) && (in % (width * 4) != 0)) {
+            in = in + (width * 2);
+        }
+
         pixel_16 =
         yuv[in + 3] << 24 |
         yuv[in + 2] << 16 |
@@ -3902,9 +4321,9 @@ int convert_yuv_to_rgb_buffer(unsigned char *yuv, unsigned char *rgb, unsigned i
 
 int saveDepth2rgb(unsigned char *m_pDepthImgBuf, unsigned char *m_pRGBBuf, unsigned int m_nImageWidth, unsigned int m_nImageHeight)
 {
-     char fname[256] = {0};
+    char fname[256] = {0};
     static unsigned int yuv_index = 0;
-    int ret = 0 ;
+    int ret = APC_OK ;
     int m_tmp_width= 0;
     char DateTime[32] = {0};
     
@@ -4039,7 +4458,7 @@ int getZDtable(DEVINFORMATION *pDevInfo, DEVSELINFO DevSelInfo, int depthHeight,
     g_maxNear = 0xfff;
     g_maxFar = 0;
 
-    CT_DEBUG("[%s][%d]Enter to calac mxaFar and maxNear...\n", __func__, __LINE__);
+    if (DEBUG_LOG) CT_DEBUG("[%s][%d]Enter to calac mxaFar and maxNear...\n", __func__, __LINE__);
     for (int i = 0 ; i < APC_ZD_TABLE_FILE_SIZE_11_BITS ; ++i) {
         if ((i * 2) == APC_ZD_TABLE_FILE_SIZE_11_BITS)
             break;
@@ -4049,7 +4468,7 @@ int getZDtable(DEVINFORMATION *pDevInfo, DEVSELINFO DevSelInfo, int depthHeight,
             g_maxFar = std::max<unsigned short>(g_maxFar, nZValue);
         }
     }
-    CT_DEBUG("[%s][%d]Leave to calac mxaFar and maxNear...\n", __func__, __LINE__);
+    if (DEBUG_LOG) CT_DEBUG("[%s][%d]Leave to calac mxaFar and maxNear...\n", __func__, __LINE__);
     
     if (g_maxNear > g_maxFar)
         g_maxNear = g_maxFar;
@@ -4155,13 +4574,14 @@ void UpdateZ14DisplayImage_DIB24(RGBQUAD *pColorPaletteZ14, unsigned char *pDept
         pDL += nBPS;
     }
 }
-
 //e:[eys3D] 20200615 implement ZD table
 
 char* PidToModuleName(unsigned short pid)
 {
-    if ((pid == APC_PID_8036) || (pid == APC_PID_MIPI_8036)) {
+    if (pid == APC_PID_8036) {
         return "EX8036";
+    } else if (pid == APC_PID_MIPI_8036) {
+        return "EX8036-MIPI";
     } else if (pid == APC_PID_8037) {
         return "EX8037";
     } else if (pid == APC_PID_8052) {
@@ -4183,7 +4603,7 @@ int get_product_name(char *path, char *out)
     char buffer[128];
     int i = 0;
 
-    f = fopen(path, "r" );
+    f = fopen(path, "r");
     if (!f) {
         CT_DEBUG("Could not open %s\n", path);
         return -1;
@@ -4198,7 +4618,7 @@ int get_product_name(char *path, char *out)
     out[i] = ':';
     i++;
     out[i] = '\0';
-    fclose( f );
+    fclose(f);
 
     return 0;
 }
@@ -4289,6 +4709,22 @@ static int TransformDepthDataType(int *nDepthDataType, bool bRectifyData)
         *nDepthDataType += APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET;
     }
 
+    //Donkey
+    if ((gCameraPID == APC_PID_8036) && (gDepthWidth == 320 && gDepthHeight == 180)) {
+        *nDepthDataType += APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET;
+        if (!IsInterleaveMode()) {
+            *nDepthDataType += APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET;
+        }
+    }
+
+    //Donkey
+    if ((gCameraPID == APC_PID_80362) && (gDepthWidth == 320 && gDepthHeight == 180)) {
+        *nDepthDataType += APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET;
+        if (!IsInterleaveMode()) {
+            *nDepthDataType += APC_DEPTH_DATA_SCALE_DOWN_MODE_OFFSET;
+        }
+    }
+
     if (IsInterleaveMode()) *nDepthDataType += APC_DEPTH_DATA_INTERLEAVE_MODE_OFFSET;
 
     CT_DEBUG("gCameraPID: 0x%04x\n", gCameraPID);
@@ -4305,7 +4741,7 @@ static void *pfunc_thread_close(void *arg)
         if (EYSD) {
             ret = APC_CloseDevice(EYSD, GetDevSelectIndexPtr());
             if (ret == APC_OK) {
-                CT_DEBUG("APC_CloseDevice() Success!\n");
+                if (DEBUG_LOG) CT_DEBUG("APC_CloseDevice() Success!\n");
             } else {
                 CT_DEBUG("APC_CloseDevice() Fail! (%d)\n", ret);
                 error_msg(ret);
@@ -4620,7 +5056,7 @@ static int error_msg(int error)
 
 //s:[eys3D] 20200623, auto config video mode for Hypatia project
 void setHypatiaVideoMode(int mode) {
-        int ret = 0;
+        int ret = APC_OK;
 
         if (APC_SetupBlock(EYSD, GetDevSelectIndexPtr(), true) != 0) {
             CT_DEBUG("Setup Blocking Fail!\n");
@@ -4723,7 +5159,7 @@ void setHypatiaVideoMode(int mode) {
 
         ret = APC_SetDepthDataType(EYSD, GetDevSelectIndexPtr(), gDepthDataType); //4 ==> 11 bits
         if (ret == APC_OK) {
-            CT_DEBUG("APC_SetDepthData() Success!\n");
+            if (DEBUG_LOG) CT_DEBUG("APC_SetDepthData() Success!\n");
         } else {
             CT_DEBUG("APC_SetDepthData() Fail! (%d)\n", ret);
             print_APC_error(ret);
@@ -4749,7 +5185,7 @@ int setupIR(unsigned short IRvalue)
     } else {
         m_nIRValue = IRvalue;
     }
-    CT_DEBUG("IR range, IR Min: %d, IR Max: %d, set IR Value: %d\n", m_nIRMin, m_nIRMax, m_nIRValue);
+    if (DEBUG_LOG) CT_DEBUG("IR range, IR Min: %d, IR Max: %d, set IR Value: %d\n", m_nIRMin, m_nIRMax, m_nIRValue);
 
     if (m_nIRValue != 0) {
         ret = APC_SetIRMode(EYSD, GetDevSelectIndexPtr(), 0x63); // 6 bits on for opening both 6 ir
@@ -4886,6 +5322,122 @@ static void *set_global_gain_test_func(void *arg)
     return NULL;
 }
 
+
+static void *get_analog_gain_test_func(void *arg)
+{
+    int ret = APC_OK;
+    float fGain = 0.0f;
+    AE_STATUS AEStatus;
+
+    ret = APC_GetAEStatus(EYSD, GetDevSelectIndexPtr(), &AEStatus);
+    if (ret != APC_OK) {
+        CT_DEBUG("Failed to call APC_GetAEStatus()(%d)\n", ret);
+    } else {
+        CT_DEBUG("Call APC_GetAEStatus() (%d, %s)\n", ret, AEStatus == AE_ENABLE ? "ENABLE" : "DISABLE");
+    }
+
+    ret = APC_GetAnalogGain(EYSD, GetDevSelectIndexPtr(), SENSOR_BOTH, &fGain);
+    if (ret != APC_OK) {
+        CT_DEBUG("Failed to call APC_GetAnalogGain()(%d)\n", ret);
+    } else {
+        CT_DEBUG("GetAnalogGain: (%f)\n", fGain);
+    }
+
+    return NULL;
+}
+
+static void *set_analog_gain_test_func(void *arg)
+{
+    int ret = APC_OK;
+    float fGain = 0.0f;
+    AE_STATUS AEStatus;
+
+    ret = APC_DisableAE(EYSD, GetDevSelectIndexPtr());
+    if (ret != APC_OK) {
+        CT_DEBUG("Failed to call APC_DisableAE()(%d)\n", ret);
+    } else {
+        CT_DEBUG("Call APC_DisableAE()(%d)\n", ret);
+    }
+
+    get_analog_gain_test_func(NULL);
+
+    CT_DEBUG("Please Input AnalogGain: ");
+    scanf("%f", &fGain);
+    CT_DEBUG("Your input AnalogGain is %f\n", fGain);
+
+    ret = APC_SetAnalogGain(EYSD, GetDevSelectIndexPtr(), SENSOR_BOTH, fGain);
+    if (ret != APC_OK) {
+        CT_DEBUG("Failed to call APC_SetAnalogGain()(%d)\n", ret);
+    } else {
+        ret = APC_GetAnalogGain(EYSD, GetDevSelectIndexPtr(), SENSOR_BOTH, &fGain);
+        if (ret != APC_OK) {
+            CT_DEBUG("Failed to call APC_GetAnalogGain()(%d)\n", ret);
+        } else {
+            CT_DEBUG("GetAnalogGain: (%f)\n", fGain);
+        }
+    }
+
+    return NULL;
+}
+
+
+static void *get_digital_gain_test_func(void *arg)
+{
+    int ret = APC_OK;
+    float fGain = 0.0f;
+    AE_STATUS AEStatus;
+
+    ret = APC_GetAEStatus(EYSD, GetDevSelectIndexPtr(), &AEStatus);
+    if (ret != APC_OK) {
+        CT_DEBUG("Failed to call APC_GetAEStatus()(%d)\n", ret);
+    } else {
+        CT_DEBUG("Call APC_GetAEStatus() (%d, %s)\n", ret, AEStatus == AE_ENABLE ? "ENABLE" : "DISABLE");
+    }
+
+    ret = APC_GetDigitalGain(EYSD, GetDevSelectIndexPtr(), SENSOR_BOTH, &fGain);
+    if (ret != APC_OK) {
+        CT_DEBUG("Failed to call APC_GetDigitalGain()(%d)\n", ret);
+    } else {
+        CT_DEBUG("GetDigitalGain: (%f)\n", fGain);
+    }
+
+    return NULL;
+}
+
+static void *set_digital_gain_test_func(void *arg)
+{
+    int ret = APC_OK;
+    float fGain = 0.0f;
+    AE_STATUS AEStatus;
+
+    ret = APC_DisableAE(EYSD, GetDevSelectIndexPtr());
+    if (ret != APC_OK) {
+        CT_DEBUG("Failed to call APC_DisableAE()(%d)\n", ret);
+    } else {
+        CT_DEBUG("Call APC_DisableAE()(%d)\n", ret);
+    }
+
+    get_digital_gain_test_func(NULL);
+
+    CT_DEBUG("Please Input DigitalGain: ");
+    scanf("%f", &fGain);
+    CT_DEBUG("Your input DigitalGain is %f\n", fGain);
+
+    ret = APC_SetDigitalGain(EYSD, GetDevSelectIndexPtr(), SENSOR_BOTH, fGain);
+    if (ret != APC_OK) {
+        CT_DEBUG("Failed to call APC_SetDigitalGain()(%d)\n", ret);
+    } else {
+        ret = APC_GetDigitalGain(EYSD, GetDevSelectIndexPtr(), SENSOR_BOTH, &fGain);
+        if (ret != APC_OK) {
+            CT_DEBUG("Failed to call APC_GetDigitalGain()(%d)\n", ret);
+        } else {
+            CT_DEBUG("GetDigitalGain: (%f)\n", fGain);
+        }
+    }
+
+    return NULL;
+}
+
 static void *get_property_bar_info_func(void *arg)
 {
     int ret = APC_OK;
@@ -4903,27 +5455,27 @@ static void *get_property_bar_info_func(void *arg)
 
     ret = APC_GetCTPUSupportList(EYSD, GetDevSelectIndexPtr(), CT_PROPERTY_ID, &support_list);
     if (ret == APC_OK) {
-        CT_DEBUG("CT Bit Map: [0x%04x]\n", support_list);
+        if (DEBUG_LOG) CT_DEBUG("CT Bit Map: [0x%04x]\n", support_list);
     } else {
         CT_DEBUG("Failed to call APC_GetCTPUSupportList()(%d, %d)\n", CT_PROPERTY_ID, ret);
         goto EXIT;
     }
 #ifdef CT_DEBUG_ENABLE
     for (i = 0; i < CT_CTRL_SEL_NUM; i++) {
-        printf("%45s: [%s]\n", gCtCtrlSelectors[i], ((1 << i) & support_list) ? "*" : " ");
+        if (DEBUG_LOG) printf("%45s: [%s]\n", gCtCtrlSelectors[i], ((1 << i) & support_list) ? "*" : " ");
     }
 #endif
 
     ret = APC_GetCTPUSupportList(EYSD, GetDevSelectIndexPtr(), PU_PROPERTY_ID, &support_list);
     if (ret == APC_OK) {
-        CT_DEBUG("PU Bit Map: [0x%04x]\n", support_list);
+        if (DEBUG_LOG) CT_DEBUG("PU Bit Map: [0x%04x]\n", support_list);
     } else {
         CT_DEBUG("Failed to call APC_GetCTPUSupportList()(%d, %d)\n", PU_PROPERTY_ID, ret);
         goto EXIT;
     }
 #ifdef CT_DEBUG_ENABLE
     for (i = 0; i < PU_CTRL_SEL_NUM; i++) {
-        printf("%45s: [%s]\n", gPuCtrlSelectors[i], ((1 << i) & support_list) ? "*" : " ");
+        if (DEBUG_LOG) printf("%45s: [%s]\n", gPuCtrlSelectors[i], ((1 << i) & support_list) ? "*" : " ");
     }
 #endif
 
@@ -5120,6 +5672,130 @@ EXIT:
     return NULL;
 }
 
+#define MIPI_POINT_CLOUD_MAX_CNT 1
+static void *mipi_point_cloud_test_func(void *arg) 
+{
+    int ret = APC_OK;
+    int64_t cur_tv_sec = 0, cur_tv_usec = 0;
+    int cur_serial_num = -1, cur_depth_serial_num = -1;
+    unsigned int count = 0;
+    bool bFirstReceived = true;
+    uint8_t *pPointCloudRGB = NULL;
+    float *pPointCloudXYZ = NULL;
+
+    (void)arg;
+
+    if (gSplitImage) {
+        CT_DEBUG("Depth Image: [%d x %d @ %d]\n", gDepthWidth, gDepthHeight, gActualFps);
+        if(gDepthImgBuf == NULL) {
+            gDepthImgBuf = (uint8_t*)calloc(2 * gDepthWidth * gDepthHeight, sizeof(uint8_t));
+        }
+
+        CT_DEBUG("Color Image: [%d x %d @ %d]\n", gColorWidth, gColorHeight, gActualFps);
+        if (gColorImgBuf == NULL) {
+            gColorImgBuf = (uint8_t*)calloc(2 * gColorWidth * gColorHeight , sizeof(uint8_t));
+        }
+
+        if (gColorRGBImgBuf == NULL) {
+            gColorRGBImgBuf = (uint8_t*)calloc(3 * gColorWidth * gColorHeight, sizeof(uint8_t));
+        }
+
+        if (gDepthImgBuf == NULL || gColorImgBuf == NULL || gColorRGBImgBuf == NULL) {
+            CT_DEBUG("Failed to alloc gDepthImageBuf or gColorImgBuf or gColorRGBImgBuf\n");
+            goto exit;
+        }
+    } else {
+        CT_DEBUG("Color Image: [(%d + %d) x %d @ %d]\n", gColorWidth, gDepthWidth, gColorHeight, gActualFps);
+        if (gColorImgBuf == NULL) {
+            gColorImgBuf = (uint8_t*)calloc(2 * (gColorWidth + gDepthWidth) * gColorHeight, sizeof(uint8_t));
+        }
+
+        if (gColorImgBuf == NULL) {
+            CT_DEBUG("Failed to alloc gColorImgBuf\n");
+            goto exit;
+        }
+    }
+
+    pPointCloudRGB = (uint8_t *)malloc(3 * gDepthWidth * gDepthHeight * sizeof(uint8_t));
+    pPointCloudXYZ = (float *)malloc(3 * gDepthWidth * gDepthHeight * sizeof(float));
+    if(pPointCloudRGB == NULL || pPointCloudXYZ == NULL) {
+        CT_DEBUG("Failed to alloc for pPointCloudRGB or pPointCloudXYZ\n");
+        goto exit;
+    }
+
+    while (count < MIPI_POINT_CLOUD_MAX_CNT) {
+        if (gSplitImage) {
+            ret = APC_Get2ImageWithTimestamp(EYSD, GetDevSelectIndexPtr(),
+                                             (uint8_t*)gColorImgBuf, (uint8_t *)gDepthImgBuf,
+                                             &gColorImgSize, &gDepthImgSize,
+                                             &cur_serial_num, &cur_depth_serial_num,
+                                             gDepthDataType, &cur_tv_sec, &cur_tv_usec);
+            save_file(gColorImgBuf, gColorImgSize, gColorWidth, gColorHeight, gColorFormat, true);
+            save_file(gDepthImgBuf, gDepthImgSize, gDepthWidth, gDepthHeight, 2, true);
+        } else {
+            ret = APC_Get2ImageWithTimestampNoSplit(EYSD, GetDevSelectIndexPtr(),
+                                                    (uint8_t*)gColorImgBuf, &gColorImgSize, &gColorSerial,
+                                                    &cur_tv_sec, &cur_tv_usec, snapShot_mipi);
+            save_file(gColorImgBuf, gColorImgSize, gColorWidth + gDepthWidth, gColorHeight, gColorFormat, true);
+        }
+        if (ret == APC_OK) {
+            if (bFirstReceived) {
+                bFirstReceived = false;
+            }
+
+            if (gSplitImage) {
+                convert_yuv_to_rgb_buffer(gColorImgBuf, gColorRGBImgBuf, gColorWidth, gColorHeight, gSplitImage);
+                save_file(gColorRGBImgBuf, 3 * gColorWidth * gColorHeight, gColorWidth, gColorHeight, gColorFormat, false);
+                ret = getPointCloud(EYSD, GetDevSelectIndexPtr(),
+                                    gColorRGBImgBuf, gColorWidth, gColorHeight,
+                                    gDepthImgBuf, gDepthWidth, gDepthHeight, gDepthDataType,
+                                    pPointCloudRGB, pPointCloudXYZ, g_maxNear, g_maxFar);
+            } else {
+                ret = getPointCloud(EYSD, GetDevSelectIndexPtr(),
+                                    gColorImgBuf, gColorWidth, gColorHeight,
+                                    gColorImgBuf, gDepthWidth, gDepthHeight, gDepthDataType,
+                                    pPointCloudRGB, pPointCloudXYZ, g_maxNear, g_maxFar);
+                save_file(pPointCloudRGB, 3 * gColorWidth * gColorHeight, gColorWidth, gColorHeight, gColorFormat, false);
+            }
+        } else {
+            CT_DEBUG("Failed to call APC_Get2ImageWithTimestamp()!\n");
+            if (ret == APC_DEVICE_TIMEOUT) {
+                CT_DEBUG("Getting image is timeout!\n");
+                usleep(1 * 1000);
+            }
+        }
+        count++;
+    }
+
+exit:
+    if (gDepthImgBuf != NULL) {
+        free(gDepthImgBuf);
+        gDepthImgBuf = NULL;
+    }
+
+    if (gColorImgBuf != NULL) {
+        free(gColorImgBuf);
+        gColorImgBuf = NULL;
+    }
+
+    if (gColorRGBImgBuf != NULL) {
+        free(gColorRGBImgBuf);
+        gColorRGBImgBuf = NULL;
+    }
+
+    if (pPointCloudRGB != NULL) {
+        free(pPointCloudRGB);
+        pPointCloudRGB = NULL;
+    }
+
+    if (pPointCloudXYZ != NULL) {
+        free(pPointCloudXYZ);
+        pPointCloudXYZ = NULL;
+    }
+ 
+    return NULL;
+}
+
 #define THERMAL_SENSOR_ID 0x90 // (A0, A1, A2) = (0, 0, 0) =>  Target Adderss = 1001 000
 static void *get_thermal_sensor_2075_temperature_test_func(void *arg)
 {   
@@ -5146,4 +5822,362 @@ static void *get_thermal_sensor_2075_temperature_test_func(void *arg)
     }
 
     return NULL;
+}
+
+#define IMU_READ_CNT 64
+#define IMU_DATA_LEN 32
+
+const char READ_OUTPUT_STAUS[8] =   {0x00, 0x11, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+const char DISABLE_OUTPUT[8] =      {0x00, 0x11, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00};
+const char ENABLE_OUTPUT[8] =       {0x00, 0x11, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00};
+const char READ_OUTPUT_FORMAT[8] =  {0x00, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+
+enum DATA_FORMAT{
+    RAW_DATA_WITHOUT_OFFSET = 1,
+    RAW_DATA_WITH_OFFSET,
+    OFFSET_DATA,
+    DMP_DATA_WITHOT_OFFSET,
+    DMP_DATA_WITH_OFFSET
+};
+
+struct SetFeatureDATA_Item {
+    const char* pData;
+    int nDataLength;
+};
+
+DATA_FORMAT gCurrentIMUFormat;
+
+void SendFeatureReport(hid_device *device, const char* pData, size_t data_lenght)
+{
+    if (device) {
+        unsigned char *pBuf = nullptr;
+        pBuf = (unsigned char *)calloc(data_lenght + 1, sizeof(unsigned char));
+        pBuf[0] = {0x0};
+        memcpy(pBuf + 1, pData, data_lenght);
+        hid_send_feature_report(device, pBuf, data_lenght + 1);
+        free(pBuf);
+    }
+}
+
+void GetFeatureReport(hid_device *device, char* pData, size_t data_lenght)
+{
+    if (device) {
+        unsigned char *pBuf = nullptr;
+        pBuf = (unsigned char *)calloc(data_lenght + 1, sizeof(unsigned char));
+        pBuf[0] = {0x0};
+        hid_get_feature_report(device, pBuf, data_lenght + 1);
+        memcpy(pData, pBuf + 1, data_lenght);
+        free(pBuf);
+    }
+}
+
+int GetIMUDataOutputByte(DATA_FORMAT format)
+{
+    switch (format) {
+        case RAW_DATA_WITHOUT_OFFSET:
+        case RAW_DATA_WITH_OFFSET:
+        case OFFSET_DATA:
+            return 27;
+        case DMP_DATA_WITHOT_OFFSET:
+        case DMP_DATA_WITH_OFFSET:
+            return 58;
+        default: return 0;
+    }
+}
+
+void ReadDataOutputFormat(hid_device *device)
+{
+    DATA_FORMAT nCurrentIMUFormat;
+    char status[8] = {0};
+
+    SetFeatureDATA_Item setFeatureData = {&READ_OUTPUT_FORMAT[0], (sizeof(READ_OUTPUT_FORMAT) / sizeof(READ_OUTPUT_FORMAT[0]))};
+
+    SendFeatureReport(device, setFeatureData.pData, setFeatureData.nDataLength);
+    GetFeatureReport(device, &status[0], setFeatureData.nDataLength);
+    gCurrentIMUFormat = status[0] != 0 ? (DATA_FORMAT)status[0] : RAW_DATA_WITHOUT_OFFSET;
+    CT_DEBUG("CurrentIMUFormat = %x\n", gCurrentIMUFormat);
+}
+
+void EnableDataOutout(hid_device *device, bool bIsEnbale)
+{
+    SetFeatureDATA_Item setFeatureData;
+
+    if (bIsEnbale) {
+        setFeatureData = {&ENABLE_OUTPUT[0], (sizeof(ENABLE_OUTPUT) / sizeof(ENABLE_OUTPUT[0]))};
+    } else {
+        setFeatureData = {&DISABLE_OUTPUT[0], (sizeof(DISABLE_OUTPUT) / sizeof(DISABLE_OUTPUT[0]))};
+    }
+
+    SendFeatureReport(device, setFeatureData.pData, setFeatureData.nDataLength);
+}
+
+int ReadIMURawData(hid_device *device)
+{
+    unsigned char imuRawData[IMU_DATA_LEN] = {0};
+
+    if (!device) {
+        return APC_NullPtr;
+    }
+
+    int ret = hid_read(device, imuRawData, sizeof(imuRawData));
+
+    if (ret < APC_OK) {
+        CT_DEBUG("Failed to call hid_read()(%d)\n", ret);
+    } else {
+        int nIMUDataByte = GetIMUDataOutputByte(gCurrentIMUFormat);
+        for (int i = 0; i < IMU_DATA_LEN; i++) {
+            printf("%02x ", imuRawData[i]);
+        }
+        printf("\n");
+    }
+
+    return ret;
+}
+
+static void *imu_test_func_for_YX8062(void *arg)
+{
+    int ret = APC_OK;
+    unsigned short nVID = 0x1E4E, nPID = 0x0163;
+
+    hid_init();
+
+    hid_device_info *deviceInfo = hid_enumerate(nVID, nPID);
+    hid_device_info *headInfo = deviceInfo;
+    if (deviceInfo) {
+        hid_device *device = hid_open_path(deviceInfo->path);
+        CT_DEBUG("Find YX8062 IMU Device (VID, PID, Path) = (0x%04x, 0x%04x, %s)\n", nVID, nPID, deviceInfo->path);
+        if (device) {
+            hid_set_nonblocking(device, true);
+            ReadDataOutputFormat(device);
+            EnableDataOutout(device, true);
+            for (int i = 0; i < IMU_READ_CNT; i++) {
+                printf("IMURawData#%02d = ", i);
+                ReadIMURawData(device);
+                usleep(5 * 1000); // 200HZ
+            }
+
+            hid_close(device);
+            hid_exit();
+        }
+    }
+
+    return NULL;
+}
+
+static int keycode_of_key_being_pressed() {
+  FILE *kbd;
+  glob_t kbddev;                                   // Glob structure for keyboard devices
+  glob("/dev/input/by-path/*-kbd", 0, 0, &kbddev); // Glob select all keyboards
+  int keycode = -1;                                // keycode of key being pressed
+  for (int i = 0; i < kbddev.gl_pathc ; i++ ) {    // Loop through all the keyboard devices ...
+    if (!(kbd = fopen(kbddev.gl_pathv[i], "r"))) { // ... and open them in turn (slow!)
+      perror("Run as root to read keyboard devices");
+      exit(1);
+    }
+
+    char key_map[KEY_MAX/8 + 1];          // Create a bit array the size of the number of keys
+    memset(key_map, 0, sizeof(key_map));  // Fill keymap[] with zero's
+    ioctl(fileno(kbd), EVIOCGKEY(sizeof(key_map)), key_map); // Read keyboard state into keymap[]
+    for (int k = 0; k < KEY_MAX/8 + 1 && keycode < 0; k++) { // scan bytes in key_map[] from left to right
+      for (int j = 0; j <8 ; j++) {       // scan each byte from lsb to msb
+        if (key_map[k] & (1 << j)) {      // if this bit is set: key was being pressed
+          keycode = 8*k + j ;             // calculate corresponding keycode
+          break;                          // don't scan for any other keys
+        }
+      }
+    }
+
+    fclose(kbd);
+    if (keycode)
+      break;                              // don't scan for any other keyboards
+  }
+  return keycode;
+}
+
+static void test_pause_resume_streaming(void)
+{
+    pthread_t kbhit_thread_id;
+    pthread_attr_t kbhit_thread_attr;
+    struct sched_param kbhit_thread_param;
+
+    pthread_t color_thread_id;
+    pthread_attr_t color_thread_attr;
+    struct sched_param color_thread_param;
+
+    pthread_t depth_thread_id;
+    pthread_attr_t depth_thread_attr;
+    struct sched_param depth_thread_param;
+
+    pthread_attr_init(&kbhit_thread_attr);
+    pthread_attr_getschedparam (&kbhit_thread_attr, &kbhit_thread_param);
+    kbhit_thread_param.sched_priority = sched_get_priority_max(SCHED_FIFO) - 1;
+    pthread_attr_setschedparam(&kbhit_thread_attr, &kbhit_thread_param);
+
+    pthread_attr_init(&color_thread_attr);
+    pthread_attr_setschedpolicy(&color_thread_attr, SCHED_FIFO);
+    pthread_attr_getschedparam (&color_thread_attr, &color_thread_param);
+    color_thread_param.sched_priority = sched_get_priority_max(SCHED_FIFO) - 1;
+    pthread_attr_setschedparam(&color_thread_attr, &color_thread_param);
+
+    pthread_attr_init(&depth_thread_attr);
+    pthread_attr_setschedpolicy(&depth_thread_attr, SCHED_FIFO);
+    pthread_attr_getschedparam (&depth_thread_attr, &depth_thread_param);
+    depth_thread_param.sched_priority = sched_get_priority_max(SCHED_FIFO) - 1;
+    pthread_attr_setschedparam(&depth_thread_attr, &depth_thread_param);
+
+    pthread_create(&kbhit_thread_id, &kbhit_thread_attr, pfunc_thread_keyboard_handler, NULL);
+    pthread_create(&color_thread_id, &color_thread_attr, test_color_time_stamp, NULL);
+    pthread_create(&depth_thread_id, &depth_thread_attr, test_depth_time_stamp, NULL);
+
+    pthread_join(kbhit_thread_id, NULL);
+    pthread_join(depth_thread_id, NULL);
+    pthread_join(color_thread_id, NULL);
+
+}
+
+static void *pfunc_thread_keyboard_handler(void *arg) {
+    //setvbuf(stdout, NULL, _IONBF, 0); // Set stdout unbuffered
+    CT_DEBUG("===================================================================================\n");
+    CT_DEBUG("== pressed KEY_P:Pause image streaming; KEY_R:Resume image streaming; KEY_Q:Exit ==\n");
+    CT_DEBUG("===================================================================================\n");
+    while (1)    {
+        int key = keycode_of_key_being_pressed();
+        //printf((key < 0 ?  "no key\n" : "keycode: %d\n"), key);
+        if (key == KEY_Q) {
+            CT_DEBUG("\nKEY_Q:Exit\n");
+            bKeepStreaming = false;
+            break;
+        } else if (key == KEY_P) {
+            CT_DEBUG("\nKEY_P:Pause image streaming\n");
+            pause_streaming();
+        } else if (key == KEY_R) {
+            CT_DEBUG("\nKEY_R:Resume image streaming\n");
+            resume_streaming();
+        } else {
+            //CT_DEBUG("keycode:%d\n", key);
+        }
+        sleep(0.5);
+    }
+    CT_DEBUG("\nexit thread_keyboard_handler\n");
+    pthread_exit(NULL);
+}
+
+static void pause_streaming()
+{
+    int flag = 0;
+    flag |= FG_Address_2Byte;
+    flag |= FG_Value_2Byte;
+    SENSORMODE_INFO SensorMode = SENSOR_BOTH;
+    unsigned short value = 0;
+    CT_DEBUG("pause_streaming:0x%02x\n", gCameraPID);
+
+    if (gCameraPID == APC_PID_8036) {
+        if (APC_GetSensorRegister(EYSD, GetDevSelectIndexPtr(), 0x30, 0x301a, &value, flag, SensorMode) != APC_OK)
+        {
+            CT_DEBUG("failed to pause streaming - get original sensor value failed!\n");
+        } else {
+            value = high_low_exchange(value);
+            CT_DEBUG("pause streaming get original sensor value:0x%04x\n", value);
+            BIT_CLEAR(value, 2);
+            CT_DEBUG("pause streaming set sensor value:0x%04x\n", value);
+            if (APC_SetSensorRegister(EYSD, GetDevSelectIndexPtr(), 0x30, 0x301a, value, flag,
+                                      SensorMode) != APC_OK) {
+                CT_DEBUG("failed to pause streaming - set sensor value failed!\n");
+            } else {
+                if (APC_GetSensorRegister(EYSD, GetDevSelectIndexPtr(), 0x30, 0x301a, &value, flag,
+                                          SensorMode) != APC_OK) {
+                    CT_DEBUG("failed to pause streaming - get after sensor value failed!\n");
+                } else {
+                    value = high_low_exchange(value);
+                    CT_DEBUG("pause streaming get after sensor value:0x%04x\n", value);
+                }
+            }
+        }
+    } else if ((gCameraPID == APC_PID_80362)) {
+        //80362
+        if (APC_GetSensorRegister(EYSD, GetDevSelectIndexPtr(), 0x30, 0x301a, &value, flag, SensorMode) != APC_OK)
+        {
+            CT_DEBUG("failed to pause streaming - get original sensor value failed!\n");
+        } else {
+            value = high_low_exchange(value);
+            CT_DEBUG("pause streaming get original sensor value:0x%04x\n", value);
+            BIT_CLEAR(value, 8);
+            CT_DEBUG("pause streaming set sensor value:0x%04x\n", value);
+            if (APC_SetSensorRegister(EYSD, GetDevSelectIndexPtr(), 0x30, 0x301a, value, flag,
+                                      SensorMode) != APC_OK) {
+                CT_DEBUG("failed to pause streaming - set sensor value failed!\n");
+            } else {
+                if (APC_GetSensorRegister(EYSD, GetDevSelectIndexPtr(), 0x30, 0x301a, &value, flag,
+                                          SensorMode) != APC_OK) {
+                    CT_DEBUG("failed to pause streaming - get after sensor value failed!\n");
+                } else {
+                    value = high_low_exchange(value);
+                    CT_DEBUG("pause streaming get after sensor value:0x%04x\n", value);
+                }
+            }
+        }
+    }
+}
+
+static void resume_streaming()
+{
+    int flag = 0;
+    flag |= FG_Address_2Byte;
+    flag |= FG_Value_2Byte;
+    SENSORMODE_INFO SensorMode = SENSOR_BOTH;
+    unsigned short value = 0;
+    CT_DEBUG("resume_streaming:0x%02x\n", gCameraPID);
+
+    if (gCameraPID == APC_PID_8036) {
+        if (APC_GetSensorRegister(EYSD, GetDevSelectIndexPtr(), 0x30, 0x301a, &value, flag, SensorMode) != APC_OK)
+        {
+            CT_DEBUG("failed to resume streaming - get original sensor value failed!\n");
+        } else {
+            value = high_low_exchange(value);
+            CT_DEBUG("resume streaming get original sensor value:0x%04x\n", value);
+            BIT_SET(value, 2);
+            CT_DEBUG("resume streaming set sensor value:0x%04x\n", value);
+            if (APC_SetSensorRegister(EYSD, GetDevSelectIndexPtr(), 0x30, 0x301a, value, flag, SensorMode) != APC_OK) {
+                CT_DEBUG("failed to resume streaming - set sensor value failed!\n");
+            } else {
+                if (APC_GetSensorRegister(EYSD, GetDevSelectIndexPtr(), 0x30, 0x301a, &value, flag, SensorMode) != APC_OK) {
+                    CT_DEBUG("failed to resume streaming - get after sensor value failed!\n");
+                } else {
+                    value = high_low_exchange(value);
+                    CT_DEBUG("resume streaming get after sensor value:0x%04x\n", value);
+                }
+            }
+        }
+    } else if ((gCameraPID == APC_PID_80362)) {
+        //80362
+        if (APC_GetSensorRegister(EYSD, GetDevSelectIndexPtr(), 0x30, 0x301a, &value, flag, SensorMode) != APC_OK)
+        {
+            CT_DEBUG("failed to resume streaming - get original sensor value failed!\n");
+        } else {
+            value = high_low_exchange(value);
+            CT_DEBUG("resume streaming get original sensor value:0x%04x\n", value);
+            BIT_SET(value, 8);
+            CT_DEBUG("resume streaming set sensor value:0x%04x\n", value);
+            if (APC_SetSensorRegister(EYSD, GetDevSelectIndexPtr(), 0x30, 0x301a, value, flag, SensorMode) != APC_OK) {
+                CT_DEBUG("failed to resume streaming - set sensor value failed!\n");
+            } else {
+                if (APC_GetSensorRegister(EYSD, GetDevSelectIndexPtr(), 0x30, 0x301a, &value, flag, SensorMode) != APC_OK) {
+                    CT_DEBUG("failed to resume streaming - get after sensor value failed!\n");
+                } else {
+                    value = high_low_exchange(value);
+                    CT_DEBUG("resume streaming get after sensor value:0x%04x\n", value);
+                }
+            }
+        }
+    }
+}
+
+static int high_low_exchange(int data)
+{
+    int data_low;
+    int data_high;
+    data_low = (data & 0xff00) >> 8;
+    data_high = (data & 0x00ff) << 8;
+    int exchange_data = data_high + data_low;
+    return exchange_data;
 }

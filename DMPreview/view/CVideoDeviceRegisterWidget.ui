@@ -250,8 +250,24 @@
          </item>
          <item>
           <widget class="QCheckBox" name="checkBox_value_2_byte">
+           <property name="maximumSize">
+            <size>
+             <width>100</width>
+             <height>16777215</height>
+            </size>
+           </property>
            <property name="text">
             <string>2 Byte</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QCheckBox" name="checkBox_swap_bytes_order">
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+           <property name="text">
+            <string>Swap bytes order(Read Value)</string>
            </property>
           </widget>
          </item>
@@ -292,28 +308,28 @@
       <item>
        <widget class="QRadioButton" name="radioButton_sensor_1">
         <property name="text">
-         <string>Sensor 1</string>
+         <string>Sensor &amp;1</string>
         </property>
        </widget>
       </item>
       <item>
        <widget class="QRadioButton" name="radioButton_sensor_2">
         <property name="text">
-         <string>Sensor 2</string>
+         <string>Sensor &amp;2</string>
         </property>
        </widget>
       </item>
       <item>
        <widget class="QRadioButton" name="radioButton_sensor_3">
         <property name="text">
-         <string>Sensor 3</string>
+         <string>Sensor &amp;3</string>
         </property>
        </widget>
       </item>
       <item>
        <widget class="QRadioButton" name="radioButton_sensor_4">
         <property name="text">
-         <string>Sensor 4</string>
+         <string>Sensor &amp;4</string>
         </property>
        </widget>
       </item>

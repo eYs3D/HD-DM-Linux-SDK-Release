@@ -8,7 +8,7 @@ endif
 ifeq ($(CPU), NVIDIA)
 	TARGET = test_arm64_tx2
 	LIBS = -L../eSPDI -leSPDI_$(CPU)_64 \
-	       -lrt
+	       -lrt -ludev
 endif
 ifeq ($(CPU), PX30)
 	TARGET = test_arm64_px30
@@ -29,7 +29,16 @@ endif
 CFLAGS = -Wall -W -std=c++11
 LFLAGS = -Wall -W 
 LIBS += -lpthread
-OBJECTS = main.o ColorPaletteGenerator.o RegisterSettings.o PlyWriter.o
+OBJECTS = main.o ColorPaletteGenerator.o RegisterSettings.o PlyWriter.o imu8062/IMUData.o imu8062/CIMUModel.o imu8062/CIMUDeviceManager.o
+
+ifeq ($(CPU), NVIDIA)
+	OBJECTS += hid_udev.o
+else ifeq ($(CPU), X86)
+	OBJECTS += hid_udev.o
+else
+	OBJECTS += hid_libusb.o
+endif
+
 INCPATH = -I../eSPDI
 
 ####### Implicit rules

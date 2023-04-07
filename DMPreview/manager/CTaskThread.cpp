@@ -161,6 +161,9 @@ void CTaskThread::run()
             case CTaskInfo::IMAGE_DATA_RAW_TO_RGB_TRANSFORM:
                 DoImageDataTransform();
                 break;
+            case CTaskInfo::Device_MODEL_UPDATE:
+                DoDeviceModelUpdate();
+                break;
             default:
                 break;
         }
@@ -219,6 +222,12 @@ void CTaskThread::DoColdReset()
     QMutexLocker locker(&mutex);
     CVideoDeviceModel *pModel = static_cast<CVideoDeviceModel *>(m_pTaskInfo->GetParam());
     QTime currentTime = QTime::currentTime();
+
+    if (!pModel->GetAutoReconnectStatus()) {
+        CThreadWorkerManage::GetInstance()->RemoveTask(m_pTaskInfo);
+        return;
+    }
+
 
     if (pModel->GetColdeResetStartTime().secsTo(currentTime) > 10 ||
         pModel->GetColdeResetStartTime().secsTo(currentTime) < 0){
@@ -341,5 +350,14 @@ void CTaskThread::DoImageDataTransform()
 {
     CImageDataModel *pImageDataModel = static_cast<CImageDataModel *>(m_pTaskInfo->GetParam());
     pImageDataModel->TransformRawToRGB();
+    QThread::msleep(10);
+}
+
+void CTaskThread::DoDeviceModelUpdate()
+{
+    CVideoDeviceModel *pModel = static_cast<CVideoDeviceModel *>(m_pTaskInfo->GetParam());
+    if(APC_OK == pModel->UpdateTaskThread()){
+        CThreadWorkerManage::GetInstance()->RemoveTask(m_pTaskInfo);
+    }
     QThread::msleep(10);
 }

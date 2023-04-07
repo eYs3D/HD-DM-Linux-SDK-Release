@@ -23,11 +23,24 @@ public:
     int SetValue(CCameraPropertyModel::CAMERA_PROPERTY type, int nValue);
     int ResetCameraProperty();
 
-    bool IsManuelExposureTimeValid();
+    /**
+     * @brief IsManualExposureValid Manual Exposure Time + Global Analog Digital Gains
+     * In sensor data sheet state that AUTO_EXPOSURE should turn off such that developers
+     * are allowed to set exposure (Time + Gains)
+     * @return if can set manual exposure or not.
+     */
+    bool IsManualExposureValid();
+    bool IsManualGainSupport();
+    bool IsManualGlobalGainSetSupport();
     float GetManuelExposureTimeMs();
     void SetManuelExposureTimeMs(float fMs);
     float GetManuelGlobalGain();
     void SetManuelGlobalGain(float fGlobalGain);
+    float GetManualAnalogGain();
+    void SetManualAnalogGain(float fAnalogGain);
+    float GetManualDigitalGain();
+    void SetManualDigitalGain(float fDigitalGain);
+    QStringList GetManualGainRegisterValueStringList();
     float SetAETarget(int index);
 
 private:

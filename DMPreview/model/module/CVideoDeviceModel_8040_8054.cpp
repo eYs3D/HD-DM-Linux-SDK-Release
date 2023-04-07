@@ -124,6 +124,7 @@ int CVideoDeviceModel_8040_8054::PrepareOpenDevice()
         unsigned int nBufferSize = m_imageData[STREAM_KOLOR].nWidth * m_imageData[STREAM_KOLOR].nHeight * nBytePerPixel;
         if (m_imageData[STREAM_KOLOR].imageBuffer.size() != nBufferSize){
             m_imageData[STREAM_KOLOR].imageBuffer.resize(nBufferSize);
+            m_imageData[STREAM_KOLOR].processedBuffer.resize(nBufferSize);
         }
         memset(&m_imageData[STREAM_KOLOR].imageBuffer[0], 0, sizeof(nBufferSize));
 

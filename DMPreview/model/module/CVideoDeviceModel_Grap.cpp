@@ -133,6 +133,7 @@ int CVideoDeviceModel_Grap::PrepareOpenDevice()
             unsigned int nBufferSize = m_imageData[type].nWidth * m_imageData[type].nHeight * nBytePerPixel;
             if (m_imageData[type].imageBuffer.size() != nBufferSize){
                 m_imageData[type].imageBuffer.resize(nBufferSize);
+                m_imageData[type].processedBuffer.resize(nBufferSize);
             }
             memset(&m_imageData[type].imageBuffer[0], 0, sizeof(nBufferSize));
         }
@@ -162,6 +163,7 @@ int CVideoDeviceModel_Grap::PrepareOpenDevice()
        unsigned int nBufferSize = m_imageData[STREAM_THERMAL].nWidth * m_imageData[STREAM_THERMAL].nHeight * nBytePerPixel;
        if (m_imageData[STREAM_THERMAL].imageBuffer.size() != nBufferSize){
                 m_imageData[STREAM_THERMAL].imageBuffer.resize(nBufferSize);
+                m_imageData[STREAM_THERMAL].processedBuffer.resize(nBufferSize);
         }
         memset(&m_imageData[STREAM_THERMAL].imageBuffer[0], 0, sizeof(nBufferSize));
      }
@@ -438,7 +440,7 @@ int  CVideoDeviceModel_Grap::GetThermalImage(STREAM_TYPE type, int video_w,v4l2 
                                     &m_imageData[type].imageBuffer[0],
                                     length,
                                     m_imageData[type].nWidth, m_imageData[type].nHeight,
-                                    centerTemp, nullptr);
+                                    centerTemp, nullptr, true);
                     }
                     break;
             }

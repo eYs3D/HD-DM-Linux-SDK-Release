@@ -9,6 +9,7 @@ FrameGrabber::FrameGrabber(
 	m_callbackParam(callbackParam)	
 {
     m_threadStart = true;
+    m_mipi_split = true;
     m_checkFrameReadyThread = new std::thread(FrameGrabber::CheckFrameReadyThreadFn, this);
 }
 
@@ -40,6 +41,11 @@ void FrameGrabber::SetFrameFormat(int index, int width, int height, int bytesPer
 	fp.m_height = height;
 }
 
+void FrameGrabber::SetMipiSplit(bool bIsMIPISplit)
+{
+    m_mipi_split = bIsMIPISplit;
+}
+
 void FrameGrabber::Close()
 {
     if (!m_threadStart) return;
@@ -63,28 +69,37 @@ void FrameGrabber::CheckFrameReadyThreadFn(void* pvoid)
         {
             std::lock_guard<std::mutex> lock(pThis->m_mutex_depth);
 
-            if (pThis->m_depth.sn == last_sn /*|| pThis->m_color.data.empty()*/)
-            {
-                synchronized = false;
-            }
-            else
-            {
-                synchronized = true;
+            if (pThis->m_mipi_split) {
+                if (pThis->m_depth.sn == last_sn) {
+                    synchronized = false;
+                } else {
+                    synchronized = true;
 
-                std::lock_guard<std::mutex> lock2(pThis->m_mutex_color);
+                    std::lock_guard<std::mutex> lock2(pThis->m_mutex_color);
 
-                last_sn = pThis->m_depth.sn;
-                color = pThis->m_color;
-                depth = pThis->m_depth;
+                    last_sn = pThis->m_depth.sn;
+                    color = pThis->m_color; // Todo: Memory copy again?
+                    depth = pThis->m_depth; // Todo: Memory copy again?
+                }
+            } else {
+                if (pThis->m_color.sn == last_sn) {
+                    synchronized = false;
+                } else {
+                    synchronized = true;
+
+                    std::lock_guard<std::mutex> lock2(pThis->m_mutex_color);
+
+                    last_sn = pThis->m_color.sn;
+                    color = pThis->m_color; // Todo: Memory copy again?
+                }
             }
         }
-        if (synchronized)
-        {
+        if (synchronized) {
             pThis->m_callbackFn(depth.data, depth.m_width, depth.m_height,
                                 color.data, color.m_width, color.m_height,
                                 last_sn, pThis->m_callbackParam);
-        }
-        else std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        } else
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     return;
 }

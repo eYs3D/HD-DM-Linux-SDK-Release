@@ -321,6 +321,53 @@ void CCameraPropertyModel::SetManuelGlobalGain(float fGlobalGain)
                                                fGlobalGain));
 }
 
+void CCameraPropertyModel::SetManualAnalogGain(float fAnalogGain) {
+    int ret;
+    RETRY_APC_API(ret, APC_SetAnalogGain(CEYSDDeviceManager::GetInstance()->GetEYSD(),
+                                         m_pDeviceSelfInfo,
+                                         SENSOR_BOTH,
+                                         fAnalogGain));
+}
+
+void CCameraPropertyModel::SetManualDigitalGain(float fDigitalGain) {
+    int ret;
+    RETRY_APC_API(ret, APC_SetDigitalGain(CEYSDDeviceManager::GetInstance()->GetEYSD(),
+                                          m_pDeviceSelfInfo,
+                                          SENSOR_BOTH,
+                                          fDigitalGain));
+}
+
+float CCameraPropertyModel::GetManualAnalogGain() {
+    int ret;
+    float fAnalogGain;
+    RETRY_APC_API(ret, APC_GetAnalogGain(CEYSDDeviceManager::GetInstance()->GetEYSD(),
+                                         m_pDeviceSelfInfo,
+                                         SENSOR_BOTH,
+                                         &fAnalogGain));
+    return fAnalogGain;
+}
+
+float CCameraPropertyModel::GetManualDigitalGain() {
+    int ret;
+    float fDigitalGain;
+    RETRY_APC_API(ret, APC_GetDigitalGain(CEYSDDeviceManager::GetInstance()->GetEYSD(),
+                                          m_pDeviceSelfInfo,
+                                          SENSOR_BOTH,
+                                          &fDigitalGain));
+    return fDigitalGain;
+}
+
+QStringList CCameraPropertyModel::GetManualGainRegisterValues() {
+    auto stdStringList = m_pVideoDeviceModel->GetGainRegisterValueStringList();
+    QStringList qStringList;
+
+    for(auto str : stdStringList) {
+        qStringList.push_back(QString::fromStdString(str));
+    }
+
+    return std::move(qStringList);
+}
+
 float CCameraPropertyModel::SetAETargetIndex(int index)
 {
     float EV = 0.0f;
