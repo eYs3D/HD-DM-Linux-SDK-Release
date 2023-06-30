@@ -59,9 +59,15 @@ int CCameraPropertyModel::InitCameraProperty()
         if (bIsCTProperty) {
             RETRY_APC_API(ret, APC_GetCTRangeAndStep(pEYSDI, m_pDeviceSelfInfo, nID,
                                                            &item.nMax, &item.nMin, &item.nStep, &item.nDefault, &item.nFlags));
+            if (ret != APC_OK) {
+                continue;
+            }
         } else {
             RETRY_APC_API(ret, APC_GetPURangeAndStep(pEYSDI, m_pDeviceSelfInfo, nID,
                                                            &item.nMax, &item.nMin, &item.nStep, &item.nDefault, &item.nFlags));
+            if (ret != APC_OK) {
+                continue;
+            }
         }
         RETRY_APC_API(ret, APC_GetDevicePortType(pEYSDI, m_pDeviceSelfInfo, &usbPortType));
 

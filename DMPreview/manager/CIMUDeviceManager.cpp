@@ -37,7 +37,7 @@ std::vector<hid_device *> CIMUDeviceManager::GetDeviceList(unsigned short nVID, 
         while (deviceInfo){
             hid_device *device = hid_open_path(deviceInfo->path);
             if (device){
-                hid_set_nonblocking(device, true);
+                hid_set_nonblocking(device, false);
                 m_hidDeviceMap[info].push_back(std::move(device));
             }
             deviceInfo = deviceInfo->next;

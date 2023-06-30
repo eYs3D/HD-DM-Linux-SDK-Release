@@ -39,6 +39,24 @@ private:
     std::thread mCallbackLooper;
 
 public:
+    struct RTC {
+        uint8_t hour;
+        uint8_t min;
+        uint8_t sec;
+        uint16_t subSecond;
+    };
+
+    struct TimeSync {
+        uint8_t sn;
+        uint8_t time1;
+        uint8_t time2;
+        uint8_t time3;
+        uint8_t time4;
+        uint8_t diff1;
+        uint8_t diff2;
+        uint8_t diff3;
+    };
+
     CIMUModel(CIMUModel &&) = default;
     using Callback = std::function<bool(const IMUData* data)>;
     inline bool isCallbackThreadStart() { return isCallbackStart; }
@@ -57,7 +75,15 @@ public:
                     if(!m_pHandle) return APC_NullPtr;
 
                     int ret = hid_read(m_pHandle, imuRawData, sizeof(imuRawData));
-                    if (ret > 0 && IMU_9_AXIS == GetType()){
+                    if (ret >= 21 /* Hard-code here due to IVY HID document not locked down yet */){
+                        fprintf(stderr, "Raw hex Data++");
+                        for (int i = 0; i < 21; ++i) {
+                            fprintf(stderr, "%02x ", imuRawData[i]);
+                        }
+                        fprintf(stderr,"\n--\n");
+                        mCallbackData.parsePacket_STM_IMU(imuRawData);
+                        mCallback(&mCallbackData);
+                    } else if (ret > 0 && IMU_9_AXIS == GetType()) {
                         mCallbackData.parsePacket_Quaternion(imuRawData);
                         mCallback(&mCallbackData);
                     }
@@ -115,6 +141,11 @@ public:
 
     const char CHECK_FLASH_WRITING_STATUS[8] = { 0x00, 0x1B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     const char START_WRITE_FLASH[8] = { 0x00, 0x1B, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00};
+    const char READ_RTC[8] = { 0x00, 0x1C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    const char Read_ACC_FS[8] = { 0x01, 0x22, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    const char Read_GYRO_FS[8] = { 0x01, 0x24, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    const char Reboot_Bootloader[8] = { 0x00, 0x1E, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00};
+    const char Read_Time_Sync[8] = { 0x00, 0x1F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
     static unsigned char GetIMUNumber(std::string serialNumber);
     static const uint8_t RW_REG_STATUS_CMD_FINISHED = 0x00;
@@ -187,6 +218,61 @@ public:
      */
     bool ReadRegister(uint8_t bank, uint8_t address, uint8_t *value);
     bool WriteRegister(uint8_t bank, uint8_t address, uint8_t value);
+
+    /**
+     * Only could be used in the YX8083 device.
+     * @return RRC/SDT 8byte
+     */
+    TimeSync ReadTimeSync();
+
+    /**
+     * Only could be used in the YX8083 device. Set sn
+     * @return
+     */
+    void SetTimeSync(uint8_t sn);
+
+
+    /**
+     * Only could be used in the YX8083 device.
+     * @return RTC
+     */
+    RTC ReadRTC();
+
+    /**
+     * Only could be used in the YX8083 device. Set hour, min, and sec.
+     * @return
+     */
+    void WriteRTC(RTC rtc);
+
+    /**
+     * Only could be used in the YX8083 device.
+     * @return Read IMU Accel Full Scale Byte 0.  Range:[0, 3] (0=2G, 1=4G, 2=8G, 3=16G)
+     */
+    uint8_t ReadAccFS();
+
+    /**
+     *
+     * @param IMU Accel Full Scale Byte 0.  Range:[0, 3] (0=2G, 1=4G, 2=8G, 3=16G)
+     */
+    void WriteAccFS(uint8_t value);
+
+     /**
+     * Only could be used in the YX8083 device.
+     * @return Read IMU Gyro Full Scale Byte 0 [0, 5] (0=125dps, 1=250dps, 2=500dps, 3=1000dps, 4=2000dps, 5=4000dps)
+     */
+    uint8_t ReadGyroFS();
+
+    /**
+     * @param value
+     * IMU Gyro Full Scale Byte 0 [0, 5] (0=125dps, 1=250dps, 2=500dps, 3=1000dps, 4=2000dps, 5=4000dps)
+     */
+    void WriteGyroFS(uint8_t value);
+
+    /**
+     * Allow user enter bootloader mode without short the JTAG pins on PCB board.
+     */
+    void RebootBootloader();
+
 private:
     void GetFeatureReport(char* pData, size_t data_lenght);
     void SendFeatureReport(const char* pData, size_t data_lenght);

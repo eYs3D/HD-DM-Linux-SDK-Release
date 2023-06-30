@@ -115,13 +115,9 @@ void CVideoDeviceIMUWidget::UpdateFWCalibrationInfo()
 {
     if (!m_pIMUDataController->GetIMUModel()) return;
 
-    if (CIMUModel::IMU_9_AXIS == m_pIMUDataController->GetIMUModel()->GetType())
-    {
-        ui->pushButton_start_fw_calibration->setVisible(false);
-        return;
-    }
-
-    ui->pushButton_start_fw_calibration->setEnabled(!m_pIMUDataController->IsCalibration());
+    ui->pushButton_start_fw_calibration->setVisible(false);
+    return;
+    /*ui->pushButton_start_fw_calibration->setEnabled(!m_pIMUDataController->IsCalibration());*/
 }
 
 void CVideoDeviceIMUWidget::UpdateSaveIMURAWDataInfo()

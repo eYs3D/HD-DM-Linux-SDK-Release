@@ -94,6 +94,24 @@ float parseBuff_Float(unsigned char* &buf, size_t size) {
     return 0;
 }
 
+void IMUData::parsePacket_STM_IMU(unsigned char *buf) {
+    _frameCount  =				parseBuff(buf, sizeTable[FRAME_COUNT  ]); // 2
+    _subSecond  =				parseBuff(buf, sizeTable[SUB_SECOND	  ]); // 2
+    _sec =						parseBuff(buf, sizeTable[SEC		  ]); // 1
+    _min =						parseBuff(buf, sizeTable[MIN		  ]); // 1
+    _hour  =					parseBuff(buf, sizeTable[HOUR		  ]); // 1
+    _accelX =		            (int16_t) parseBuff(buf, sizeTable[ACCEL_X	  ]); // 2
+    _accelY =		            (int16_t) parseBuff(buf, sizeTable[ACCEL_Y	  ]); // 2
+    _accelZ =		            (int16_t) parseBuff(buf, sizeTable[ACCEL_Z	  ]); // 2
+    _temprature =				(int16_t) parseBuff(buf, sizeTable[TEMPARATURE  ]); // 2
+    _gyroScopeX =	            (int16_t) parseBuff(buf, sizeTable[GYROSCOPE_X  ]); // 2
+    _gyroScopeY =	            (int16_t) parseBuff(buf, sizeTable[GYROSCOPE_Y  ]); // 2
+    _gyroScopeZ =	            (int16_t) parseBuff(buf, sizeTable[GYROSCOPE_Z  ]); // 2
+    fprintf(stderr, "FrameSN:[%d] Time: %2d,%2d,%2d,%5d\nacc:%5f,%5f,%5f tmp:%2d\ngyro:%5f,%5f,%5f\n\n",
+                    _frameCount, _hour, _min, _sec, _subSecond, _accelX, _accelY, _accelZ,
+                    _temprature, _gyroScopeX, _gyroScopeY, _gyroScopeZ);
+}
+
 void IMUData::parsePacket(unsigned char* buf, bool normalization)
 {	
 	_frameCount  =				parseBuff(buf, sizeTable[FRAME_COUNT  ]);

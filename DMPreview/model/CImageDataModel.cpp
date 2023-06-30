@@ -791,7 +791,7 @@ void CImageDataModel_Depth::CalculateDepthSpatialNoise()
 void CImageDataModel_Depth::CalculateDepthTemporaNoise()
 {
     const int nDepthSize = m_nWidth * m_nHeight;
-
+    for (auto& i : m_listDepth) i.resize(nDepthSize, 0);
     int nDepthZSum = 0;
     int nCount = 0;
     short nAvgDepth = 0;

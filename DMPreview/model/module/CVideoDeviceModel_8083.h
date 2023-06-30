@@ -11,6 +11,12 @@ public:
     virtual int AddCameraPropertyModels();
     friend class CVideoDeviceModelFactory;
     std::vector<std::string> GetGainRegisterValueStringList() override;
+    virtual std::vector<CIMUModel::INFO> GetIMUInfo() {
+        return {
+            {0x3438, 0x0166, CIMUModel::IMU_6_AXIS}
+        };
+    }
+    virtual bool IMUSupport(){ return true; }
 protected:
     CVideoDeviceModel_8083(DEVSELINFO *pDeviceSelfInfo);
 };

@@ -44,6 +44,7 @@ public:
 	void parsePacket(unsigned char * buf, bool normalization);
 	void parsePacket_DMP(unsigned char * buf);
     void parsePacket_Quaternion(unsigned char * buf);
+    void parsePacket_STM_IMU(unsigned char *buf);
 
     void setMaxG(float fMaxG){ MAX_G = fMaxG; }
     void setMaxDPS(float fMaxDPS){ MAX_DPS = fMaxDPS; }

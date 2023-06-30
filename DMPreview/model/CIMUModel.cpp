@@ -471,7 +471,10 @@ int CIMUModel::ReadIMUData(IMUData &imuData, bool bSync)
 
         if (IMU_9_AXIS == m_imuType){
             imuData.parsePacket_Quaternion(imuRawData);
-        }else if (27 == nIMUDataByte){
+        } else if (ret <= 21) {
+            /* Wait for HID IMU Command document >= 1.6 release. Temporarily determine by byte counts. */
+            imuData.parsePacket_STM_IMU(imuRawData);
+        } else if (27 == nIMUDataByte){
             imuData.parsePacket(imuRawData, OFFSET_DATA != m_nCurrentIMUFormat);
         }else if (58 == nIMUDataByte){
             imuData.parsePacket_DMP(imuRawData);
