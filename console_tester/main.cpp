@@ -224,7 +224,9 @@ char *gPuCtrlSelectors[PU_CTRL_SEL_NUM] = {
 };
 
 static constexpr int APC_USER_SETTING_OFFSET = 5;
+static void write_calibration_data(int index);
 static void copy_file_to_g2(int index);
+int load_file_data_to_buffer(uint8_t* p_buffer, int size, const char* filename);
 int saveRawFile(const char *pFilePath, BYTE *pBuffer, unsigned int sizeByte);
 
 //s:[eys3D] 20200610 definition functions
@@ -423,6 +425,9 @@ public:
     ColorCallbackHelper& operator=(ColorCallbackHelper& helper) = delete;
 
     virtual void runner(Frame *f) override {
+        if (!f->width || !f->height) {
+            return;
+        }
         while (isStart()) {
             f->status = APC_GetColorImageWithTimestamp(mDeviceHandle, &mDevSelInfo, f->dataVec.data(),
                                                        &f->actualImageSize, &f->sn, 0, &f->ts_s, &f->ts_us);
@@ -439,6 +444,9 @@ public:
     DepthCallbackHelper& operator=(DepthCallbackHelper& helper) = delete;
 
     virtual void runner(Frame *f) override {
+        if (!f->width || !f->height) {
+            return;
+        }
         while (isStart()) {
             f->status = APC_GetDepthImageWithTimestamp(mDeviceHandle, &mDevSelInfo, f->dataVec.data(),
                                                        &f->actualImageSize, &f->sn, 0, &f->ts_s, &f->ts_us);
@@ -698,14 +706,14 @@ int main(void)
         printf("11. Set IR Value\n");
         printf("20. FW Reg Write\n");
         printf("21. FW Reg Read\n");
-        printf("22. Read3X\n");
-        printf("23. Write3X\n");
-        printf("24. Read4X\n");
-        printf("25. Write4X\n");
-        printf("26. Read5X\n");
-        printf("27. Write5X\n");
-        printf("28. Read24X\n");
-        printf("29. Write24X\n");
+        printf("22. Camera intrinsic/extrinsic Read3X\n");
+        printf("23. Camera intrinsic/extrinsic Write3X\n");
+        printf("24. Camera intrinsic/extrinsic Read4X\n");
+        printf("25. Camera intrinsic/extrinsic Write4X\n");
+        printf("26. Camera intrinsic/extrinsic Read5X\n");
+        printf("27. Camera intrinsic/extrinsic Write5X\n");
+        printf("28. Camera intrinsic/extrinsic Read24X\n");
+        printf("29. Camera intrinsic/extrinsic Write24X\n");
         printf("30. Reset UNPData\n");
         printf("31. Point Cloud FPS Demo\n");
         printf("33. ReadPlugIn\n");
@@ -718,7 +726,14 @@ int main(void)
 #endif
         printf("81. Force overwrite calibration data G1 section to G2, 30 40 50 240. (Use at your own risk.)\n");
         printf("85. IVY Camera (2248X1364@30, APC_DEPTH_DATA_OFF_RAW, USB)\n");
-        printf("86. IVY Camera Callback Helper (1104x1104@30, APC_DEPTH_DATA_11_BITS, USB)\n");
+        printf("86. IVY Camera Image Callback Helper (1104x1104@30, APC_DEPTH_DATA_11_BITS, USB)\n");
+        printf("92. IVY Camera IMU Callback Helper HIDAPI with libusb \n");
+        printf("93. IVY Camera Exposure: Analog/Digital Gain, Exposure Time\n");
+        printf("94. IVY Camera requested case. Devices info. Save files. Demo callbacks.\n");
+        printf("95. IVY IMU Enter FW download mode.\n");
+        printf("101. Batch ASIC register value.\n");
+        printf("102. Batch ASIC & Sensor & FW register value.\n");
+        printf("103. Write the output bin file of the calibration tool to the camera.\n");
         printf("255. EXIT)\n");
         scanf("%d", &input);
         switch (input) {
@@ -739,13 +754,21 @@ int main(void)
             if (gdepth_thread_id != (pthread_t) - 1)
                 pthread_join(gdepth_thread_id, NULL);
             break;
-        case 4:
+        case 4:{
+            int delay_time = 0;
+#if defined(qcom)
+            /*
+            NOTE: This is workaround for QCS610 development board.
+                  Because, this board needs more time for the UVC setup time.
+                  So, We add the delay time with the V4L2 UVC setup process.
+            */
+            delay_time = 6;
+            printf("input wait time between get color and get depth, we test QCS610 need 6 sec\n");
+            scanf("%d", &delay_time);            
+#endif
             get_color_image();
-
-            // Ensure that color image open first.
-            usleep(6 * 1000 * 1000);
-
-            get_depth_image();
+            usleep(delay_time * 1000 * 1000);
+            get_depth_image();}
             if (gdepth_thread_id != (pthread_t) - 1)
                 pthread_join(gdepth_thread_id, NULL);
             if (gcolor_thread_id != (pthread_t) - 1)
@@ -1278,10 +1301,6 @@ int main(void)
             readIMURegStatus = imuModel.ReadRegister(0x0, 0x0 /* REG_WHO_AM_I */, &readIMURegData);
             fprintf(stderr, "ReadRegister CMD25 status[%d] value[0x%x]\n", readIMURegStatus, readIMURegData);
 
-            uint8_t writeIMURegData = 0xff;
-            int writeIMURegStatus = imuModel.WriteRegister(0x0, 0x0, writeIMURegData);
-            fprintf(stderr, "WriteRegister CMD26 status[%d] value[0x%x]\n", writeIMURegStatus, writeIMURegData);
-
             if (info.axis != CIMUModel::IMU_9_AXIS) {
                 std::string imuModuleSN = imuModel.GetSerialNumber();
                 fprintf(stderr, "GetSerialNumber[%s] CMD27-CMD31\n", imuModuleSN.c_str());
@@ -1324,6 +1343,489 @@ int main(void)
             APC_Release(&cameraHandle);
             break;
         }
+        case 92: {
+
+            /*
+             * This case only verified at YX8083 Early sample IMU FW IVY2-D01-ELSM6DSR-BL00U-001-BETA01
+             * Implement the STMG431_HID_CMD-1 document CMD1-CMD16, CMD24-CMD45
+             * */
+
+            void* cameraHandle = nullptr;
+            DEVSELINFO devSelInfo;
+            devSelInfo.index = 0;
+
+            int ret = APC_Init(&cameraHandle, false);
+
+            if (!cameraHandle) {
+                fprintf(stderr, "Null handle reason %d\n", ret);
+                return 0;
+            }
+
+            unsigned short nVID = 0x3438, nPID = 0x0166;
+
+            CIMUModel::INFO info {
+                    .nVID = nVID,
+                    .nPID = nPID,
+                    .axis = CIMUModel::IMU_6_AXIS
+            };
+
+            CIMUModel imuModel = CIMUModel(info, cameraHandle);
+
+            std::string serialNumber = imuModel.GetCameraSerialNumber(cameraHandle, devSelInfo);
+            fprintf(stderr, "Camera serialNumber:[%s]\n", serialNumber.c_str());
+            std::string imuModuleName = imuModel.GetModuleName();
+            fprintf(stderr, "GetModuleName[%s] CMD1-CMD4 \n", imuModuleName.c_str());
+            std::string imuFWVersion = imuModel.GetFWVersion();
+            fprintf(stderr, "GetFWVersion [%s] CMD5-CMD12\n", imuFWVersion.c_str());
+            std::string imuOutputStatus = imuModel.GetStatus();
+            fprintf(stderr, "GetOutputStatus[%s] CMD13 \n", imuOutputStatus.c_str());
+            imuModel.EnableDataOutput(false);
+            imuOutputStatus = imuModel.GetStatus();
+            fprintf(stderr, "SetOutputStatus Disable [%s] CMD14 \n", imuOutputStatus.c_str());
+            imuModel.EnableDataOutput(true);
+            imuOutputStatus = imuModel.GetStatus();
+            fprintf(stderr, "SetOutputStatus Enable [%s] CMD15 \n", imuOutputStatus.c_str());
+            imuModel.EnableDataOutput(false);
+            imuOutputStatus = imuModel.GetStatus();
+            fprintf(stderr, "SetOutputStatus Disable [%s] CMD14 \n", imuOutputStatus.c_str());
+
+            uint8_t readIMURegData = 0x0;
+            int readIMURegStatus;
+            readIMURegStatus = imuModel.ReadRegister(0x0, 0x0F /* REG_WHO_AM_I */, &readIMURegData);
+            fprintf(stderr, "ReadRegister CMD25 status[%d] value[0x%x]\n", readIMURegStatus, readIMURegData);
+
+            std::string imuModuleSN = imuModel.GetSerialNumber();
+            fprintf(stderr, "GetSerialNumber[%s] CMD27-CMD31\n", imuModuleSN.c_str());
+
+            imuModel.SetSerialNumber(imuModuleSN);
+            fprintf(stderr, "SetSerialNumber[%s] CMD32-CMD39\n", imuModuleSN.c_str());
+
+            CIMUModel::RTC rtc { 0, 0, 0, 0 };
+            imuModel.WriteRTC(rtc);
+            auto accFS = imuModel.ReadAccFS();
+            fprintf(stderr, "WriteRTC reset to 0 CMD41, CMD42 ACCFS: %d\n", accFS);
+            //accFS = 8;
+            imuModel.WriteAccFS(accFS);
+            if (accFS == imuModel.ReadAccFS()) fprintf(stderr, "WriteAccFS CMD43 equals the value had written\n");
+
+            auto gyro = imuModel.ReadGyroFS();
+            fprintf(stderr, "ReadGyroFS CMD44 value %d \n", gyro);
+            //gyro = 4;
+            imuModel.WriteGyroFS(gyro);
+            fprintf(stderr, "WriteGyroFS CMD45 value %d \n", gyro);
+            if (gyro == imuModel.ReadGyroFS()) fprintf(stderr, "WriteGyroFS CMD45 equals the value had written\n");
+
+            {
+                FILE* imuLog = fopen("imulog.txt", "a+");
+                // 1. Setup callback
+                CIMUModel::Callback printCallback([&] (const IMUData *data) {
+                    fprintf(stderr, "FrameSN:[%d] Time: %2d,%2d,%2d,%5d\nacc:%5f,%5f,%5f tmp:%2d\ngyro:%5f,%5f,%5f\n\n",
+                            data->_frameCount, data->_hour, data->_min, data->_sec, data->_subSecond,
+                            data->_accelX, data->_accelY, data->_accelZ, data->_temprature,
+                            data->_gyroScopeX, data->_gyroScopeY, data->_gyroScopeZ);
+                    fprintf(imuLog, "FrameSN:[%d] Time: %2d,%2d,%2d,%5d\nacc:%5f,%5f,%5f tmp:%2d\ngyro:%5f,%5f,%5f\n\n",
+                            data->_frameCount, data->_hour, data->_min, data->_sec, data->_subSecond,
+                            data->_accelX, data->_accelY, data->_accelZ, data->_temprature,
+                            data->_gyroScopeX, data->_gyroScopeY, data->_gyroScopeZ);
+                    return true;
+                });
+
+                // 2. Enable callback looper
+                imuModel.EnableDataCallback(printCallback);
+                sleep(2);
+                // 3. Test Time Sync function.
+                for (int i = 0; i < 60; ++i)
+                {
+                    imuModel.SetTimeSync(2);
+                    //Don's set any HID command between Set and get TimeSync.
+                    auto TimeSync = imuModel.ReadTimeSync();
+                    fprintf(stderr, "ReadTimeSync: %02x %02x %02x %02x %02x %02x %02x %02x CMD47\n", TimeSync.sn, TimeSync.time1, TimeSync.time2, TimeSync.time3, TimeSync.time4, TimeSync.diff1, TimeSync.diff2, TimeSync.diff3);
+                    fprintf(imuLog, "ReadTimeSync: %02x %02x %02x %02x %02x %02x %02x %02x CMD47\n", TimeSync.sn, TimeSync.time1, TimeSync.time2, TimeSync.time3, TimeSync.time4, TimeSync.diff1, TimeSync.diff2, TimeSync.diff3);
+                    auto rtc = imuModel.ReadRTC();
+                    fprintf(stderr, "GetRTC %d %d %d %d CMD40\n", rtc.hour, rtc.min, rtc.sec, rtc.subSecond);
+                    fprintf(imuLog, "GetRTC %d %d %d %d CMD40\n", rtc.hour, rtc.min, rtc.sec, rtc.subSecond);
+                    sleep(1);
+                }
+                // 4. Disable callback looper after use.
+                imuModel.DisableDataCallback();
+
+                time_t now = time(nullptr);
+                fprintf(imuLog, "CB End %ld\n", now);
+                fflush(imuLog);
+                fclose(imuLog);
+                fprintf(stderr, "CB End %ld\n", now);
+            }
+
+            sleep(5);
+            APC_Release(&cameraHandle);
+            break;
+        }
+        case 93: {
+            void* cameraHandle = nullptr;
+            DEVSELINFO devSelInfo;
+            devSelInfo.index = 0;
+            DEVSELINFO devESP777Info;
+            devESP777Info.index = 1;
+            int fps = 30;
+            int cw = 1280; int ch = 720;
+            int dw = 1280; int dh = 720;
+            int depthDataType = 4;
+            int isMjpeg = 0;
+
+            printf("Choose YUYV:0 MJPEG:1 \n");
+            scanf("%d", &isMjpeg);
+            printf("Color width:\n");
+            scanf("%d", &cw);
+            printf("Color height:\n");
+            scanf("%d", &ch);
+            printf("Depth width:\n");
+            scanf("%d", &dw);
+            printf("Depth height:\n");
+            scanf("%d", &dh);
+            printf("Choose FPS:\n");
+            scanf("%d", &fps);
+            printf("Choose Depth data type\nD(11Bits)=4\nZ(14Bits)=2\nColor Only L'+R'=5\nColor Only L+R=0\n");
+            scanf("%d", &depthDataType);
+
+            int ret = APC_Init(&cameraHandle, true);
+
+            if (!cameraHandle) {
+                fprintf(stderr, "Null handle reason %d\n", ret);
+                return 0;
+            }
+
+            APC_SetDepthDataType(cameraHandle, &devSelInfo, depthDataType);
+
+            APC_SetupBlock(cameraHandle, &devSelInfo, true);
+
+            ret = APC_OpenDevice2(cameraHandle, &devSelInfo, cw, ch, isMjpeg, dw, dh, DEPTH_IMG_NON_TRANSFER, false,
+                                  nullptr, &fps);
+            if (ret) {
+                fprintf(stderr, "Open failed reason %d\n", ret);
+                return 0;
+            }
+
+            static bool settingUpExposure = false;
+            libeys3dsample::FrameCallbackHelper::Callback colorCallbackFn([] (const libeys3dsample::Frame *f) {
+                if (settingUpExposure) {
+                    fprintf(stderr, "Inside color callback frame.sn=%d status=%d save one image \n", f->sn, f->status);
+                    settingUpExposure = false;
+                    saveRawFile(std::to_string(f->sn).c_str(), (unsigned char*) f->dataVec.data(), f->dataVec.size());
+                    fprintf(stderr, "Saved frame.sn=%d --\n", f->sn);
+                }
+                return f->status;
+            });
+
+            libeys3dsample::FrameCallbackHelper::Callback depthCallbackFn([] (const libeys3dsample::Frame *f) {
+                static bool everEnter = false;
+                if (!everEnter) {
+                    fprintf(stderr, "...\n");
+                    everEnter = true;
+                }
+                return f->status;
+            });
+
+            libeys3dsample::ColorCallbackHelper colorCallback(cameraHandle, devSelInfo, cw, ch, 2, colorCallbackFn);
+            libeys3dsample::DepthCallbackHelper depthCallback(cameraHandle, devSelInfo, dw, dh, 2, depthCallbackFn);
+
+            colorCallback.start();
+            sleep(5);
+            depthCallback.start();
+
+            APC_SetCTPropVal(cameraHandle, &devESP777Info, CT_PROPERTY_ID_AUTO_EXPOSURE_MODE_CTRL, 1 /*Disable*/);
+
+            float fAnalogGain = 1.0f;
+            float fSetAnalogGain = 1.0f;
+            int retAnalogGain = APC_GetAnalogGain(cameraHandle, &devESP777Info, SENSOR_BOTH, &fAnalogGain);
+            fprintf(stderr, "APC_GetAnalogGain original value = %f ret=%d\n", fAnalogGain, retAnalogGain);
+            fprintf(stderr, "Please Input Analog gain\n");
+            scanf("%f", &fSetAnalogGain);
+            retAnalogGain = APC_SetAnalogGain(cameraHandle, &devESP777Info, SENSOR_BOTH, fSetAnalogGain);
+            fprintf(stderr, "APC_SetAnalogGain set value = %f ret=%d\n", fSetAnalogGain, retAnalogGain);
+            retAnalogGain = APC_GetAnalogGain(cameraHandle, &devESP777Info, SENSOR_BOTH, &fAnalogGain);
+            fprintf(stderr, "APC_GetAnalogGain value = %f ret=%d \n", fAnalogGain, retAnalogGain);
+            settingUpExposure = true;
+
+            float fDigitalGain = 1.0f;
+            float fSetDigitalGain = 1.0f;
+            int retDigitalGain = APC_GetDigitalGain(cameraHandle, &devESP777Info, SENSOR_BOTH, &fDigitalGain);
+            fprintf(stderr, "APC_GetDigitalGain original value = %f ret=%d\n", fDigitalGain, retDigitalGain);
+            fprintf(stderr, "Please Input Digital gain\n");
+            scanf("%f", &fSetDigitalGain);
+            retDigitalGain = APC_SetDigitalGain(cameraHandle, &devESP777Info, SENSOR_BOTH, fSetDigitalGain);
+            fprintf(stderr, "APC_SetDigitalGain set value = %f ret=%d\n", fSetDigitalGain, retDigitalGain);
+            retDigitalGain = APC_GetDigitalGain(cameraHandle, &devESP777Info, SENSOR_BOTH, &fDigitalGain);
+            fprintf(stderr, "APC_GetDigitalGain value = %f ret=%d\n", fDigitalGain, retDigitalGain);
+            settingUpExposure = true;
+
+            float fExposureTime = 0.0f;
+            float fSetExposureTime = 0.0f;
+            int retExposureTime = APC_GetExposureTime(cameraHandle, &devESP777Info, SENSOR_BOTH, &fExposureTime);
+            fprintf(stderr, "APC_GetExposureTime original value = %f ret=%d\n", fExposureTime, retExposureTime);
+            fprintf(stderr, "Please Input Exposure Time ms\n");
+            scanf("%f", &fSetExposureTime);
+            retExposureTime = APC_SetExposureTime(cameraHandle, &devESP777Info, SENSOR_BOTH, fSetExposureTime);
+            fprintf(stderr, "APC_SetExposureTime set value = %f ret=%d\n", fSetExposureTime, retExposureTime);
+            retExposureTime = APC_GetExposureTime(cameraHandle, &devESP777Info, SENSOR_BOTH, &fExposureTime);
+            fprintf(stderr, "APC_GetExposureTime value = %f ret=%d \n", fExposureTime, retExposureTime);
+            settingUpExposure = true;
+
+            sleep(5);
+            colorCallback.stop();
+            depthCallback.stop();
+
+            APC_CloseDevice(cameraHandle, &devSelInfo);
+            APC_Release(&cameraHandle);
+            break;
+        }
+        case 94: {
+            // YX8083 early sample Integration Requirements:
+            // 1. 2560x960 C 1280x960 D 30fps ,depth_data_type=4, ZD_index=0
+            // 2. Printing out both camera and IMU FW name.
+            // 3. Callback function printing out image serial number and timestamp.
+            // 4. Saving C+D and Z image. Including yuy2.yuv and rgb.raw every 5 seconds.
+            // 5. Callback Function IMU printing out raw data.
+            // 6. Printing out camera intrinsic and extrinsic parameters.
+            // 7. Execute the program 30 seconds and release.
+
+            /*
+             * This case only verified at YX8083 early sample IMU FW IVY2-D01-ELSM6DSR-BL00U-001-BETA01
+             * */
+
+            void* cameraHandle = nullptr;
+            DEVSELINFO devSelInfo;
+            devSelInfo.index = 0;
+            int fps = 30;
+            int cw = 2560, ch = 960;
+            int dw = 1280, dh = 960;
+            int ret = APC_Init(&cameraHandle, false);
+
+            if (!cameraHandle) {
+                fprintf(stderr, "Null handle reason %d\n", ret);
+                return 0;
+            }
+
+            int deviceCount = APC_GetDeviceNumber(cameraHandle);
+            DEVSELINFO printDevSelInfo;
+            for(int i = 0; i < deviceCount; i++) {
+                printDevSelInfo.index = i;
+
+                const size_t kFWVersionSize = 256;
+                char fwVersion[kFWVersionSize];
+                int nActualLength = 0;
+                if (!APC_GetFwVersion(cameraHandle, &printDevSelInfo, fwVersion, kFWVersionSize, &nActualLength)) {
+                    fprintf(stderr, "Camera firmware version %s\n", fwVersion);
+                }
+
+                DEVINFORMATION info;
+                if (!APC_GetDeviceInfo(cameraHandle, &printDevSelInfo, &info)) {
+                    fprintf(stderr, "Device Name: %s\n", info.strDevName);
+                    fprintf(stderr, "Product ID: 0x%04x\n", info.wPID);
+                    fprintf(stderr, "Vendor ID: 0x%04x\n", info.wVID);
+                    fprintf(stderr, "ChipID: 0x%x\n", info.nChipID);
+                    fprintf(stderr, "Device Type: %d\n", info.nDevType);
+                }
+            }
+
+            APC_SetDepthDataType(cameraHandle, &devSelInfo, 4);
+
+            APC_SetupBlock(cameraHandle, &devSelInfo, true);
+
+            ret = APC_OpenDevice2(cameraHandle, &devSelInfo, cw, ch, false, dw, dh, DEPTH_IMG_NON_TRANSFER, false,
+                                  nullptr, &fps);
+
+            if (ret) {
+                fprintf(stderr, "Open device failed %d\n", ret);
+                return 0;
+            }
+
+            std::vector<uint16_t> zdBuffer;
+            zdBuffer.resize(APC_ZD_TABLE_FILE_SIZE_11_BITS/2);
+            int actualZDLen = 0;
+            ZDTABLEINFO zdInfo { .nIndex = 0, .nDataType = APC_DEPTH_DATA_11_BITS};
+            ret = APC_GetZDTable(cameraHandle, &devSelInfo, (uint8_t *) zdBuffer.data(),
+                                 APC_ZD_TABLE_FILE_SIZE_11_BITS, &actualZDLen, &zdInfo);
+
+            if (ret) fprintf(stderr, "Get ZD Table failed %d\n", ret);
+
+            for (int i = 1; i < APC_ZD_TABLE_FILE_SIZE_11_BITS / 2; ++i) {
+                zdBuffer[i] = __bswap_16(zdBuffer[i]);
+            }
+
+            eSPCtrl_RectLogData rectifyData;
+            ret = APC_GetRectifyMatLogData(cameraHandle, &devSelInfo, &rectifyData, zdInfo.nIndex);
+            if (ret) fprintf(stderr, "Get RectifyMatLogData Table failed %d\n", ret);
+            else {
+                float baseline = 1.0f / rectifyData.ReProjectMat[14];
+                float focalLength = rectifyData.ReProjectMat[11];
+                float cx = rectifyData.CamMat1[2];
+                float fx = rectifyData.CamMat1[0];
+                float cy = rectifyData.CamMat1[5];
+                float fy = rectifyData.CamMat1[4];
+                float fxp = rectifyData.NewCamMat1[0];
+                float cxp = rectifyData.NewCamMat1[2];
+                float fyp = rectifyData.NewCamMat1[5];
+                float cyp = rectifyData.NewCamMat1[6];
+                float r0 = rectifyData.LRotaMat[0];
+                float r1 = rectifyData.LRotaMat[1];
+                float r2 = rectifyData.LRotaMat[2];
+                float r3 = rectifyData.LRotaMat[3];
+                float r4 = rectifyData.LRotaMat[4];
+                float r5 = rectifyData.LRotaMat[5];
+                float r6 = rectifyData.LRotaMat[6];
+                float r7 = rectifyData.LRotaMat[7];
+                float r8 = rectifyData.LRotaMat[8];
+
+                fprintf(stderr, "Rectify Log Data\ncx:[%4f], fx[%4f], cy[%4f], fy[%4f]\n"
+                                "cx':[%4f], cy':[%4f], fx':[%4f], fy':[%4f]\n"
+                                "rectification transform = [%4f %4f %4f %4f %4f %4f %4f %4f %4f]\n"
+                                "baseline:[%f] focal length:[%f]", cx, fx, cy, fy, cxp, cyp, fxp, fyp,
+                                r0, r1, r2, r3, r4, r5, r6, r7, r8,
+                                baseline, focalLength);
+            }
+
+            libeys3dsample::FrameCallbackHelper::Callback colorCallbackFn([&] (const libeys3dsample::Frame *f) {
+                static uint64_t timeLastSavingTsUs = 0;
+                uint64_t currentTsUs = f->ts_s * 1000000 + f->ts_us;
+                bool isNeedSavingFile = currentTsUs - timeLastSavingTsUs > 5000000;
+
+                fprintf(stderr, "Inside color callback frame.sn=%d status=%d [ts_s=%ld ts_us=%ld]\n", f->sn, f->status,
+                        f->ts_s, f->ts_us);
+
+                if (isNeedSavingFile) {
+                    std::string rawFileName(SAVE_FILE_PATH"yuy2_");
+                    rawFileName.append(std::to_string(f->sn));
+                    rawFileName.append(".yuv");
+                    fprintf(stderr, "Saving start... %s\n", rawFileName.c_str());
+                    saveRawFile(rawFileName.c_str(), (uint8_t *) f->dataVec.data(), f->dataVec.size());
+
+                    fprintf(stderr, "Saving RGB file...\n");
+
+                    std::string rgbFileName(SAVE_FILE_PATH"rgb_");
+                    rgbFileName.append(std::to_string(f->sn));
+                    rgbFileName.append(".raw");
+
+                    auto writeRGBFileBuffer = new std::vector<uint8_t>();
+                    writeRGBFileBuffer->resize(f->width * f->height * 3);
+
+                    APC_ColorFormat_to_RGB24(cameraHandle, &devSelInfo, writeRGBFileBuffer->data(),
+                                             (uint8_t*) f->dataVec.data(), f->actualImageSize, f->width, f->height,
+                                             APCImageType::COLOR_YUY2);
+
+                    saveRawFile(rgbFileName.c_str(), (unsigned char*) writeRGBFileBuffer->data(),
+                                writeRGBFileBuffer->size());
+
+                    delete writeRGBFileBuffer;
+                    timeLastSavingTsUs = currentTsUs;
+                    fprintf(stderr, "Saving end... %s %s\n", rawFileName.c_str(), rgbFileName.c_str());
+                }
+
+                return f->status;
+            });
+
+            libeys3dsample::FrameCallbackHelper::Callback depthCallbackFn([&zdBuffer] (const libeys3dsample::Frame *f) {
+                static uint64_t timeLastSavingTsUs = 0;
+                uint64_t currentTsUs = f->ts_s * 1000000 + f->ts_us;
+                bool isNeedSavingFile = currentTsUs - timeLastSavingTsUs > 5000000;
+
+                fprintf(stderr, "Inside depth callback frame.sn=%d status=%d [ts_s=%ld ts_us=%ld]\n", f->sn, f->status,
+                        f->ts_s, f->ts_us);
+
+                if (isNeedSavingFile) {
+                    fprintf(stderr, "Saving start... %d\n", f->sn);
+                    std::string rawFileName(SAVE_FILE_PATH"DisparityMap_");
+                    rawFileName.append(std::to_string(f->sn));
+                    rawFileName.append(".raw");
+                    saveRawFile(rawFileName.c_str(), (uint8_t *) f->dataVec.data(), f->dataVec.size());
+
+                    fprintf(stderr, "Saving Distance Map...\n");
+                    std::string distanceFileName(SAVE_FILE_PATH"Z14_");
+                    distanceFileName.append(std::to_string(f->sn));
+                    distanceFileName.append(".yuv");
+
+                    auto distanceBuffer = new std::vector<uint16_t>();
+                    distanceBuffer->resize(f->width * f->height);
+
+                    auto pD11BufPixelWalker = (uint16_t*) f->dataVec.data();
+                    for (int i = 0, maxPixelCnt = f->width * f->height; i < maxPixelCnt; ++i, pD11BufPixelWalker++) {
+                        // Verification formula:
+                        // Z(mm) = [Focal Len(mm) * Baseline(mm) / Disparity(mm)] * 8
+                        // Multiply by 8 due to interpolation from 8 Bits to 11 Bits
+                        uint16_t index = *pD11BufPixelWalker;
+                        distanceBuffer->at(i) = zdBuffer[index];
+                    }
+
+                    saveRawFile(distanceFileName.c_str(), (uint8_t *) distanceBuffer->data(),
+                                distanceBuffer->size() * sizeof(uint16_t));
+
+                    timeLastSavingTsUs = currentTsUs;
+                    fprintf(stderr, "Saving end... %s:%zu %s:%zu Bytes \n", rawFileName.c_str(), f->dataVec.size(),
+                            distanceFileName.c_str(), distanceBuffer->size());
+                    delete distanceBuffer;
+                }
+
+                return f->status;
+            });
+
+            libeys3dsample::ColorCallbackHelper colorCallback(cameraHandle, devSelInfo, cw, ch, 2, colorCallbackFn);
+            libeys3dsample::DepthCallbackHelper depthCallback(cameraHandle, devSelInfo, dw, dh, 2, depthCallbackFn);
+
+            colorCallback.start();
+            sleep(6);
+            depthCallback.start();
+
+            unsigned short nVID = 0x3438, nPID = 0x0166;
+
+            CIMUModel::INFO info {
+                    .nVID = nVID,
+                    .nPID = nPID,
+                    .axis = CIMUModel::IMU_6_AXIS
+            };
+
+            CIMUModel imuModel = CIMUModel(info, cameraHandle);
+            std::string imuFWVersion = imuModel.GetFWVersion();
+            fprintf(stderr, "GetFWVersion [%s] CMD5-CMD12\n", imuFWVersion.c_str());
+            FILE* imuLog = fopen("imulog.txt", "a+");
+            // 1. Setup callback
+            CIMUModel::Callback printCallback([&] (const IMUData *data) {
+                fprintf(stderr, "FrameSN:[%d] Time: %2d,%2d,%2d,%5d\nacc raw:%5f,%5f,%5f\ngyro raw:%5f,%5f,%5f\n",
+                        data->_frameCount, data->_hour, data->_min, data->_sec, data->_subSecond,
+                        data->_accelX, data->_accelY, data->_accelZ,
+                        data->_gyroScopeX, data->_gyroScopeY, data->_gyroScopeZ);
+                fprintf(imuLog, "FrameSN:[%d] Time: %2d,%2d,%2d,%5d\nacc raw:%5f,%5f,%5f\ngyro raw:%5f,%5f,%5f\n",
+                        data->_frameCount, data->_hour, data->_min, data->_sec, data->_subSecond,
+                        data->_accelX, data->_accelY, data->_accelZ,
+                        data->_gyroScopeX, data->_gyroScopeY, data->_gyroScopeZ);
+                return true;
+            });
+
+            // 2. Enable callback looper
+            imuModel.EnableDataCallback(printCallback);
+            sleep(2);
+            // 3. Test Time Sync function.
+            for (int i = 0; i < 60; ++i)
+                {
+                    imuModel.SetTimeSync(2);
+                    //Don's set any HID command between Set and get TimeSync.
+                    auto TimeSync = imuModel.ReadTimeSync();
+                    fprintf(stderr, "ReadTimeSync: %02x %02x %02x %02x %02x %02x %02x %02x CMD47\n", TimeSync.sn, TimeSync.time1, TimeSync.time2, TimeSync.time3, TimeSync.time4, TimeSync.diff1, TimeSync.diff2, TimeSync.diff3);
+                    fprintf(imuLog, "ReadTimeSync: %02x %02x %02x %02x %02x %02x %02x %02x CMD47\n", TimeSync.sn, TimeSync.time1, TimeSync.time2, TimeSync.time3, TimeSync.time4, TimeSync.diff1, TimeSync.diff2, TimeSync.diff3);
+                    auto rtc = imuModel.ReadRTC();
+                    fprintf(stderr, "GetRTC %d %d %d %d CMD40\n", rtc.hour, rtc.min, rtc.sec, rtc.subSecond);
+                    fprintf(imuLog, "GetRTC %d %d %d %d CMD40\n", rtc.hour, rtc.min, rtc.sec, rtc.subSecond);
+                    sleep(1);
+                }
+
+            // 3. Disable callback looper after use.
+            imuModel.DisableDataCallback();
+
+            colorCallback.stop();
+            depthCallback.stop();
+
+            APC_CloseDevice(cameraHandle, &devSelInfo);
+            APC_Release(&cameraHandle);
+            break;
+        }
         case 100:
             CT_DEBUG("test pause/resume streaming\n");
             snapShot_color = false;
@@ -1343,6 +1845,36 @@ int main(void)
             CT_DEBUG("finish test.\n");
             exit(0);
             break;
+        case 101:
+            //876 or 777 can use this
+            init_device(true);
+            //open_device();
+            RegisterSettings::Batch_read_ASIC(EYSD,GetDevSelectIndexPtr(), g_pDevInfo[gsDevSelInfo.index].nChipID);
+            break;
+        case 102:
+            //IVY2 876+777 camera please choose 777 for FW & Sensor Register, usually device index 1.
+            init_device(true);
+            //open_device();
+            RegisterSettings::Batch_read_ASIC(EYSD,GetDevSelectIndexPtr(), g_pDevInfo[gsDevSelInfo.index].nChipID);
+            #define SensorSlaveAddress 0x20
+            RegisterSettings::Batch_read_Sensor(EYSD,GetDevSelectIndexPtr(), SensorSlaveAddress,FG_Address_2Byte | FG_Value_1Byte);
+            RegisterSettings::Batch_read_FW(EYSD,GetDevSelectIndexPtr(), 1);
+            RegisterSettings::Batch_read_FW(EYSD,GetDevSelectIndexPtr(), 2);
+            RegisterSettings::Batch_read_FW(EYSD,GetDevSelectIndexPtr(), 3);
+            RegisterSettings::Batch_read_FW(EYSD,GetDevSelectIndexPtr(), 4);
+            RegisterSettings::Batch_read_FW(EYSD,GetDevSelectIndexPtr(), 5);
+            RegisterSettings::Batch_read_FW(EYSD,GetDevSelectIndexPtr(), 6);
+            break;
+        case 103: {
+            //Step 1 :QCS610 take picture ande send to windows calibration tool
+            //Step 2 :Send output bin file to QCS610 and run this case
+            init_device(true); //choose 876
+            write_calibration_data(0);
+            //for (int index = 0; index < APC_USER_SETTING_OFFSET; ++index) {
+                //write_calibration_data(index);
+            //}
+            break;
+        }
         case 255:
             close_device();
             release_device();
@@ -1354,6 +1886,117 @@ int main(void)
     } while(1);
 
     return 0;
+}
+
+int load_file_data_to_buffer(uint8_t* p_buffer, int size, const char* filename) {
+
+    CT_DEBUG("Load file %s to buffer data\n",filename);
+    FILE* pFile;
+    pFile = fopen(filename, "rb+");
+
+    if (pFile == nullptr) {
+        CT_DEBUG("Can not open file %s \n",filename);
+        return -1;
+    }
+    size_t data_size = fread(p_buffer, sizeof(uint8_t), size, pFile);
+    if (data_size != size) {
+        CT_DEBUG("Bin size not match, target size is %d \n",size);
+        return -1;
+    }
+    CT_DEBUG("Load file to data success\n");
+    fclose(pFile);
+    return 0;
+}
+
+static void write_calibration_data(int fileIndex) {
+    if (fileIndex > APC_USER_SETTING_OFFSET) return;
+    auto devSelInfo = &gsDevSelInfo;
+
+    //xy offset
+    CT_DEBUG("Start write XY offset file ID 3%d \n",fileIndex);
+    int xyactualLength = 0;
+    uint8_t* xy_buffer_r = new uint8_t[APC_Y_OFFSET_FILE_SIZE];
+    memset(xy_buffer_r, 0, sizeof(APC_Y_OFFSET_FILE_SIZE));
+    char xyfileName[256] = {0};
+    sprintf(xyfileName, "calibrationdata/write_fileio_buffer_xyoffset_%d.bin", fileIndex);
+
+    if (load_file_data_to_buffer(xy_buffer_r, APC_Y_OFFSET_FILE_SIZE, xyfileName) < 0) {
+        CT_DEBUG("Load XY offset file fail \n");
+    } else {
+        if (APC_SetYOffset(EYSD, devSelInfo, xy_buffer_r, APC_Y_OFFSET_FILE_SIZE, &xyactualLength,fileIndex) < 0) {
+            CT_DEBUG("APC_SetYOffset fail\n");
+            return;
+        }
+        else {
+            CT_DEBUG("APC_SetYOffset success \n");
+        }
+    }
+    delete[] xy_buffer_r;
+
+    //rectify
+    CT_DEBUG("Start write Rectify file ID 4%d \n",fileIndex);
+    int recactualLength = 0;
+    uint8_t* rec_buffer_r = new uint8_t[APC_RECTIFY_FILE_SIZE];
+    memset(rec_buffer_r, 0, sizeof(APC_RECTIFY_FILE_SIZE));
+    char recfileName[256] = {0};
+    sprintf(recfileName, "calibrationdata/write_fileio_buffer_rectify_%d.bin", fileIndex);
+
+    if (load_file_data_to_buffer(rec_buffer_r, APC_RECTIFY_FILE_SIZE, recfileName) < 0) {
+        CT_DEBUG("Load Rectify file fail \n");
+    } else {
+        if (APC_SetRectifyTable(EYSD, devSelInfo, rec_buffer_r, APC_RECTIFY_FILE_SIZE, &recactualLength,fileIndex) < 0) {
+            CT_DEBUG("APC_SetRectifyTable fail \n");
+            return;
+        }
+        else {
+            CT_DEBUG("APC_SetRectifyTable success \n");
+        }
+    }
+    delete[] rec_buffer_r;
+
+    //zdtable
+    CT_DEBUG("Start write ZDtable file ID 5%d \n",fileIndex);
+    int zdactualLength = 0;
+    uint8_t* zd_buffer_r = new uint8_t[APC_ZD_TABLE_FILE_SIZE_11_BITS];
+    memset(zd_buffer_r, 0, sizeof(APC_ZD_TABLE_FILE_SIZE_11_BITS));
+    char zdfileName[256] = {0};
+    sprintf(zdfileName, "calibrationdata/write_fileio_buffer_zdtable_%d.bin", fileIndex);
+
+    if (load_file_data_to_buffer(zd_buffer_r, APC_ZD_TABLE_FILE_SIZE_11_BITS, zdfileName) < 0) {
+        CT_DEBUG("Load ZDtable file fail \n");
+    } else {
+        ZDTABLEINFO ZDTableInfo;
+        ZDTableInfo.nIndex = fileIndex;
+        if (APC_SetZDTable(EYSD, devSelInfo, zd_buffer_r, APC_ZD_TABLE_FILE_SIZE_11_BITS, &zdactualLength, &ZDTableInfo) < 0) {
+            CT_DEBUG("APC_SetZDTable fail \n");
+            return;
+        }
+        else {
+            CT_DEBUG("APC_SetZDTable success \n");
+        }
+    }
+    delete[] zd_buffer_r;
+
+    //log
+    CT_DEBUG("Start write log file ID 24%d \n",fileIndex);
+    int logactualLength = 0;
+    uint8_t* log_buffer_r = new uint8_t[APC_CALIB_LOG_FILE_SIZE];
+    memset(log_buffer_r, 0, sizeof(APC_CALIB_LOG_FILE_SIZE));
+    char logfileName[256] = {0};
+    sprintf(logfileName, "calibrationdata/write_fileio_buffer_log_%d.bin", fileIndex);
+
+    if (load_file_data_to_buffer(log_buffer_r, APC_CALIB_LOG_FILE_SIZE, logfileName) < 0) {
+        CT_DEBUG("Load log file fail \n");
+    } else {
+        if (APC_SetLogData(EYSD, devSelInfo, log_buffer_r, APC_CALIB_LOG_FILE_SIZE, &logactualLength, fileIndex) < 0) {
+            CT_DEBUG("APC_SetLogData fail \n");
+            return;
+        }
+        else {
+            CT_DEBUG("APC_SetLogData success \n");
+        }
+    }
+    delete[] log_buffer_r;
 }
 
 static void copy_file_to_g2(int fileIndex) {

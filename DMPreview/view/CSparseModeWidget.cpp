@@ -190,6 +190,9 @@ void CSparseModeWidget::UpdateUI_SliderCtrl_SPARSE_THD_Range(long min, long max)
 void CSparseModeWidget::on_checkBox_enable_sparse_mode_stateChanged(int arg1)
 {
     bool bIsChecked = Qt::Checked == arg1 ? true : false;
+    if (!bIsChecked)
+            return;
+    ui->checkBox_enable_sparse_mode->setEnabled(false);
     m_pSparseModeController->UpdateSparseModeConfig(bIsChecked);
     UpdateDefaultUI();
     m_pSparseModeController->UpdateSparseModeDefault();

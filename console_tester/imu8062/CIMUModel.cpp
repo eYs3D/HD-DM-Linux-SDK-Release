@@ -579,6 +579,77 @@ void CIMUModel::EnableDataCallback(CIMUModel::Callback cb) {
 void CIMUModel::DisableDataCallback() {
     stopCallbackThreadAndJoin();
     EnableDataOutput(false);
-    std::string imuStatus = GetStatus();
-    fprintf(stderr, "DisableDataCallback-- %s\n", imuStatus.c_str());
+}
+
+CIMUModel::TimeSync CIMUModel::ReadTimeSync() {
+    unsigned char status[8] = { 0 };
+    SendFeatureReport(&Read_Time_Sync[0], sizeof(Read_Time_Sync) / sizeof(Read_Time_Sync[0]));
+    GetFeatureReport((char*) &status[0], sizeof(status) / sizeof(status[0]));
+    return {
+        .sn = status[0],
+        .time1 = status[1],
+        .time2 = status[2],
+        .time3 = status[3],
+        .time4 = status[4],
+        .diff1 = status[5],
+        .diff2 = status[6],
+        .diff3 = status[7]
+    };
+}
+
+void CIMUModel::SetTimeSync(uint8_t sn) {
+    unsigned char status[8] = { 0 };
+    const unsigned char Set_Time_Sync[8] = { 0x00, 0x1F, 0x01, sn, 0x00, 0x00, 0x00, 0x00};
+    SendFeatureReport((const char*) &Set_Time_Sync[0], sizeof(Set_Time_Sync) / sizeof(Set_Time_Sync[0]));
+}
+
+CIMUModel::RTC CIMUModel::ReadRTC() {
+    unsigned char status[8] = { 0 };
+    SendFeatureReport(&READ_RTC[0], sizeof(READ_RTC) / sizeof(READ_RTC[0]));
+    GetFeatureReport((char*) &status[0], sizeof(status) / sizeof(status[0]));
+    return {
+        .hour = status[0],
+        .min = status[1],
+        .sec = status[2],
+        .subSecond = (uint16_t) (status[3] + (status[4] << 8))
+    };
+}
+
+void CIMUModel::WriteRTC(CIMUModel::RTC rtc) {
+    unsigned char status[8] = { 0 };
+    const unsigned char WRITE_RTC[8] = { 0x00, 0x1D, 0x01, rtc.hour, rtc.min, rtc.sec, 0x00, 0x00};
+    SendFeatureReport((const char*) &WRITE_RTC[0], sizeof(WRITE_RTC) / sizeof(WRITE_RTC[0]));
+    GetFeatureReport((char*) &status[0], sizeof(status) / sizeof(status[0]));
+}
+
+uint8_t CIMUModel::ReadAccFS() {
+    unsigned char status[8] = { 0 };
+    SendFeatureReport(&Read_ACC_FS[0], sizeof(Read_ACC_FS) / sizeof(Read_ACC_FS[0]));
+    GetFeatureReport((char*) &status[0], sizeof(status) / sizeof(status[0]));
+    return status[0];
+}
+
+void CIMUModel::WriteAccFS(uint8_t value) {
+    unsigned char status[8] = { 0 };
+    const unsigned char WRITE_ACC_FW[8] = { 0x01, 0x23, 0x01, value, 0x0, 0x0, 0x0, 0x0 };
+    SendFeatureReport((const char*) &WRITE_ACC_FW[0], sizeof(WRITE_ACC_FW) / sizeof(WRITE_ACC_FW[0]));
+    GetFeatureReport((char*) &status[0], sizeof(status) / sizeof(status[0]));
+}
+
+uint8_t CIMUModel::ReadGyroFS() {
+    unsigned char status[8] = { 0 };
+    SendFeatureReport(&Read_GYRO_FS[0], sizeof(Read_GYRO_FS) / sizeof(Read_GYRO_FS[0]));
+    GetFeatureReport((char*) &status[0], sizeof(status) / sizeof(status[0]));
+    return status[0];
+}
+
+void CIMUModel::WriteGyroFS(uint8_t value) {
+    unsigned char status[8] = { 0 };
+    const unsigned char WRITE_GYRO_FW[8] = { 0x01, 0x25, 0x01, value, 0x0, 0x0, 0x0, 0x0 };
+    SendFeatureReport((const char*) &WRITE_GYRO_FW[0], sizeof(WRITE_GYRO_FW) / sizeof(WRITE_GYRO_FW[0]));
+    GetFeatureReport((char*) &status[0], sizeof(status) / sizeof(status[0]));
+}
+
+void CIMUModel::RebootBootloader() {
+    SendFeatureReport((const char*) &Reboot_Bootloader[0], sizeof(Reboot_Bootloader) / sizeof(Reboot_Bootloader[0]));
 }

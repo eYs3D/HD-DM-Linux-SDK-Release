@@ -237,7 +237,7 @@ int CIMUDataController::IMUCallback(IMUData *pImuData, int status)
     if (!pModel) return APC_NullPtr;
 
     if (APC_NullPtr == status){
-        m_sIMUData = "unable to open device.";
+        m_sIMUData = "Unable to open device. Have you tried sudo yet?";
         return APC_NullPtr;
     }
 

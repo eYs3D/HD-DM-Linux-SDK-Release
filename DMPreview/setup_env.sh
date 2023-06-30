@@ -9,7 +9,6 @@ sudo apt upgrade
 sudo apt-get install build-essential qtcreator qt5-default libudev-dev cmake libxt-dev libusb-1.0-0-dev libwebp-dev
 sudo apt-get install meshlab -y
 sudo apt-get install doxygen
-sudo apt-get install libdc1394-22 libdc1394-22-dev
 sudo apt install ocl-icd-opencl-dev
 #sudo apt install zlib1g
 #sudo apt install zlib1g-dev

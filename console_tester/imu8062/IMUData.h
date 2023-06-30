@@ -43,6 +43,7 @@ public:
 	~IMUData();
 
 	void parsePacket(unsigned char * buf, bool normalization);
+	void parsePacket_STM_IMU(unsigned char * buf);
 	void parsePacket_DMP(unsigned char * buf);
     void parsePacket_Quaternion(unsigned char * buf);
 

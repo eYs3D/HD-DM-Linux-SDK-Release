@@ -2,6 +2,7 @@
 #include <unistd.h>
 #include <iostream>
 #include <fstream>
+#include <sstream>
 using namespace std;
 
 
@@ -867,6 +868,208 @@ retry_again:
 
     in.close();
 
+    return nRet;
+}
+
+
+int RegisterSettings::Batch_read_ASIC(void* hEYSD, PDEVSELINFO pDevSelInfo, unsigned short nChipID)
+{
+    char readfileName[256] = {0};
+    char writefileName[256] = {0};
+    switch (nChipID) {
+    case 0x015:
+        sprintf(readfileName, "./batch/ASIC(ISP)_list_eSP876.txt");
+        sprintf(writefileName, "./batch/ASIC(ISP)_read_eSP876.txt");
+        break;
+    case 0x029:
+        sprintf(readfileName, "./batch/ASIC(ISP)_list_eSP777.txt");
+        sprintf(writefileName, "./batch/ASIC(ISP)_read_eSP777.txt");
+        break;
+    default:
+        printf("Chip not support\n");
+        return -1;
+    }
+    int nRet = 0;
+    char tmp[255];
+    int RegAddress, Data;
+    ifstream in(readfileName);
+    ofstream out(writefileName);
+    if (!in)
+    {
+        printf("[%s][%d]Cannot open read format file %s \n", __func__, __LINE__, readfileName);
+        return -1;
+    }
+    printf("[%s][%d]Successfully open read format file %s \n", __func__, __LINE__, readfileName);
+    while (in)
+    {
+            in.getline(tmp, 255);
+            if (in)
+            {
+                unsigned short RegValue;
+                sscanf(tmp, "%x, %x", &RegAddress, &Data);
+                APC_GetHWRegister(hEYSD, pDevSelInfo, RegAddress, &RegValue, FG_Address_2Byte | FG_Value_1Byte);
+                ostringstream ra ,rv;
+                ra << "0x" << hex << RegAddress;
+                string read = ra.str();
+                if (RegValue>=16)
+                {
+                    rv << "0x" << hex << RegValue;
+                    string write = rv.str();
+                    out << read <<","<< write << endl ;
+                }
+                if (RegValue<16)
+                {
+                    rv << "0x0" << hex << RegValue;
+                    string write = rv.str();
+                    out << read <<","<< write << endl ;
+                }
+            }
+    }
+    in.close();
+    return nRet;
+}
+
+int RegisterSettings::Batch_read_Sensor(void* hEYSD, PDEVSELINFO pDevSelInfo, int SensorSlaveAddress, int flag)
+{
+    int nRet = 0;
+    char readfileName[256] = {0};
+    char writefileName[256] = {0};
+    char tmp[255];
+    int RegAddress, Data;
+    SENSORMODE_INFO SensorMode = SENSOR_A;
+    sprintf(readfileName, "./batch/Sensor_list.txt");
+    sprintf(writefileName, "./batch/Sensor_read.txt");
+    ifstream in(readfileName);
+    ofstream out(writefileName);
+    if (!in)
+    {
+        printf("[%s][%d]Cannot open read format file %s \n", __func__, __LINE__, readfileName);
+        return -1;
+    }
+    printf("[%s][%d]Successfully open read format file %s \n", __func__, __LINE__, readfileName);
+    while (in)
+    {
+            in.getline(tmp, 255);
+            if (in)
+            {
+                unsigned short RegValue;
+                sscanf(tmp, "%x, %x", &RegAddress, &Data);
+                APC_GetSensorRegister(hEYSD, pDevSelInfo, SensorSlaveAddress, RegAddress, &RegValue, flag, SensorMode);
+                ostringstream ra ,rv;
+                ra << "0x0" << hex << RegAddress;
+                string read = ra.str();
+                if (RegValue>=16)
+                {
+                    rv << "0x" << hex << RegValue;
+                    string write = rv.str();
+                    out << read <<","<< write << endl ;
+                }
+                if (RegValue<16)
+                {
+                    rv << "0x0" << hex << RegValue;
+                    string write = rv.str();
+                    out << read <<","<< write << endl ;
+                }
+            }
+    }
+    in.close();
+    return nRet;
+}
+
+int RegisterSettings::Batch_read_FW(void* hEYSD, PDEVSELINFO pDevSelInfo, int Page)
+{
+    int nRet = 0;
+    char readfileName[256] = {0};
+    char writefileName[256] = {0};
+    char tmp[255];
+    int RegAddress, Data;
+    int flag = 0;
+    flag |= FG_Address_1Byte;
+    flag |= FG_Value_1Byte;
+    switch (Page) {
+    case 1:
+        sprintf(readfileName, "./batch/FW_list_pg1.txt");
+        sprintf(writefileName, "./batch/FW_read_pg1.txt");
+        APC_SetFWRegister(hEYSD, pDevSelInfo, 0xa0, 0x00, flag);
+        break;
+    case 2:
+        sprintf(readfileName, "./batch/FW_list_pg2.txt");
+        sprintf(writefileName, "./batch/FW_read_pg2.txt");
+        APC_SetFWRegister(hEYSD, pDevSelInfo, 0xa0, 0x10, flag);
+        break;
+    case 3:
+        sprintf(readfileName, "./batch/FW_list_pg3.txt");
+        sprintf(writefileName, "./batch/FW_read_pg3.txt");
+        APC_SetFWRegister(hEYSD, pDevSelInfo, 0xa0, 0x20, flag);
+        break;
+    case 4:
+        sprintf(readfileName, "./batch/FW_list_pg4.txt");
+        sprintf(writefileName, "./batch/FW_read_pg4.txt");
+        APC_SetFWRegister(hEYSD, pDevSelInfo, 0xa0, 0x30, flag);
+        break;
+    case 5:
+        sprintf(readfileName, "./batch/FW_list_pg5.txt");
+        sprintf(writefileName, "./batch/FW_read_pg5.txt");
+        APC_SetFWRegister(hEYSD, pDevSelInfo, 0xa0, 0x40, flag);
+        break;
+    case 6:
+        sprintf(readfileName, "./batch/FW_list_pg6.txt");
+        sprintf(writefileName, "./batch/FW_read_pg6.txt");
+        APC_SetFWRegister(hEYSD,pDevSelInfo, 0xa8, 0x00, flag);
+        break;
+    }
+    ifstream in(readfileName);
+    ofstream out(writefileName);
+    if (!in)
+    {
+        printf("[%s][%d]Cannot open read format file %s \n", __func__, __LINE__, readfileName);
+        return -1;
+    }
+    printf("[%s][%d]Successfully open read format file %s \n", __func__, __LINE__, readfileName);
+    while (in)
+    {
+            in.getline(tmp, 255);
+            if (in)
+            {
+                unsigned short RegValue;
+                sscanf(tmp, "%x, %x", &RegAddress, &Data);
+                if (Page<6)
+                {
+                    APC_SetFWRegister(hEYSD, pDevSelInfo, 0xa1, RegAddress, flag);
+
+                    APC_GetFWRegister(hEYSD, pDevSelInfo, 0xa2, &RegValue, flag);
+                }
+                if (Page == 6)
+                {
+                    APC_SetFWRegister(hEYSD, pDevSelInfo, 0xa9, RegAddress, flag);
+
+                    APC_GetFWRegister(hEYSD, pDevSelInfo, 0xaa, &RegValue, flag);
+                }
+                ostringstream ra ,rv;
+                if (RegAddress>=16)
+                {
+                    ra << "0x" << hex << RegAddress;
+                }
+                if (RegAddress<16)
+                {
+                    ra << "0x0" << hex << RegAddress;
+                }
+                string read = ra.str();
+                if (RegValue>=16)
+                {
+                    rv << "0x" << hex << RegValue;
+                    string write = rv.str();
+                    out << read <<","<< write << endl ;
+                }
+                if (RegValue<16)
+                {
+                    rv << "0x0" << hex << RegValue;
+                    string write = rv.str();
+                    out << read <<","<< write << endl ;
+                }
+            }
+    }
+    in.close();
     return nRet;
 }
 
