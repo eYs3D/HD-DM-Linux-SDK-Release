@@ -62,7 +62,10 @@ private slots:
 
     void on_checkBox_swap_bytes_order_stateChanged(int arg1);
 
+    void on_comboBox_device_selector_currentIndexChanged(int index);
+
 private:
+    void UpdateDevice();
     void UpdateType();
     void UpdateSlaveID();
     void UpdateAddressSize();
@@ -80,6 +83,7 @@ private:
 
     std::vector<QLineEdit *> m_requestAddressEdit;
     std::vector<QLineEdit *> m_requestValueEdit;
+    std::map<std::string, int> m_mapDevDesc;
 };
 
 #endif // CVIDEODEVICEREGISTERWIDGET_H

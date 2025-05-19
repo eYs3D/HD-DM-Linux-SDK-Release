@@ -322,7 +322,22 @@ int PlyWriter::EYSDFrameTo3D_8029(int depthWidth, int depthHeight, std::vector<u
     return 0;
 }
 
-int PlyWriter::EYSDFrameTo3D(int depthWidth, int depthHeight, std::vector<unsigned char>& dArray, int colorWidth, int colorHeight, std::vector<unsigned char>& colorArray, eSPCtrl_RectLogData* rectLogData, APCImageType::Value depthType, std::vector<CloudPoint>& output, bool clipping, float zNear,float zFar,bool removeINF = true, bool useDepthResolution = true, float scale_ratio = 1.0f){
+int PlyWriter::EYSDFrameTo3D(int depthWidth, int depthHeight, std::vector<unsigned char>& dArray,
+                             int colorWidth, int colorHeight, std::vector<unsigned char>& colorArray,
+                             eSPCtrl_RectLogData* rectLogData, APCImageType::Value depthType,
+                             std::vector<CloudPoint>& output, bool clipping, float zNear,float zFar,
+                             bool removeINF = true, bool useDepthResolution = true, float scale_ratio = 1.0f) {
+    PlyWriter::EYSDFrameTo3D(depthWidth, depthHeight, dArray, colorWidth, colorHeight, colorArray, rectLogData,
+                             depthType, output, clipping, zNear, zFar, removeINF, useDepthResolution, scale_ratio,
+                             false);
+}
+
+int PlyWriter::EYSDFrameTo3D(int depthWidth, int depthHeight, std::vector<unsigned char>& dArray,
+                             int colorWidth, int colorHeight, std::vector<unsigned char>& colorArray,
+                             eSPCtrl_RectLogData* rectLogData, APCImageType::Value depthType,
+                             std::vector<CloudPoint>& output, bool clipping, float zNear,float zFar,
+                             bool removeINF = true, bool useDepthResolution = true, float scale_ratio = 1.0f,
+                             bool isMipiDevice = false) {
 
     float ratio_Mat = 1.0f;
 
@@ -375,7 +390,73 @@ int PlyWriter::EYSDFrameTo3D(int depthWidth, int depthHeight, std::vector<unsign
     float baseline = 1.0f / rectLogData->ReProjectMat[14];
     float diff = rectLogData->ReProjectMat[15] * ratio_Mat;
 
+    // Camera Parameters needed by larger FOV PLY algorithm
+    float centerXP = 0.0f;
+    float centerYP = 0.0f;
+    float focalXP = 0.0f;
+    float focalYP = 0.0f;
 
+    if (!isMipiDevice) {
+        centerXP = rectLogData->NewCamMat1[2] * ratio_Mat;
+        centerYP = rectLogData->NewCamMat1[6] * ratio_Mat;
+        focalXP = rectLogData->NewCamMat1[0] * ratio_Mat;
+        focalYP = rectLogData->NewCamMat1[5] * ratio_Mat;
+    }
+
+    unsigned char *colorBuf = &colorArrayResized[0];
+    unsigned char *dArrayBuf = &dArrayResized[0];
+
+    if (centerXP != 0.0f && centerYP != 0.0f && focalXP != 0.0f && focalYP != 0.0f && ratio_Mat != 0.0f) {
+        float disparity = 0;
+        float z_tmp = 0;
+        float x, y, z;
+
+        bool isDisparity = (depthType == APCImageType::DEPTH_11BITS);
+
+        for (int i = 0; i < outputHeight; i++) {
+            int i_start = i * outputWidth;
+            for (int j = 0; j < outputWidth; j++) {
+                int idx = i_start + j;
+                int idx3 = idx * 3;
+
+                x = 0;
+                y = 0;
+                z = 0;
+
+                if (isDisparity) {
+                    //ic output depth range is 0~2047 and need to scale to 0~255, so multiply 0.125
+                    disparity = (float)(((unsigned short*)dArrayBuf)[idx]) * 0.125f * ratio_Mat;
+                } else {
+                    disparity = (float)(((unsigned short*)dArrayBuf)[idx]);//it's Z actually
+                }
+
+                if (!(removeINF && disparity == 0.0f)) {
+                    z_tmp = (isDisparity) ? baseline * focalXP / disparity : disparity;
+
+                    if (!(clipping && (z_tmp > zFar || z_tmp < zNear))) {
+                        x = (j - centerXP) / focalXP * z_tmp;
+                        y = (i - centerYP) / focalYP * z_tmp;
+                        z = z_tmp;
+
+                        CloudPoint point;
+                        point.r = *(colorBuf + 0);
+                        point.g = *(colorBuf + 1);
+                        point.b = *(colorBuf + 2);
+                        point.x = x;
+                        point.y = y;
+                        point.z = z;
+
+                        count++;
+                        tempPointCloud.push_back(point);
+                    }
+                }
+                colorBuf += 3;
+            }
+        }
+
+        output.assign(tempPointCloud.begin(), tempPointCloud.begin() + count);
+        return 0;
+    }
     /*Generate table for disparity to W ( W = disparity / baseline)*/
     float disparityToW[2048];
     int tableSize;
@@ -395,9 +476,6 @@ int PlyWriter::EYSDFrameTo3D(int depthWidth, int depthHeight, std::vector<unsign
         case APCImageType::DEPTH_14BITS:
             break;
     }
-
-    unsigned char *colorBuf = &colorArrayResized[0];
-    unsigned char *dArrayBuf = &dArrayResized[0];
 
     for (int j = 0; j < outputHeight; j++) {
         for (int i = 0; i < outputWidth; i++) {

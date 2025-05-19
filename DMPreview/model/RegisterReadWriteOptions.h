@@ -50,6 +50,8 @@ public:
     bool IsSaveLog(){ return m_bSaveLog; }
     void EnableSaveLog(bool bEnable){ m_bSaveLog = bEnable; }
 
+    int GetCurrentDeviceIndex() { return m_nCurrentDeviceIndex; }
+    void SetCurrentDeviceIndex(int index) { m_nCurrentDeviceIndex = index; }
 private:
     TYPE m_registerType = IC2;
     int m_nSlaveID = EOF;
@@ -61,7 +63,8 @@ private:
 
     bool m_bPeriodicRead = false;
     int  m_nPeriodTimeMs = 1000;
-    bool m_bSaveLog = false;    
+    bool m_bSaveLog = false;
+    int m_nCurrentDeviceIndex = 0;
 };
 
 #endif // REGISTERREADWRITEOPTIONS_H

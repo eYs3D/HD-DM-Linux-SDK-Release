@@ -810,7 +810,11 @@ int RegisterSettings::DM_Quality_Register_Setting(void* hEYSD, PDEVSELINFO pDevS
     case APC_PID_IVY:
         modelName = "IVY";
         break;
+    case APC_PID_IVY2:
+        modelName = "IVY2";
+        break;
     default:
+        fprintf(stderr, "[%s][%d] Cannot find cfg file for %hu, is it new module ?\n", __func__, __LINE__, wPID);
         modelName = "DEFAULT";
         break;
     }
@@ -929,16 +933,30 @@ int RegisterSettings::Batch_read_ASIC(void* hEYSD, PDEVSELINFO pDevSelInfo, unsi
     return nRet;
 }
 
-int RegisterSettings::Batch_read_Sensor(void* hEYSD, PDEVSELINFO pDevSelInfo, int SensorSlaveAddress, int flag)
+int RegisterSettings::Batch_read_Sensor(void* hEYSD, PDEVSELINFO pDevSelInfo, int SensorSlaveAddress, int flag,
+                                        int productId)
 {
     int nRet = 0;
     char readfileName[256] = {0};
     char writefileName[256] = {0};
     char tmp[255];
     int RegAddress, Data;
-    SENSORMODE_INFO SensorMode = SENSOR_A;
-    sprintf(readfileName, "./batch/Sensor_list.txt");
-    sprintf(writefileName, "./batch/Sensor_read.txt");
+    SENSORMODE_INFO SensorMode = SENSOR_BOTH;
+
+    switch (productId) {
+        case APC_PID_IVY2:
+            sprintf(readfileName, "./batch/Sensor_list.txt");
+            sprintf(writefileName, "./batch/Sensor_read.txt");
+            break;
+        case APC_PID_IVY4:
+            sprintf(readfileName, "./batch/Sensor_list_IVY4.txt");
+            sprintf(writefileName, "./batch/Sensor_read_IVY4.txt");
+            break;
+        default:
+            printf("Product not support\n");
+            return -1;
+    }
+
     ifstream in(readfileName);
     ofstream out(writefileName);
     if (!in)

@@ -38,6 +38,10 @@ public:
     bool GetSwapBytesOrderStatus() { return m_SwapBytesOrder; }
     void SetSwapBytesOrderStatus(bool swapBytesOrder) { m_SwapBytesOrder = swapBytesOrder; }
 
+    std::map<std::string, int> GetCurrentDeviceMap();
+    int  GetCurrentCameraIndex();
+    void SetCurrentCameraIndex(int nIndex);
+
 private:
     CVideoDeviceModel *m_pVideoDeviceModel;
     RegisterReadWriteOptions *m_pRegisterReadWriteOptions;

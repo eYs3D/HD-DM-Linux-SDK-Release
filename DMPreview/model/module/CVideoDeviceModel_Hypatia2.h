@@ -6,9 +6,9 @@ class CVideoDeviceModel_Hypatia2 : public CVideoDeviceModel
 {
 public:
     virtual int TransformDepthDataType(int nDepthDataType, bool bRectifyData);
-
+    virtual int PreparePointCloudInfo();
+    virtual int AdjustZDTableIndex(int &nIndex);
     friend class CVideoDeviceModelFactory;
-
 protected:
     CVideoDeviceModel_Hypatia2(DEVSELINFO *pDeviceSelfInfo);
 };

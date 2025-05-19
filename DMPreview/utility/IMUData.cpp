@@ -16,7 +16,9 @@ std::map<IMUData::IMUPacketSymbol, size_t> IMUData::sizeTable = {
 	{ GYROSCOPE_Z,2 },
 	{ COMPASS_X,2 },
 	{ COMPASS_Y,2 },
-	{ COMPASS_Z,2 } };
+    { COMPASS_Z,2 },
+    { TRIGGER_STATUS, 1 } // Rev.1.10 Only used in IVY2
+};
 
 std::map<IMUData::IMUPacketSymbol, size_t> IMUData::sizeTable_DMP = {
 	{ FRAME_COUNT, 2 },
@@ -107,9 +109,10 @@ void IMUData::parsePacket_STM_IMU(unsigned char *buf) {
     _gyroScopeX =	            (int16_t) parseBuff(buf, sizeTable[GYROSCOPE_X  ]); // 2
     _gyroScopeY =	            (int16_t) parseBuff(buf, sizeTable[GYROSCOPE_Y  ]); // 2
     _gyroScopeZ =	            (int16_t) parseBuff(buf, sizeTable[GYROSCOPE_Z  ]); // 2
-    fprintf(stderr, "FrameSN:[%d] Time: %2d,%2d,%2d,%5d\nacc:%5f,%5f,%5f tmp:%2d\ngyro:%5f,%5f,%5f\n\n",
+    _updateReason =             (uint8_t) parseBuff(buf, sizeTable[TRIGGER_STATUS]); //1
+    fprintf(stderr, "FrameSN:[%d] Time: %2d,%2d,%2d,%5d\nacc:%5f,%5f,%5f tmp:%2d\ngyro:%5f,%5f,%5f\nReason:%x\n",
                     _frameCount, _hour, _min, _sec, _subSecond, _accelX, _accelY, _accelZ,
-                    _temprature, _gyroScopeX, _gyroScopeY, _gyroScopeZ);
+                    _temprature, _gyroScopeX, _gyroScopeY, _gyroScopeZ, _updateReason);
 }
 
 void IMUData::parsePacket(unsigned char* buf, bool normalization)

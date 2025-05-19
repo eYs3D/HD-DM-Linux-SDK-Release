@@ -2,6 +2,7 @@
 #define CIMUDEVICEMANAGER_H
 #include <vector>
 #include <map>
+#include <cstdio>
 #include "../hidapi.h"
 
 class CIMUDeviceManager

@@ -418,9 +418,17 @@ void CVideoDeviceDialog::UpdateThermalUI() {
 
 void CVideoDeviceDialog::UpdateSelfCalibration()
 {
-    if (m_pSelfCalibrationWidget) delete m_pSelfCalibrationWidget;
-    m_pSelfCalibrationWidget = new CSelfCalibrationWidget(m_pVideoDeviceController, this);
-    ui->tabWidget->addTab(m_pSelfCalibrationWidget, "SelfCalibration");
+    QSettings settings("./../settings/APC_UIConfig.ini", QSettings::IniFormat);
+    settings.setIniCodec("UTF8");
+    settings.beginGroup("Setting");
+    int self_calibration_ui_config = 0;
+    self_calibration_ui_config = settings.value("Enable_TabPage_SelfCalibration").toInt();
+    qDebug() << "UpdateSelfCalibration Enable_TabPage_SelfCalibration:" << self_calibration_ui_config;
+    if (self_calibration_ui_config == 1) {
+        if (m_pSelfCalibrationWidget) delete m_pSelfCalibrationWidget;
+        m_pSelfCalibrationWidget = new CSelfCalibrationWidget(m_pVideoDeviceController, this);
+        ui->tabWidget->addTab(m_pSelfCalibrationWidget, "SelfCalibration");
+    }
 }
 
 void CVideoDeviceDialog::UpdateSparseMode()

@@ -2,7 +2,7 @@
 #define UTIMAGEPROCESSINGUTILITY_H
 #include "eSPDI_def.h"
 #include "ColorPaletteGenerator.h"
-
+#include <vector>
 class utImageProcessingUtility
 {
 public:
@@ -30,6 +30,10 @@ public:
                               float cxNew, float cyNew,
                               float angle,
                               float &x, float &y);
+
+    static std::vector<unsigned char> CropLeftImage(std::vector<unsigned char>& concatenatedImage,
+                                                    const int fullWidth, const int height,
+                                                    const int bytePerPixel);
 private:
     utImageProcessingUtility();
 };

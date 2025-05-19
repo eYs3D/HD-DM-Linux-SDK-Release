@@ -131,10 +131,7 @@ int CCameraPropertyModel::SetDefaultCameraProperty()
     for (int i = 0 ; i < CAMERA_PROPERTY_COUNT ; ++i){
         bool bNeedRestoreAutoState = false;
         if(EXPOSURE_TIME == (CAMERA_PROPERTY)i){
-            if(1 == m_cameraPropertyItems[AUTO_EXPOSURE].nValue){
-                SetCameraPropertyValue(AUTO_EXPOSURE, 0);
-                bNeedRestoreAutoState = true;
-            }
+            bNeedRestoreAutoState = true;
         }else if(WHITE_BLANCE_TEMPERATURE == (CAMERA_PROPERTY)i){
             if(1 == m_cameraPropertyItems[AUTO_WHITE_BLANCE].nValue){
                 SetCameraPropertyValue(AUTO_WHITE_BLANCE, 0);

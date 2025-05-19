@@ -49,7 +49,7 @@ contains(DEFINES, THERMAL_SENSOR) {
 LIBS += -lrt -lm -ldl -lpthread -lX11 -ludev -lusb-1.0
 CONFIG += c++11
 
-QMAKE_LFLAGS += '-Wl,-rpath,\'\$$ORIGIN/../eSPDI\''
+QMAKE_LFLAGS += '-Wl,--trace,-rpath,\'\$$ORIGIN/../eSPDI\''
 
 QMAKE_CXXFLAGS_WARN_ON += -Wno-unused-parameter
 QMAKE_CXXFLAGS_WARN_ON += -Wno-reorder
@@ -113,6 +113,7 @@ HEADERS += \
     model/module/CVideoDeviceModel_8076_8077.h \
     model/module/CVideoDeviceModel_8081.h \
     model/module/CVideoDeviceModel_8083.h \
+    model/module/CVideoDeviceModel_IVY3.h \
     model/module/CVideoDeviceModel_ColorWithDepth.h \
     model/module/CVideoDeviceModel_Kolor.h \
     model/module/CVideoDeviceModel_Hypatia.h \
@@ -163,7 +164,8 @@ HEADERS += \
     view/CIMUDataViewerWidget.h \
     view/CVideoDeviceDepthFilterWidget.h \
     view/CSelfCalibrationWidget.h \
-    view/CSparseModeWidget.h
+    view/CSparseModeWidget.h \
+    model/module/CVideoDeviceModel_IVY4.h
 
 # x86 hidapi with hid_libusb
 
@@ -213,6 +215,7 @@ SOURCES += \
     model/module/CVideoDeviceModel_8076_8077.cpp \
     model/module/CVideoDeviceModel_8081.cpp \
     model/module/CVideoDeviceModel_8083.cpp \
+    model/module/CVideoDeviceModel_IVY3.cpp \
     model/module/CVideoDeviceModel_ColorWithDepth.cpp \
     model/module/CVideoDeviceModel_Kolor.cpp \
     model/module/CVideoDeviceModel_Hypatia.cpp \
@@ -260,7 +263,8 @@ SOURCES += \
     view/CIMUDataViewerWidget.cpp \
     view/CVideoDeviceDepthFilterWidget.cpp \
     view/CSelfCalibrationWidget.cpp \
-    view/CSparseModeWidget.cpp
+    view/CSparseModeWidget.cpp \
+    model/module/CVideoDeviceModel_IVY4.cpp
 
 RESOURCES += \
     resource/resource.qrc

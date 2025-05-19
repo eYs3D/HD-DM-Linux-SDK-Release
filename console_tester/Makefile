@@ -13,7 +13,7 @@ endif
 ifeq ($(CPU), PX30)
 	TARGET = test_arm64_px30
 	LIBS = -L../eSPDI -leSPDI_$(CPU)_64 \
-	       -lrt
+	       -lrt -lusb-1.0
 endif
 ifeq ($(CPU), MTK)
 	TARGET = test_arm64_mtk

@@ -1,6 +1,24 @@
 #include "utImageProcessingUtility.h"
 #include <QDebug>
 #include <math.h>
+#include <cstring>
+std::vector<unsigned char>
+utImageProcessingUtility::CropLeftImage(std::vector<unsigned char>& concatenatedImage,
+                                        const int fullWidth, const int height,
+                                        const int bytePerPixel) {
+    const int cropWidth = fullWidth / 2;
+    const int croppedSize = cropWidth * height * bytePerPixel;
+    const int cropStride = cropWidth * bytePerPixel;
+    std::vector<unsigned char> croppedImage(croppedSize);
+
+    for (int y = 0; y < height; ++y) {
+        int sourceOffset = y * fullWidth * bytePerPixel;
+        int targetOffset = y * cropWidth * bytePerPixel;
+        memcpy(&croppedImage[targetOffset], &concatenatedImage[sourceOffset], cropStride);
+    }
+
+    return std::move(croppedImage);
+}
 
 int utImageProcessingUtility::convert_yuv_to_rgb_pixel(int y, int u, int v)
 {

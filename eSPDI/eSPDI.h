@@ -651,6 +651,25 @@ int  APC_GetZDTable      (void *pHandleEYSD, PDEVSELINFO pDevSelInfo, BYTE *buff
 */
 int  APC_GetLogData      (void *pHandleEYSD, PDEVSELINFO pDevSelInfo, BYTE *buffer, int BufferLength, int *pActualLength, int index, CALIBRATION_LOG_TYPE type);
 
+/*! \fn int APC_GetLogData(
+        void *pHandleEYSD,
+        PDEVSELINFO pDevSelInfo,
+        BYTE *buffer,
+        int BufferLength,
+        int *pActualLength,
+        int index)
+    \brief get log data from flash default all
+    \param void *pHandleEYSD    handle
+    \param PDEVSELINFO pDevSelInfo  pointer of device select index
+    \param BYTE *buffer buffer to store log data
+    \param int BufferLength input buffer length, must be 4096
+    \param int *pActualLength   actual length has written to buffer
+    \param int index    index to identify log data for corresponding depth
+    \param CALIBRATION_LOG_TYPE type    which calibration log to get
+    \return success: APC_OK, others: see eSPDI_def.h
+*/
+int  APC_GetLogData_linux(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, BYTE *buffer, int BufferLength, int *pActualLength, int index);
+
 /*! \fn int APC_GetUserData(
         void *pHandleEYSD,
         PDEVSELINFO pDevSelInfo,
@@ -685,6 +704,24 @@ int  APC_GetUserData     (void *pHandleEYSD, PDEVSELINFO pDevSelInfo, BYTE *buff
 */
 int  APC_SetYOffset      (void *pHandleEYSD, PDEVSELINFO pDevSelInfo, BYTE *buffer, int BufferLength, int *pActualLength, int index);
 
+/*! \fn int APC_SetYOffset_Advanced(
+        void *pHandleEYSD,
+        PDEVSELINFO pDevSelInfo,
+        BYTE *buffer,
+        int BufferLength,
+        int *pActualLength,
+        int index)
+    \brief set Y offset values to G1 and G2 if is FP device
+    \param void *pHandleEYSD    handle
+    \param PDEVSELINFO pDevSelInfo  pointer of device select index
+    \param BYTE *buffer buffer data to set
+    \param int BufferLength buffer length
+    \param int *pActualLength   always return 256
+    \param int index    index value to file ID 30
+    \return success: APC_OK, others: see eSPDI_def.h
+*/
+int  APC_SetYOffset_Advanced(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, BYTE *buffer, int BufferLength, int *pActualLength, int index);
+
 /*! \fn int APC_SetRectifyTable(
         void *pHandleEYSD,
         PDEVSELINFO pDevSelInfo,
@@ -702,6 +739,24 @@ int  APC_SetYOffset      (void *pHandleEYSD, PDEVSELINFO pDevSelInfo, BYTE *buff
     \return success: APC_OK, others: see eSPDI_def.h
 */
 int  APC_SetRectifyTable (void *pHandleEYSD, PDEVSELINFO pDevSelInfo, BYTE *buffer, int BufferLength, int *pActualLength, int index);
+
+/*! \fn int APC_SetRectifyTable_Advanced(
+        void *pHandleEYSD,
+        PDEVSELINFO pDevSelInfo,
+        BYTE *buffer,
+        int BufferLength,
+        int *pActualLength,
+        int index)
+    \brief set rectify values to G1 and G2 if is FP device
+    \param void *pHandleEYSD    handle
+    \param PDEVSELINFO pDevSelInfo  pointer of device select index
+    \param BYTE *buffer rectify values to set
+    \param int BufferLength bufer length, must be 1024
+    \param int *pActualLength   always return 1024
+    \param int index    index(from 0 ~ 9) to identify rectify table for corresponding depth
+    \return success: APC_OK, others: see eSPDI_def.h
+*/
+int  APC_SetRectifyTable_Advanced(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, BYTE *buffer, int BufferLength, int *pActualLength, int index);
 
 /*! \fn int APC_SetZDTable(
         void *pHandleEYSD,
@@ -721,6 +776,24 @@ int  APC_SetRectifyTable (void *pHandleEYSD, PDEVSELINFO pDevSelInfo, BYTE *buff
 */
 int  APC_SetZDTable      (void *pHandleEYSD, PDEVSELINFO pDevSelInfo, BYTE *buffer, int BufferLength, int *pActualLength, PZDTABLEINFO pZDTableInfo);
 
+/*! \fn int APC_SetZDTable_Advanced(
+        void *pHandleEYSD,
+        PDEVSELINFO pDevSelInfo,
+        BYTE *buffer,
+        int BufferLength,
+        int *pActualLength,
+        PZDTABLEINFO pZDTableInfo)
+    \brief set disparity and Z values to G1 and G2 if is FP device
+    \param void *pHandleEYSD    handle
+    \param PDEVSELINFO pDevSelInfo  pointer of device select index
+    \param BYTE *buffer ZD values to set
+    \param int BufferLength corresponding length of ZD table in buffer
+    \param int *pActualLength   buffer lenth written to flash, should be same as BufferLength
+    \param PZDTABLEINFO pZDTableInfo    index and depth type of this ZD
+    \return success: APC_OK, others: see eSPDI_def.h
+*/
+int  APC_SetZDTable_Advanced(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, BYTE *buffer, int BufferLength, int *pActualLength, PZDTABLEINFO pZDTableInfo);
+
 /*! \fn int APC_SetLogData(
         void *pHandleEYSD,
         PDEVSELINFO pDevSelInfo,
@@ -738,6 +811,34 @@ int  APC_SetZDTable      (void *pHandleEYSD, PDEVSELINFO pDevSelInfo, BYTE *buff
     \return success: APC_OK, others: see eSPDI_def.h
 */
 int  APC_SetLogData      (void *pHandleEYSD, PDEVSELINFO pDevSelInfo, BYTE *buffer, int BufferLength, int *pActualLength, int index);
+
+/*! \fn int APC_SetLogData_Advanced(
+        void *pHandleEYSD,
+        PDEVSELINFO pDevSelInfo,
+        BYTE *buffer,
+        int BufferLength,
+        int *pActualLength,
+        int index)
+    \brief set log data to G1 and G2 if is FP device
+    \param void *pHandleEYSD    handle
+    \param PDEVSELINFO pDevSelInfo  pointer of device select index
+    \param BYTE *buffer log data to set
+    \param int BufferLength buffer length, must be 4096
+    \param int *pActualLength   always return 4096
+    \param int index    index to identify log data for corresponding depth
+    \return success: APC_OK, others: see eSPDI_def.h
+*/
+int  APC_SetLogData_Advanced(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, BYTE *buffer, int BufferLength, int *pActualLength, int index);
+
+/*! \fn int APC_GetFlashProtectionSupported(
+void *pHandleEYSD,
+PDEVSELINFO pDevSelInfo)
+\brief check module support protected flash or not
+\param pHandleEYSD	 the pointer to the initilized EYSD SDK instance
+\param pDevSelInfo	pointer of device select index
+\return APC_OK: support FP, APC_NotSupport: not support FP
+*/
+int APC_GetFlashProtectionSupported(void *pHandleEYSD, PDEVSELINFO pDevSelInfo);
 
 /*! \fn int APC_SetUserData(
         void *pHandleEYSD,
@@ -842,6 +943,23 @@ int  APC_GetDeviceResolutionList(void *pHandleEYSD, PDEVSELINFO pDevSelInfo,
 */
 int  APC_Setup_v4l2_requestbuffers(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, int cnt);
 
+/**
+ * @brief Porting the signature from Windows SDK. Open camera device with image callback support.
+ * @param void *pHandleEYSD the pointer to the initialized eYs3D SDK instance
+ * @param PDEVSELINFO pDevSelInfo pointer of device select index
+ * @param int colorStreamIndex index of the desired color stream
+ * @param int depthStreamIndex index of the desired depth stream
+ * @param int depthStreamSwitch depth switch currently unused.
+ * @param int nFPS indicate frame per second to the desired frame rate.
+ * @param APC_ImgCallbackFn callbackFn set image callback function
+ * @param void* pCallbackParameter the data to associate with the callback function
+ * @param pid Specify device product id currently unused.
+ * @return success: APC_OK, others:see eSPDI_ErrCode.h
+ */
+
+int APC_OpenDeviceCallback(void* pHandleEYSD, PDEVSELINFO pDevSelInfo,
+                           int colorStreamIndex, int depthStreamIndex, int depthStreamSwitch, int nFPS,
+                           APC_ImgCallbackFn callbackFn, void* pCallbackParameter, int pid);
 /*! \fn int APC_OpenDevice(
     void *pHandleEYSD,
     PDEVSELINFO pDevSelInfo,
@@ -1639,6 +1757,44 @@ int  APC_SetGPIOCtrl(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, int nGPIOIndex,
 */
 int  APC_GetCTPropVal(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, int nId, long int *pValue);
 
+/*! \fn int APC_PropertyCT_GetCurrent(
+        void *pHandleEYSD,
+        PDEVSELINFO pDevSelInfo,
+        long nProperty,
+        long *pCur,
+        long *pCur2,
+        long *pCapsFlag,
+        int pid)
+    \brief get camera terminal(CT) property value for cv, windows type api
+        By v4l2_control to get control value of camera terminal
+
+        this enumeration contained the following properties:
+        V4L2_CID_EXPOSURE_AUTO;
+        V4L2_CID_EXPOSURE_AUTO_PRIORITY
+        V4L2_CID_EXPOSURE_ABSOLUTE
+        V4L2_CID_EXPOSURE
+        V4L2_CID_FOCUS_ABSOLUTE
+        V4L2_CID_FOCUS_RELATIVE
+        V4L2_CID_FOCUS_AUTO
+        V4L2_CID_IRIS_ABSOLUTE
+        V4L2_CID_IRIS_RELATIVE
+        V4L2_CID_ZOOM_ABSOLUTE
+        V4L2_CID_ZOOM_RELATIVE
+        V4L2_CID_PAN_ABSOLUTE
+        V4L2_CID_PAN_RELATIVE
+        V4L2_CID_TILT_ABSOLUTE
+        V4L2_CID_TILT_RELATIVE
+        V4L2_CID_PRIVACY
+    \param void *pHandleEYSD    handle
+    \param PDEVSELINFO pDevSelInfo  pointer of device select index
+    \param long nProperty  specifies the member of the property set,
+        see windows CT Property ID defined in eSPDI_def.h
+    \param long *pCur  pointer of store CT property value
+    \param int pid set device pid, slave system not create yet.
+    \return success: APC_OK, others: see eSPDI_def.h
+*/
+int  APC_PropertyCT_GetCurrent(void *pHandleEYSD, DEVSELINFO *pDevSelInfo, long nProperty, long *pCur, long *pCur2, long *pCapsFlag, int pid);
+
 /*! \fn int APC_SetCTPropVal(
         void *pHandleEYSD,
         PDEVSELINFO pDevSelInfo,
@@ -1654,6 +1810,26 @@ int  APC_GetCTPropVal(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, int nId, long 
     \return success: APC_OK, others: see eSPDI_def.h
 */
 int  APC_SetCTPropVal(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, int nId, long int nValue);
+
+/*! \fn int APC_PropertyCT_SetCurrent(
+        void *pHandleEYSD,
+        PDEVSELINFO pDevSelInfo,
+        long nProperty,
+        long pCur,
+        long pCur2,
+        long pCapsFlag,
+        int pid)
+    \brief set camera terminal property values for cv, windows type api
+        By v4l2_control to set
+    \param void *pHandleEYSD    handle
+    \param PDEVSELINFO pDevSelInfo  pointer of device select index
+    \param long nProperty  specifies the member of the property set
+        see windows CT Property ID defined in eSPDI_def.h
+    \param long pCur  CT property value to set
+    \param int pid set device pid, slave system not create yet.
+    \return success: APC_OK, others: see eSPDI_def.h
+*/
+int  APC_PropertyCT_SetCurrent(void *pHandleEYSD, DEVSELINFO *pDevSelInfo, long nProperty, long pCur, long pCur2, long pCapsFlag, int pid);
 
 /*! \fn int APC_GetPUPropVal(
         void *pHandleEYSD,
@@ -1778,6 +1954,45 @@ int  APC_GetCTRangeAndStep(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, int nId, 
     \return success: APC_OK, others: see eSPDI_def.h
 */
 int  APC_GetPURangeAndStep(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, int nId, int *pMax, int *pMin, int *pStep, int *pDefault, int *pFlags);
+
+/*! \fn int APC_PropertyCT_GetRange(
+    void *pHandleEYSD, DEVSELINFO *pDevSelInfo, long nProperty, long *pMax, long *pMin, long *pStep, long *pDefault, long *pFlags, int pid)
+    \brief get processing unit property value for cv, windows type api
+        By v4l2_queryctrl to get property values of processing unit(PU)
+        this enumeration contained the following properties:
+        V4L2_CID_BACKLIGHT_COMPENSATION
+        V4L2_CID_BRIGHTNESS
+        V4L2_CID_CONTRAST
+        V4L2_CID_GAIN
+        V4L2_CID_POWER_LINE_FREQUENCY
+        V4L2_CID_HUE
+        V4L2_CID_HUE_AUTO
+        V4L2_CID_SATURATION
+        V4L2_CID_SHARPNESS
+        V4L2_CID_GAMMA
+        V4L2_CID_WHITE_BALANCE_TEMPERATURE
+        V4L2_CID_AUTO_WHITE_BALANCE
+    \param void *pHandleEYSD    handle
+    \param PDEVSELINFO pDevSelInfo  pointer of device select index
+    \param long nProperty  nProperty specifies the member of the property set,
+        see windows CT Property ID defined in eSPDI_def.h
+    \param long int *pMax   maximum value, inclusive.
+        This field gives an upper bound for the control
+    \param long int *pMin   minimum value, inclusive.
+        This field gives a lower bound for the control
+    \param long int *pStep  This field gives a step size for the control
+        see enum https://www.linuxtv.org/downloads/v4l-dvb-apis-old/vidioc-queryctrl.html
+        how the step value is to be used for each possible control type. Note that this an unsigned 32-bit value
+    \param long int *pDefault   The default value of a V4L2_CTRL_TYPE_INTEGER, _BOOLEAN, _BITMASK,
+        _MENU or _INTEGER_MENU control. Not valid for other types of controls.
+        Note that drivers reset controls to their default value only when the driver is first loaded, never afterwards.
+    \param long int *pFlags control flags,
+        see https://www.linuxtv.org/downloads/v4l-dvb-apis-old/vidioc-queryctrl.html
+    \param int pid set device pid, slave system not create yet.
+    \return success: APC_OK, others: see eSPDI_def.h
+*/
+
+int APC_PropertyCT_GetRange(void *pHandleEYSD, DEVSELINFO *pDevSelInfo, long nProperty, long *pMax, long *pMin, long *pStep, long *pDefault, long *pFlags, int pid);
 
 int APC_GetCTPUSupportList(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, unsigned char CtPuId, unsigned short int *pValue);
 
@@ -3107,5 +3322,55 @@ int APC_GetSimpleDevSelectIndex(void *pHandleEYSD, int index);
 */
 int APC_GetCompositeDevSelectIndex(void *pHandleEYSD, int index);
 
+/*! \fn int APC_GetDeviceInfoEx(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, DEVINFORMATIONEX* pDevInfoEx)
+    \brief Get informations of EYSD UVC devices, see DEVINFORMATIONEX.
+    \param void *pHandleEYSD handle
+    \param PDEVSELINFO pDevSelInfo pointer of device select index.
+    \param DEVINFORMATIONEX* pDevInfoEx	pointer of device information.
+    \return success: APC_OK, others: see eSPDI_def.h
+*/
+int APC_GetDeviceInfoEx(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, DEVINFORMATIONEX* pDevInfoEx);
 
+/**
+ * @fn APC_IsBPX4bitsClear
+ * @param pHandleEYSD device handle
+ * @param pDevSelInfo pointer of device select index.
+ * @return return if it cleared return APC_OK , APC_WRITE_REG_FAIL if cannot
+ */
+int APC_IsBPX4bitsClear(void *pHandleEYSD, PDEVSELINFO pDevSelInfo);
+
+/**
+ * @fn APC_UnprotectFlash
+ * @param pHandleEYSD
+ * @param pDevSelInfo
+ * @return Supported firmware: If unlocked or successfully unlocked return APC_OK. Failed return APC_WRITE_REG_FAIL.
+ * Not support firmware: APC_OK.
+ * Other: No device APC_NoDevice. Null pointer APC_Init_Fail. APC_DEVICE_BUSY if imu is testing.
+ */
+int APC_UnprotectFlash(void *pHandleEYSD, PDEVSELINFO pDevSelInfo);
+
+typedef struct {
+    uint8_t protocolVersion;
+    uint8_t payloadSize;
+    union {
+        uint8_t payload[256];
+    };
+} APC_META_DATA;
+
+typedef void (*APC_MetaDataCallbackFn) (APC_META_DATA metaData);
+
+/**
+ * @fn APC_EnableMetaDataEvent
+ * @param pHandleEYSD: Initialized handler returned by APC_Init API.
+ * @param pDevSelInfo: Pointer to the device select information.
+ * @param enableEvent: Set to true to enable the metadata event, false to disable it.
+ * @param callbackFunction: Callback function to be invoked after image metadata is ready. It contains APC_META_DATA as
+ * the callback function's parameter. If the data received with payloadSize is zero, it means error happens, and one
+ * meta data event will be dropped.
+ * @return return APC_OK when successful operation. APC_ILLEGAL_STEP if already open before.
+ * APC_RET_BAD_PARAM is from registering VIDIOC_SUBSCRIBE_EVENT failed. APC_NullPtr might be null handle or callback.
+ * Other return value: Check eSPDI_def.h
+ */
+int APC_SetMetaDataEventState(void *pHandleEYSD, PDEVSELINFO pDevSelInfo, bool enableEvent,
+                              APC_MetaDataCallbackFn callbackFunction = nullptr);
 #endif // LIB_ESPDI_H

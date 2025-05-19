@@ -14,6 +14,8 @@
 #include <linux/input.h>
 #include <sys/stat.h>
 #include <glob.h>
+#include <fstream>
+#include <cstdio>
 
 #include "PlyWriter.h"
 #include "eSPDI.h"
@@ -22,6 +24,9 @@
 #include "RegisterSettings.h"
 #include "hidapi.h"
 #include "imu8062/CIMUModel.h"
+#include "json/nlohmann/json.hpp"
+#include "meta/MetaDataPayloadParser.h"
+#include "meta/JsonFileSerializer.h"
 
 #define CT_DEBUG_CT_DEBUG(format, ...) \
     printf("[CT][%s][%d]" format, __func__, __LINE__, ##__VA_ARGS__)
@@ -113,7 +118,7 @@ static pthread_t gdepth_thread_id = (pthread_t) - 1;
 static int gColorFormat     = 1; // 0: YUYV, 1: MJPEG
 static int gColorWidth      = 1280;
 static int gColorHeight     = 720;
-
+JsonFileSerializer* gJsonFileSerializer = nullptr;
 static bool snapShot_color  = true;
 static bool snapShot_raw    = true;
 static bool snapShot_depth  = true;
@@ -306,6 +311,7 @@ static void Read5X(void);
 static void Write5X(void);
 static void Read24X(void);
 static void Write24X(void);
+static void ReadAllCalibrationData(void);
 static void PointCloudFPS(void);
 static void ResetUNPData(void);
 static void ReadPlugIn(void);
@@ -368,11 +374,11 @@ class FrameCallbackHelper {
 private:
     bool mIsStart = false;
     std::thread mCallbackLooper;
-    Frame* mFrame = nullptr;
 protected:
     void* mDeviceHandle = nullptr;
     DEVSELINFO mDevSelInfo;
 public:
+    Frame* mFrame = nullptr;
     using Callback = std::function<bool(const Frame* frame)>;
     Callback mCallback;
     explicit FrameCallbackHelper(void* handle, DEVSELINFO devSelInfo, size_t w, size_t h, size_t bpp, Callback& cb) {
@@ -457,6 +463,11 @@ public:
 
 }; // namespace libeys3d
 
+void SimpleColorDepthCallback(APCImageType::Value imgType, int imgId, unsigned char *imgBuf, int imgSizeByte,
+                              int width, int height, int serialNumber, long long timestamp, void *pParameter) {
+    fprintf(stderr, "APC_OpenDeviceCallback reason type:%d id:%d buf:%p sz:%d w:%d h:%d sn:%d ts:%lld param:%p \n",
+            imgType, imgId, imgBuf, imgSizeByte, width, height, serialNumber, timestamp, pParameter);
+}
 
 void SelectDevInx(int index) {
     if (g_pDevInfo[index].nDevType != OTHERS && g_pDevInfo[index].nDevType != UNKNOWN_DEVICE_TYPE) {
@@ -706,14 +717,14 @@ int main(void)
         printf("11. Set IR Value\n");
         printf("20. FW Reg Write\n");
         printf("21. FW Reg Read\n");
-        printf("22. Camera intrinsic/extrinsic Read3X\n");
-        printf("23. Camera intrinsic/extrinsic Write3X\n");
-        printf("24. Camera intrinsic/extrinsic Read4X\n");
-        printf("25. Camera intrinsic/extrinsic Write4X\n");
-        printf("26. Camera intrinsic/extrinsic Read5X\n");
-        printf("27. Camera intrinsic/extrinsic Write5X\n");
-        printf("28. Camera intrinsic/extrinsic Read24X\n");
-        printf("29. Camera intrinsic/extrinsic Write24X\n");
+        printf("22. Camera intrinsic/extrinsic Read3X Y Offset\n");
+        //printf("23. Camera intrinsic/extrinsic Write3X\n");
+        printf("24. Camera intrinsic/extrinsic Read4X Rectify\n");
+        //printf("25. Camera intrinsic/extrinsic Write4X\n");
+        printf("26. Camera intrinsic/extrinsic Read5X ZD table\n");
+        //printf("27. Camera intrinsic/extrinsic Write5X\n");
+        printf("28. Camera intrinsic/extrinsic Read24X Log\n");
+        //printf("29. Camera intrinsic/extrinsic Write24X\n");
         printf("30. Reset UNPData\n");
         printf("31. Point Cloud FPS Demo\n");
         printf("33. ReadPlugIn\n");
@@ -726,14 +737,24 @@ int main(void)
 #endif
         printf("81. Force overwrite calibration data G1 section to G2, 30 40 50 240. (Use at your own risk.)\n");
         printf("85. IVY Camera (2248X1364@30, APC_DEPTH_DATA_OFF_RAW, USB)\n");
-        printf("86. IVY Camera Image Callback Helper (1104x1104@30, APC_DEPTH_DATA_11_BITS, USB)\n");
-        printf("92. IVY Camera IMU Callback Helper HIDAPI with libusb \n");
-        printf("93. IVY Camera Exposure: Analog/Digital Gain, Exposure Time\n");
-        printf("94. IVY Camera requested case. Devices info. Save files. Demo callbacks.\n");
-        printf("95. IVY IMU Enter FW download mode.\n");
-        printf("101. Batch ASIC register value.\n");
-        printf("102. Batch ASIC & Sensor & FW register value.\n");
-        printf("103. Write the output bin file of the calibration tool to the camera.\n");
+        printf("86. IVY2 / IVY4 Camera Image Callback Helper (1104x1104@30, APC_DEPTH_DATA_11_BITS, USB)\n");
+        printf("92. IVY2 Only Camera IMU Callback Helper HIDAPI with libusb \n");
+        printf("93. IVY2 / IVY4 Camera Exposure: Analog/Digital Gain, Exposure Time\n");
+        printf("94. IVY2 / IVY4 Camera requested case. Devices info. Save files. Demo callbacks. IVY4 without IMU.\n");
+        printf("95. IVY2 IMU Enter FW download mode.\n");
+        printf("96. Use Windows API open camera.\n");
+        printf("97. IVY2 + IVY3 / IVY4 Camera streaming. IVY2 IMU test\n");
+        printf("98. IVY4 Tool1 item Disable eSP876 ISP related function\n");
+        printf("99. IVY4 Metadata implementation.\n");
+        printf("101. IVY2 / IVY4 Batch ASIC register value.\n");
+        printf("102. IVY2 / IVY4 Batch ASIC & Sensor & FW register value.\n");
+        printf("----------Read/Write calibration data case----------\n");
+        printf("103. IVY2 / IVY4 Read all calibration data from the camera, save as read.bin file\n");
+        printf("     read.bin file will save at calibrationdata/read folder\n");
+        printf("104. IVY2 / IVY4 Write the output write.bin file of the calibration tool to the camera.\n");
+        printf("     Put write.bin file into calibrationdata/write folder\n");
+        printf("105. General Streaming Loop Test.\n");
+        printf("106. Profile YUY2 decode Loop Test.\n");
         printf("255. EXIT)\n");
         scanf("%d", &input);
         switch (input) {
@@ -1098,6 +1119,8 @@ int main(void)
                 int dh = 1104;
                 int f0 = APC_DEPTH_DATA_11_BITS;
                 int fps = 30;
+                printf("Choose YUYV:0 MJPEG:1 \n");
+                scanf("%d", &gColorFormat);
                 printf("Choose color width ");
                 scanf("%d", &cw);
                 printf("Choose color height ");
@@ -1464,8 +1487,7 @@ int main(void)
             void* cameraHandle = nullptr;
             DEVSELINFO devSelInfo;
             devSelInfo.index = 0;
-            DEVSELINFO devESP777Info;
-            devESP777Info.index = 1;
+
             int fps = 30;
             int cw = 1280; int ch = 720;
             int dw = 1280; int dh = 720;
@@ -1494,9 +1516,18 @@ int main(void)
                 return 0;
             }
 
+            // IVY2 optical control is in the eSP777 side, so select 1. IVY4 select eSP876 directly.
+            DEVINFORMATION info;
+            APC_GetDeviceInfo(cameraHandle, &devSelInfo, &info);
+            DEVSELINFO devOpticalSensorSelInfo;
+            int eSP777Index = 1;
+            devOpticalSensorSelInfo.index = info.wPID == APC_PID_IVY2 ? eSP777Index : devSelInfo.index;
+
             APC_SetDepthDataType(cameraHandle, &devSelInfo, depthDataType);
 
             APC_SetupBlock(cameraHandle, &devSelInfo, true);
+
+            APC_Setup_v4l2_requestbuffers(cameraHandle, &devSelInfo, 5);
 
             ret = APC_OpenDevice2(cameraHandle, &devSelInfo, cw, ch, isMjpeg, dw, dh, DEPTH_IMG_NON_TRANSFER, false,
                                   nullptr, &fps);
@@ -1505,13 +1536,18 @@ int main(void)
                 return 0;
             }
 
-            static bool settingUpExposure = false;
+            /**
+             * Dump 10 images in each stage. 1) Original 2) Set analog gain 3) Set digital gain. 4) Set exposure ms
+             */
+            static int nSettingUpExposure = 0;
             libeys3dsample::FrameCallbackHelper::Callback colorCallbackFn([] (const libeys3dsample::Frame *f) {
-                if (settingUpExposure) {
-                    fprintf(stderr, "Inside color callback frame.sn=%d status=%d save one image \n", f->sn, f->status);
-                    settingUpExposure = false;
-                    saveRawFile(std::to_string(f->sn).c_str(), (unsigned char*) f->dataVec.data(), f->dataVec.size());
-                    fprintf(stderr, "Saved frame.sn=%d --\n", f->sn);
+                if (nSettingUpExposure < 10) {
+                    fprintf(stderr, "Inside color callback frame.sn=%d st=%d adjusted image\n", f->sn, f->status);
+                    nSettingUpExposure++;
+                    std::string fileName(SAVE_FILE_PATH);
+                    fileName.append(std::to_string(f->sn));
+                    saveRawFile(fileName.c_str(), (unsigned char*) f->dataVec.data(), f->dataVec.size());
+                    fprintf(stderr, "Saved frame.sn=%d in %s --\n", f->sn, fileName.c_str());
                 }
                 return f->status;
             });
@@ -1529,52 +1565,56 @@ int main(void)
             libeys3dsample::DepthCallbackHelper depthCallback(cameraHandle, devSelInfo, dw, dh, 2, depthCallbackFn);
 
             colorCallback.start();
-            sleep(5);
+            if (info.wPID == APC_PID_IVY2) {
+                std::this_thread::sleep_for(std::chrono::seconds(5));
+            }
             depthCallback.start();
 
-            APC_SetCTPropVal(cameraHandle, &devESP777Info, CT_PROPERTY_ID_AUTO_EXPOSURE_MODE_CTRL, 1 /*Disable*/);
+            APC_SetCTPropVal(cameraHandle, &devOpticalSensorSelInfo, CT_PROPERTY_ID_AUTO_EXPOSURE_MODE_CTRL,
+                             AE_MOD_MANUAL_MODE);
 
             float fAnalogGain = 1.0f;
             float fSetAnalogGain = 1.0f;
-            int retAnalogGain = APC_GetAnalogGain(cameraHandle, &devESP777Info, SENSOR_BOTH, &fAnalogGain);
+            int retAnalogGain = APC_GetAnalogGain(cameraHandle, &devOpticalSensorSelInfo, SENSOR_BOTH, &fAnalogGain);
             fprintf(stderr, "APC_GetAnalogGain original value = %f ret=%d\n", fAnalogGain, retAnalogGain);
             fprintf(stderr, "Please Input Analog gain\n");
             scanf("%f", &fSetAnalogGain);
-            retAnalogGain = APC_SetAnalogGain(cameraHandle, &devESP777Info, SENSOR_BOTH, fSetAnalogGain);
+            retAnalogGain = APC_SetAnalogGain(cameraHandle, &devOpticalSensorSelInfo, SENSOR_BOTH, fSetAnalogGain);
             fprintf(stderr, "APC_SetAnalogGain set value = %f ret=%d\n", fSetAnalogGain, retAnalogGain);
-            retAnalogGain = APC_GetAnalogGain(cameraHandle, &devESP777Info, SENSOR_BOTH, &fAnalogGain);
+            retAnalogGain = APC_GetAnalogGain(cameraHandle, &devOpticalSensorSelInfo, SENSOR_BOTH, &fAnalogGain);
             fprintf(stderr, "APC_GetAnalogGain value = %f ret=%d \n", fAnalogGain, retAnalogGain);
-            settingUpExposure = true;
+            nSettingUpExposure = 0;
 
             float fDigitalGain = 1.0f;
             float fSetDigitalGain = 1.0f;
-            int retDigitalGain = APC_GetDigitalGain(cameraHandle, &devESP777Info, SENSOR_BOTH, &fDigitalGain);
+            int retDigitalGain = APC_GetDigitalGain(cameraHandle, &devOpticalSensorSelInfo, SENSOR_BOTH, &fDigitalGain);
             fprintf(stderr, "APC_GetDigitalGain original value = %f ret=%d\n", fDigitalGain, retDigitalGain);
             fprintf(stderr, "Please Input Digital gain\n");
             scanf("%f", &fSetDigitalGain);
-            retDigitalGain = APC_SetDigitalGain(cameraHandle, &devESP777Info, SENSOR_BOTH, fSetDigitalGain);
+            retDigitalGain = APC_SetDigitalGain(cameraHandle, &devOpticalSensorSelInfo, SENSOR_BOTH, fSetDigitalGain);
             fprintf(stderr, "APC_SetDigitalGain set value = %f ret=%d\n", fSetDigitalGain, retDigitalGain);
-            retDigitalGain = APC_GetDigitalGain(cameraHandle, &devESP777Info, SENSOR_BOTH, &fDigitalGain);
+            retDigitalGain = APC_GetDigitalGain(cameraHandle, &devOpticalSensorSelInfo, SENSOR_BOTH, &fDigitalGain);
             fprintf(stderr, "APC_GetDigitalGain value = %f ret=%d\n", fDigitalGain, retDigitalGain);
-            settingUpExposure = true;
+            nSettingUpExposure = 0;
 
             float fExposureTime = 0.0f;
             float fSetExposureTime = 0.0f;
-            int retExposureTime = APC_GetExposureTime(cameraHandle, &devESP777Info, SENSOR_BOTH, &fExposureTime);
+            int retExposureTime = APC_GetExposureTime(cameraHandle, &devOpticalSensorSelInfo, SENSOR_BOTH, &fExposureTime);
             fprintf(stderr, "APC_GetExposureTime original value = %f ret=%d\n", fExposureTime, retExposureTime);
             fprintf(stderr, "Please Input Exposure Time ms\n");
             scanf("%f", &fSetExposureTime);
-            retExposureTime = APC_SetExposureTime(cameraHandle, &devESP777Info, SENSOR_BOTH, fSetExposureTime);
+            retExposureTime = APC_SetExposureTime(cameraHandle, &devOpticalSensorSelInfo, SENSOR_BOTH, fSetExposureTime);
             fprintf(stderr, "APC_SetExposureTime set value = %f ret=%d\n", fSetExposureTime, retExposureTime);
-            retExposureTime = APC_GetExposureTime(cameraHandle, &devESP777Info, SENSOR_BOTH, &fExposureTime);
+            retExposureTime = APC_GetExposureTime(cameraHandle, &devOpticalSensorSelInfo, SENSOR_BOTH, &fExposureTime);
             fprintf(stderr, "APC_GetExposureTime value = %f ret=%d \n", fExposureTime, retExposureTime);
-            settingUpExposure = true;
+            nSettingUpExposure = 0;
 
             sleep(5);
             colorCallback.stop();
             depthCallback.stop();
 
             APC_CloseDevice(cameraHandle, &devSelInfo);
+            APC_Setup_v4l2_requestbuffers(cameraHandle, &devSelInfo, 32);
             APC_Release(&cameraHandle);
             break;
         }
@@ -1598,6 +1638,9 @@ int main(void)
             int fps = 30;
             int cw = 2560, ch = 960;
             int dw = 1280, dh = 960;
+            int depthDataType = 4;
+            int isMjpeg = 0;
+
             int ret = APC_Init(&cameraHandle, false);
 
             if (!cameraHandle) {
@@ -1605,8 +1648,24 @@ int main(void)
                 return 0;
             }
 
+            printf("Choose YUYV:0 MJPEG:1 \n");
+            scanf("%d", &isMjpeg);
+            printf("Color width:\n");
+            scanf("%d", &cw);
+            printf("Color height:\n");
+            scanf("%d", &ch);
+            printf("Depth width:\n");
+            scanf("%d", &dw);
+            printf("Depth height:\n");
+            scanf("%d", &dh);
+            printf("Choose FPS:\n");
+            scanf("%d", &fps);
+            printf("Choose Depth data type\nD(11Bits)=4\nZ(14Bits)=2\nColor Only L'+R'=5\nColor Only L+R=0\n");
+            scanf("%d", &depthDataType);
+
             int deviceCount = APC_GetDeviceNumber(cameraHandle);
             DEVSELINFO printDevSelInfo;
+            bool isIVY2 = false;
             for(int i = 0; i < deviceCount; i++) {
                 printDevSelInfo.index = i;
 
@@ -1624,6 +1683,9 @@ int main(void)
                     fprintf(stderr, "Vendor ID: 0x%04x\n", info.wVID);
                     fprintf(stderr, "ChipID: 0x%x\n", info.nChipID);
                     fprintf(stderr, "Device Type: %d\n", info.nDevType);
+                    if (info.wPID == APC_PID_IVY2 || info.wPID == APC_PID_IVY2_S) {
+                        isIVY2 |= true;
+                    }
                 }
             }
 
@@ -1693,9 +1755,13 @@ int main(void)
                         f->ts_s, f->ts_us);
 
                 if (isNeedSavingFile) {
-                    std::string rawFileName(SAVE_FILE_PATH"yuy2_");
+                    std::string rawFileName(SAVE_FILE_PATH"color_");
                     rawFileName.append(std::to_string(f->sn));
-                    rawFileName.append(".yuv");
+                    if (isMjpeg) {
+                        rawFileName.append(".jpg");
+                    } else {
+                        rawFileName.append(".yuv");
+                    }
                     fprintf(stderr, "Saving start... %s\n", rawFileName.c_str());
                     saveRawFile(rawFileName.c_str(), (uint8_t *) f->dataVec.data(), f->dataVec.size());
 
@@ -1710,7 +1776,7 @@ int main(void)
 
                     APC_ColorFormat_to_RGB24(cameraHandle, &devSelInfo, writeRGBFileBuffer->data(),
                                              (uint8_t*) f->dataVec.data(), f->actualImageSize, f->width, f->height,
-                                             APCImageType::COLOR_YUY2);
+                                             isMjpeg ? APCImageType::COLOR_MJPG : APCImageType::COLOR_YUY2);
 
                     saveRawFile(rgbFileName.c_str(), (unsigned char*) writeRGBFileBuffer->data(),
                                 writeRGBFileBuffer->size());
@@ -1771,59 +1837,886 @@ int main(void)
             libeys3dsample::DepthCallbackHelper depthCallback(cameraHandle, devSelInfo, dw, dh, 2, depthCallbackFn);
 
             colorCallback.start();
-            sleep(6);
+            if (isIVY2) {
+                sleep(6);
+            }
             depthCallback.start();
 
-            unsigned short nVID = 0x3438, nPID = 0x0166;
+            if (isIVY2) {
+                unsigned short nVID = 0x3438, nPID = 0x0166;
 
-            CIMUModel::INFO info {
-                    .nVID = nVID,
-                    .nPID = nPID,
-                    .axis = CIMUModel::IMU_6_AXIS
-            };
+                CIMUModel::INFO info{
+                        .nVID = nVID,
+                        .nPID = nPID,
+                        .axis = CIMUModel::IMU_6_AXIS
+                };
 
-            CIMUModel imuModel = CIMUModel(info, cameraHandle);
-            std::string imuFWVersion = imuModel.GetFWVersion();
-            fprintf(stderr, "GetFWVersion [%s] CMD5-CMD12\n", imuFWVersion.c_str());
-            FILE* imuLog = fopen("imulog.txt", "a+");
-            // 1. Setup callback
-            CIMUModel::Callback printCallback([&] (const IMUData *data) {
-                fprintf(stderr, "FrameSN:[%d] Time: %2d,%2d,%2d,%5d\nacc raw:%5f,%5f,%5f\ngyro raw:%5f,%5f,%5f\n",
-                        data->_frameCount, data->_hour, data->_min, data->_sec, data->_subSecond,
-                        data->_accelX, data->_accelY, data->_accelZ,
-                        data->_gyroScopeX, data->_gyroScopeY, data->_gyroScopeZ);
-                fprintf(imuLog, "FrameSN:[%d] Time: %2d,%2d,%2d,%5d\nacc raw:%5f,%5f,%5f\ngyro raw:%5f,%5f,%5f\n",
-                        data->_frameCount, data->_hour, data->_min, data->_sec, data->_subSecond,
-                        data->_accelX, data->_accelY, data->_accelZ,
-                        data->_gyroScopeX, data->_gyroScopeY, data->_gyroScopeZ);
-                return true;
-            });
+                CIMUModel imuModel = CIMUModel(info, cameraHandle);
+                std::string imuFWVersion = imuModel.GetFWVersion();
+                fprintf(stderr, "GetFWVersion [%s] CMD5-CMD12\n", imuFWVersion.c_str());
+                FILE *imuLog = fopen("imulog.txt", "a+");
+                // 1. Setup callback
+                CIMUModel::Callback printCallback([&](const IMUData *data) {
+                    fprintf(stderr,
+                            "FrameSN:[%d] Time: %2d,%2d,%2d,%5d\nacc raw:%5f,%5f,%5f\ngyro raw:%5f,%5f,%5f st:%x\n",
+                            data->_frameCount, data->_hour, data->_min, data->_sec, data->_subSecond,
+                            data->_accelX, data->_accelY, data->_accelZ,
+                            data->_gyroScopeX, data->_gyroScopeY, data->_gyroScopeZ, data->_updateReason);
+                    fprintf(imuLog,
+                            "FrameSN:[%d] Time: %2d,%2d,%2d,%5d\nacc raw:%5f,%5f,%5f\ngyro raw:%5f,%5f,%5f st:%x\n",
+                            data->_frameCount, data->_hour, data->_min, data->_sec, data->_subSecond,
+                            data->_accelX, data->_accelY, data->_accelZ,
+                            data->_gyroScopeX, data->_gyroScopeY, data->_gyroScopeZ, data->_updateReason);
+                    return true;
+                });
 
-            // 2. Enable callback looper
-            imuModel.EnableDataCallback(printCallback);
-            sleep(2);
-            // 3. Test Time Sync function.
-            for (int i = 0; i < 60; ++i)
-                {
+                // 2. Enable callback looper
+                imuModel.EnableDataCallback(printCallback);
+                sleep(2);
+                // 3. Test Time Sync function.
+                for (int i = 0; i < 60; ++i) {
                     imuModel.SetTimeSync(2);
                     //Don's set any HID command between Set and get TimeSync.
                     auto TimeSync = imuModel.ReadTimeSync();
-                    fprintf(stderr, "ReadTimeSync: %02x %02x %02x %02x %02x %02x %02x %02x CMD47\n", TimeSync.sn, TimeSync.time1, TimeSync.time2, TimeSync.time3, TimeSync.time4, TimeSync.diff1, TimeSync.diff2, TimeSync.diff3);
-                    fprintf(imuLog, "ReadTimeSync: %02x %02x %02x %02x %02x %02x %02x %02x CMD47\n", TimeSync.sn, TimeSync.time1, TimeSync.time2, TimeSync.time3, TimeSync.time4, TimeSync.diff1, TimeSync.diff2, TimeSync.diff3);
+                    fprintf(stderr, "ReadTimeSync: %02x %02x %02x %02x %02x %02x %02x %02x CMD47\n", TimeSync.sn,
+                            TimeSync.time1, TimeSync.time2, TimeSync.time3, TimeSync.time4, TimeSync.diff1,
+                            TimeSync.diff2, TimeSync.diff3);
+                    fprintf(imuLog, "ReadTimeSync: %02x %02x %02x %02x %02x %02x %02x %02x CMD47\n", TimeSync.sn,
+                            TimeSync.time1, TimeSync.time2, TimeSync.time3, TimeSync.time4, TimeSync.diff1,
+                            TimeSync.diff2, TimeSync.diff3);
                     auto rtc = imuModel.ReadRTC();
                     fprintf(stderr, "GetRTC %d %d %d %d CMD40\n", rtc.hour, rtc.min, rtc.sec, rtc.subSecond);
                     fprintf(imuLog, "GetRTC %d %d %d %d CMD40\n", rtc.hour, rtc.min, rtc.sec, rtc.subSecond);
                     sleep(1);
                 }
 
-            // 3. Disable callback looper after use.
-            imuModel.DisableDataCallback();
+                // 3. Disable callback looper after use.
+                imuModel.DisableDataCallback();
+            }
 
             colorCallback.stop();
             depthCallback.stop();
 
             APC_CloseDevice(cameraHandle, &devSelInfo);
             APC_Release(&cameraHandle);
+            break;
+        }
+
+        case 95: {
+            void* cameraHandle = nullptr;
+
+            int ret = APC_Init(&cameraHandle, false);
+            if (!cameraHandle) {
+                fprintf(stderr, "Null handle reason %d\n", ret);
+                return 0;
+            }
+
+            DEVINFORMATION devInfo;
+            DEVSELINFO devselinfo;
+            devselinfo.index = 0;
+            ret = APC_GetDeviceInfo(cameraHandle, &devselinfo, &devInfo);
+
+            if (devInfo.wPID == APC_PID_IVY2) {
+                unsigned short nVID = 0x3438, nPID = 0x0166;
+                CIMUModel::INFO info {
+                        .nVID = nVID,
+                        .nPID = nPID,
+                        .axis = CIMUModel::IMU_6_AXIS
+                };
+
+                CIMUModel imuModel = CIMUModel(info, cameraHandle);
+                imuModel.RebootBootloader();
+            }
+
+            APC_Release(&cameraHandle);
+            break;
+        }
+
+        case 96: {
+            void* cameraHandle = nullptr;
+
+            DEVSELINFO devSelInfo;
+            devSelInfo.index = 0;
+
+            int fps = 30;
+            int colorOption = 0;
+            int depthOption = 0;
+            int depthSwitch = 0x0;
+            int depthDataType = 4;
+            int isMjpeg = 0;
+
+            int ret = APC_Init(&cameraHandle, false);
+
+            if (!cameraHandle) {
+                fprintf(stderr, "Null handle reason %d\n", ret);
+                return 0;
+            }
+
+            int deviceCount = APC_GetDeviceNumber(cameraHandle);
+            DEVSELINFO printDevSelInfo;
+
+            for(int i = 0; i < deviceCount; i++) {
+                printDevSelInfo.index = i;
+                DEVINFORMATIONEX info;
+
+                constexpr int APC_MAX_STREAM_COUNT = 64;
+                APC_STREAM_INFO ep0StreamInfo[APC_MAX_STREAM_COUNT] = {{0}};
+                APC_STREAM_INFO ep1StreamInfo[APC_MAX_STREAM_COUNT] = {{0}};
+                int ep0StreamOptionCount;
+                int ep1StreamOptionCount;
+
+                auto getResolution = [&] (APC_STREAM_INFO* pStreamRes0, int* pStreamResCount0,
+                                          APC_STREAM_INFO* pStreamRes1, int* pStreamResCount1) {
+
+                    int ret = APC_GetDeviceResolutionList(cameraHandle, &printDevSelInfo,
+                                                          APC_MAX_STREAM_COUNT, pStreamRes0,
+                                                          APC_MAX_STREAM_COUNT, pStreamRes1);
+                    int ep0Cnt = 0;
+                    for (ep0Cnt = 0; ep0Cnt < APC_MAX_STREAM_COUNT; ep0Cnt++) {
+                        if (pStreamRes0[ep0Cnt].nHeight <= 0 || pStreamRes0[ep0Cnt].nWidth <= 0) {
+                            break;
+                        }
+                    }
+                    *pStreamResCount0 = ep0Cnt;
+
+                    int ep1Cnt = 0;
+                    for (ep1Cnt = 0; ep1Cnt < APC_MAX_STREAM_COUNT; ep1Cnt++) {
+                        if (pStreamRes1[ep1Cnt].nHeight <= 0 || pStreamRes1[ep1Cnt].nWidth <= 0) {
+                            break;
+                        }
+                    }
+                    *pStreamResCount1 = ep1Cnt;
+                };
+
+                getResolution(ep0StreamInfo, &ep0StreamOptionCount, ep1StreamInfo, &ep1StreamOptionCount);
+
+                for (unsigned short resCount0 = 0; resCount0 < ep0StreamOptionCount; resCount0++) {
+                    printf("EP0 [%d] %d x %d, %s\n", resCount0, ep0StreamInfo[resCount0].nWidth,
+                           ep0StreamInfo[resCount0].nHeight, ep0StreamInfo[resCount0].bFormatMJPG ? "MJPEG" : "YUYV");
+                }
+
+                for (unsigned short resCount1 = 0; resCount1 < ep1StreamOptionCount; resCount1++) {
+                    printf("EP1 [%d] %d x %d, %s\n", resCount1, ep1StreamInfo[resCount1].nWidth,
+                           ep1StreamInfo[resCount1].nHeight, ep1StreamInfo[resCount1].bFormatMJPG ? "MJPEG" : "YUYV");
+                }
+
+                if (!APC_GetDeviceInfoEx(cameraHandle, &printDevSelInfo, &info)) {
+                    fprintf(stderr, "Product ID: 0x%04x\n", info.wPID);
+                    fprintf(stderr, "Vendor ID:  0x%04x\n", info.wVID);
+                    fprintf(stderr, "Device Name: %s\n", info.strDevName);
+                    fprintf(stderr, "strDevPath: %s \n", info.strDevPath);
+                    fprintf(stderr, "ChipID: 0x%x\n", info.nChipID);
+                    fprintf(stderr, "Device Type: %d\n", info.nDevType);
+                    fprintf(stderr, "wUsbNode: %x \n", info.wUsbNode);
+                }
+            }
+
+            printf("Choose YUYV:0 MJPEG:1 \n");
+            scanf("%d", &isMjpeg);
+            printf("Color Option:\n");
+            scanf("%d", &colorOption);
+            printf("Depth Option:\n");
+            scanf("%d", &depthOption);
+            printf("Choose FPS:\n");
+            scanf("%d", &fps);
+            printf("Choose Depth Data Type\n");
+            scanf("%d", &depthDataType);
+            printf("Depth Data Type %d\n", depthDataType);
+
+            ret = APC_Init(&cameraHandle, false);
+            fprintf(stderr, "APC_Init reason %d\n", ret);
+            ret = APC_SetDepthDataType(cameraHandle, &devSelInfo, depthDataType);
+            fprintf(stderr, "APC_SetDepthDataType reason %d\n", ret);
+            /** Interleave case */
+            int interleaveEnable = 0;
+            printf("Choose Interleave enable (1 or 0)\n");
+            scanf("%d", &interleaveEnable);
+            printf("Interleave on %d ? (Need provide supported HW && Resolution)\n", interleaveEnable);
+            ret = APC_SetInterleaveMode(cameraHandle, &devSelInfo, interleaveEnable);
+            fprintf(stderr, "APC_SetInterleaveMode reason %d\n", ret);
+
+            /** Common case close immediate */
+            ret = APC_OpenDeviceCallback(cameraHandle, &devSelInfo, colorOption, depthOption, depthSwitch, fps,
+                                         SimpleColorDepthCallback, nullptr, APC_PID_IVY2);
+            fprintf(stderr, "APC_OpenDeviceCallback 01 open close reason %d\n", ret);
+            ret = APC_CloseDevice(cameraHandle, &devSelInfo);
+            fprintf(stderr, "APC_CloseDevice 01 reason %d\n", ret);
+
+            /** Common case close 5s */
+            ret = APC_OpenDeviceCallback(cameraHandle, &devSelInfo, colorOption, depthOption, depthSwitch, fps,
+                                         SimpleColorDepthCallback, nullptr, APC_PID_IVY2);
+            fprintf(stderr, "APC_OpenDeviceCallback 02 open 5s close reason %d\n", ret);
+            std::this_thread::sleep_for(std::chrono::seconds(5));
+            ret = APC_CloseDevice(cameraHandle, &devSelInfo);
+            fprintf(stderr, "APC_CloseDevice reason 02 %d\n", ret);
+
+            /** Double Open */
+            for (int k = 0; k < 10; k++) {
+                ret = APC_OpenDeviceCallback(cameraHandle, &devSelInfo, colorOption, depthOption, depthSwitch, fps,
+                                             SimpleColorDepthCallback, nullptr, APC_PID_IVY2);
+                fprintf(stderr, "APC_OpenDeviceCallback 03 double open reason %d\n", ret);
+                std::this_thread::sleep_for(std::chrono::milliseconds(random() % 2000));
+
+                ret = APC_OpenDeviceCallback(cameraHandle, &devSelInfo, colorOption, depthOption, depthSwitch, fps,
+                                             SimpleColorDepthCallback, nullptr, APC_PID_IVY2);
+                fprintf(stderr, "APC_OpenDeviceCallback 03 double2 reason %d\n", ret);
+                std::this_thread::sleep_for(std::chrono::seconds(10));
+                ret = APC_CloseDevice(cameraHandle, &devSelInfo);
+                fprintf(stderr, "APC_CloseDevice 03 reason %d\n", ret);
+            }
+
+            /** Double Close */
+            ret = APC_CloseDevice(cameraHandle, &devSelInfo);
+            fprintf(stderr, "APC_CloseDevice 04 reason %d\n", ret);
+
+            /** Null callback function pointer */
+            ret = APC_OpenDeviceCallback(cameraHandle, &devSelInfo, colorOption, depthOption, depthSwitch, fps,
+                                         nullptr, nullptr, APC_PID_IVY2);
+            fprintf(stderr, "APC_OpenDeviceCallback 05 NULL open then... close reason %d\n", ret);
+            std::this_thread::sleep_for(std::chrono::seconds(5));
+            ret = APC_CloseDevice(cameraHandle, &devSelInfo);
+            fprintf(stderr, "APC_CloseDevice 05 reason %d\n", ret);
+
+            APC_Release(&cameraHandle);
+            break;
+        }
+        case 97: {
+            // IVY2 + IVY3 + IMU / IVY4 stream together case.
+            void* cameraHandle = nullptr;
+            DEVSELINFO devSelInfo;
+            devSelInfo.index = 0;
+
+            /* IVY2 resolution parameters */
+            int fps = 30;
+            int cw = 2560, ch = 960;
+            int dw = 1280, dh = 960;
+            int depthDataType = APC_DEPTH_DATA_11_BITS;
+            int isMjpeg = false;
+            /* IVY3 resolution parameters*/
+            int ivy3_cw = 640, ivy3_ch = 480;
+            int ivy3_fps = 30;
+            int ivy3_is_mjpeg = false;
+            int ivy3_depthDataType = APC_DEPTH_DATA_OFF_RECTIFY;
+            int ret = APC_Init(&cameraHandle, false);
+
+            if (!cameraHandle) {
+                fprintf(stderr, "Null handle reason %d\n", ret);
+                return 0;
+            }
+
+            fprintf(stderr, "Case 97 IVY2 IVY3 IMU / IVY4 stream on test.\n");
+            printf("Choose YUYV:0 MJPEG:1 \n");
+            scanf("%d", &isMjpeg);
+            fprintf(stderr, "Color width:\n");
+            scanf("%d", &cw);
+            fprintf(stderr,"Color height:\n");
+            scanf("%d", &ch);
+            fprintf(stderr,"Depth width:\n");
+            scanf("%d", &dw);
+            fprintf(stderr,"Depth height:\n");
+            scanf("%d", &dh);
+            fprintf(stderr, "FPS?\n");
+            scanf("%d", &fps);
+            fprintf(stderr,"Choose IVY2 Depth Data Type D11 set 4 Z14 set 2\n");
+            scanf("%d", &depthDataType);
+            fprintf(stderr,"Depth Data Type %d\n", depthDataType);
+
+            fprintf(stderr,"IVY3 Color width:\n");
+            scanf("%d", &ivy3_cw);
+            fprintf(stderr,"IVY3 Color height:\n");
+            scanf("%d", &ivy3_ch);
+            fprintf(stderr, "IVY3 FPS?\n");
+            scanf("%d", &ivy3_fps);
+            fprintf(stderr, "IVY3 YUYV set 0 or MJPEG set 1:\n");
+            scanf("%d", &ivy3_is_mjpeg);
+            fprintf(stderr,"IVY3 Depth Data Type K(No Dewarp) set 0 K'(Dewarp) set 5\n");
+            scanf("%d", &ivy3_depthDataType);
+            fprintf(stderr,"IVY3 Depth Data Type %d\n", ivy3_depthDataType);
+
+            int sec = 30;
+            fprintf(stderr, "How many seconds?\n");
+            scanf("%d", &sec);
+            fprintf(stderr, "IVY3 Image FMT %d %s \n", ivy3_is_mjpeg, ivy3_is_mjpeg ? "MJPEG" : "YUYV");
+            fprintf(stderr, "Running case 97 for %d secs. With FPS %d, %d\n", sec, fps, ivy3_fps);
+
+            int deviceCount = APC_GetDeviceNumber(cameraHandle);
+            DEVSELINFO printDevSelInfo;
+            int ivy2DeviceIndex = -1;
+            int ivy3DeviceIndex = -1;
+            int ivy4DeviceIndex = -1;
+            for(int i = 0; i < deviceCount; i++) {
+                printDevSelInfo.index = i;
+
+                const size_t kFWVersionSize = 256;
+                char fwVersion[kFWVersionSize];
+                int nActualLength = 0;
+                if (!APC_GetFwVersion(cameraHandle, &printDevSelInfo, fwVersion, kFWVersionSize, &nActualLength)) {
+                    fprintf(stderr, "Camera firmware version %s\n", fwVersion);
+                }
+
+                DEVINFORMATION info;
+                if (!APC_GetDeviceInfo(cameraHandle, &printDevSelInfo, &info)) {
+                    fprintf(stderr, "Device Name: %s\n", info.strDevName);
+                    fprintf(stderr, "Product ID: 0x%04x\n", info.wPID);
+                    fprintf(stderr, "Vendor ID: 0x%04x\n", info.wVID);
+                    fprintf(stderr, "ChipID: 0x%x\n", info.nChipID);
+                    fprintf(stderr, "Device Type: %d\n", info.nDevType);
+                    if (info.wPID == APC_PID_IVY3) {
+                        ivy3DeviceIndex = i;
+                    } else if (info.wPID == APC_PID_IVY2) {
+                        ivy2DeviceIndex = i;
+                    } else if (info.wPID == APC_PID_IVY4) {
+                        ivy4DeviceIndex = i;
+                    }
+                }
+            }
+
+            bool isIVY2 = ivy2DeviceIndex != -1;
+            bool isIVY3 = ivy3DeviceIndex != -1;
+            bool isIVY4 = ivy4DeviceIndex != -1;
+
+            libeys3dsample::ColorCallbackHelper* colorCallback = nullptr;
+            libeys3dsample::DepthCallbackHelper* depthCallback = nullptr;
+            int dropColor = 0;
+            int dropDepth = 0;
+            int ivy2TotalColorFrames = 0;
+            int ivy2TotalDepthFrames = 0;
+            if (isIVY2 || isIVY4) {
+                devSelInfo.index = isIVY4 ? ivy4DeviceIndex : ivy2DeviceIndex;
+                APC_SetDepthDataType(cameraHandle, &devSelInfo, depthDataType);
+
+                APC_SetupBlock(cameraHandle, &devSelInfo, true);
+                ret = APC_OpenDevice2(cameraHandle, &devSelInfo, cw, ch, isMjpeg, dw, dh, DEPTH_IMG_NON_TRANSFER, false,
+                                      nullptr, &fps);
+
+                if (ret) {
+                    fprintf(stderr, "Open device failed %d\n", ret);
+                    APC_Release(&cameraHandle);
+                    return 0;
+                }
+
+                libeys3dsample::FrameCallbackHelper::Callback colorCallbackFn([&] (const libeys3dsample::Frame *f) {
+                    static int64_t lastTimeUs = 0;
+                    static int lastSN = 0;
+                    int64_t curTimeUs = f->ts_s * 1000000 + f->ts_us;
+                    if (f->sn - lastSN > 1) {
+                        fprintf(stderr, "[DropFrame] Inside color callback frame.sn=%d lastSN=%d status=%d diffMs=%f\n",
+                                f->sn, lastSN, f->status, (curTimeUs - lastTimeUs) / 1000.0f);
+                        dropColor++;
+                    }
+                    lastTimeUs = curTimeUs;
+                    lastSN = f->sn;
+                    ivy2TotalColorFrames++;
+                    return f->status;
+                });
+
+                libeys3dsample::FrameCallbackHelper::Callback depthCallbackFn([&] (const libeys3dsample::Frame *f) {
+                    static int64_t lastTimeUs = 0;
+                    static int lastSN = 0;
+                    int64_t curTimeUs = f->ts_s * 1000000 + f->ts_us;
+                    if (f->sn - lastSN > 1) {
+                        fprintf(stderr, "[DropFrame] Inside depth callback frame.sn=%d lastSN=%d status=%d diffMs=%f\n",
+                                f->sn, lastSN, f->status, (curTimeUs - lastTimeUs) / 1000.0f);
+                        dropDepth++;
+                    }
+                    lastTimeUs = curTimeUs;
+                    lastSN = f->sn;
+                    ivy2TotalDepthFrames++;
+                    return f->status;
+                });
+
+                colorCallback = new libeys3dsample::ColorCallbackHelper(cameraHandle, devSelInfo, cw, ch, 2,
+                                                                        colorCallbackFn);
+                depthCallback = new libeys3dsample::DepthCallbackHelper(cameraHandle, devSelInfo, dw, dh, 2,
+                                                                        depthCallbackFn);
+                colorCallback->start();
+                if(isIVY2) {
+                    std::this_thread::sleep_for(std::chrono::seconds(5));
+                }
+                depthCallback->start();
+
+                // Registers should be set after depth stream on due to firmware will set default value when preview.
+                // RegisterSettings::DM_Quality_Register_Setting(cameraHandle, &devSelInfo, 0x191);
+            }
+
+            libeys3dsample::ColorCallbackHelper* ivy3ColorCallback = nullptr;
+            int ivy3DropColor = 0;
+            int ivy3TotalFrames = 0;
+            if (isIVY3) {
+                devSelInfo.index = ivy3DeviceIndex;
+                APC_SetDepthDataType(cameraHandle, &devSelInfo, ivy3_depthDataType);
+                APC_SetupBlock(cameraHandle, &devSelInfo, true);
+
+                ret = APC_OpenDevice2(cameraHandle, &devSelInfo, ivy3_cw, ivy3_ch, ivy3_is_mjpeg, 0, 0,
+                                      DEPTH_IMG_NON_TRANSFER, false, nullptr, &ivy3_fps);
+
+                if (ret) {
+                    fprintf(stderr, "IVY3 Open device failed %d\n", ret);
+                    if (ivy2DeviceIndex == -1) {
+                        APC_Release(&cameraHandle);
+                        return 0;
+                    }
+                    // Otherwise release later
+                }
+
+                int acceptableOffsetUs = 5000;
+                int frameDropThresholdUs = (1 / (double) ivy3_fps) * 1000000 + 5000;
+
+                fprintf(stderr, "IVY3 Color Rectify Mode Set (%d) and drop threshold = %d\n", ivy3_depthDataType,
+                       frameDropThresholdUs);
+
+                int64_t ivy3LastTimeUs = 0ul;
+                libeys3dsample::FrameCallbackHelper::Callback colorCallbackFn([&] (const libeys3dsample::Frame *f) {
+                    ivy3LastTimeUs = 0;
+                    int64_t curTimeUs = f->ts_s * 1000000 + f->ts_us;
+                    if (ivy3LastTimeUs && curTimeUs - ivy3LastTimeUs > frameDropThresholdUs) {
+                        fprintf(stderr, "[DropFrame] Inside IVY3 color callback status=%d diffMs=%f\n", f->status,
+                                (curTimeUs - ivy3LastTimeUs) / 1000.0f);
+                        ivy3DropColor++;
+                    }
+                    ivy3LastTimeUs = curTimeUs;
+                    ivy3TotalFrames++;
+                    return f->status;
+                });
+                ivy3ColorCallback = new libeys3dsample::ColorCallbackHelper(cameraHandle, devSelInfo, ivy3_cw, ivy3_ch,
+                                                                            2, colorCallbackFn);
+                ivy3ColorCallback->start();
+            }
+
+            CIMUModel* pImuModel = nullptr;
+            if (isIVY2) {
+                unsigned short nVID = 0x3438, nPID = 0x0166;
+                CIMUModel::INFO info {
+                        .nVID = nVID,
+                        .nPID = nPID,
+                        .axis = CIMUModel::IMU_6_AXIS
+                };
+
+                pImuModel = new CIMUModel(info, cameraHandle);
+                std::string imuFWVersion = pImuModel->GetFWVersion();
+                fprintf(stderr, "IMU GetFWVersion [%s] CMD5-CMD12\n", imuFWVersion.c_str());
+                bool isIMUWork = false;
+
+                CIMUModel::Callback printCallback([&] (const IMUData *data) {
+                    if (!isIMUWork) {
+                        fprintf(stderr, "IMU work !!\n");
+                        isIMUWork = true;
+                    }
+                    return true;
+                });
+
+                pImuModel->EnableDataCallback(printCallback);
+            }
+
+            sleep(sec);
+            fprintf(stderr, "Times up!!\n");
+
+            if (isIVY2) {
+                if (pImuModel) {
+                    pImuModel->DisableDataCallback();
+                    pImuModel = nullptr;
+                }
+            }
+
+            if (colorCallback) {
+                colorCallback->stop();
+                colorCallback = nullptr;
+                fprintf(stderr, "Color End !!\n");
+            }
+
+            if (depthCallback) {
+                depthCallback->stop();
+                depthCallback = nullptr;
+                fprintf(stderr, "Depth End !!\n");
+            }
+
+            if (ivy3ColorCallback) {
+                ivy3ColorCallback->stop();
+                ivy3ColorCallback = nullptr;
+                fprintf(stderr, "IVY3 Color End !!\n");
+            }
+
+            fprintf(stderr, "Total Color %d, Depth %d, IVY3 %d frames / Drop Color %d Depth: %d IVY3 %d\n",
+                    ivy2TotalColorFrames, ivy2TotalDepthFrames, ivy3TotalFrames, dropColor, dropDepth, ivy3DropColor);
+
+            if (ivy2DeviceIndex >= 0) {
+                devSelInfo.index = ivy2DeviceIndex;
+                APC_CloseDevice(cameraHandle, &devSelInfo);
+            }
+
+            if (ivy3DeviceIndex >= 0) {
+                devSelInfo.index = ivy3DeviceIndex;
+                APC_CloseDevice(cameraHandle, &devSelInfo);
+            }
+
+            if (ivy4DeviceIndex >= 0) {
+                devSelInfo.index = ivy4DeviceIndex;
+                APC_CloseDevice(cameraHandle, &devSelInfo);
+            }
+
+            fprintf(stderr, "Close End !!\n");
+
+            APC_Release(&cameraHandle);
+            fprintf(stderr, "Release End !!\n");
+            sleep(10); // For multiple test purpose APC_Release will reset eSP777
+            break;
+        }
+        case 98: {
+            // [IVY4 TOOL 1]
+            void* cameraHandle = nullptr;
+            DEVSELINFO devSelInfo;
+            devSelInfo.index = 0;
+
+            int fps = 15;
+            int cw = 1280; int ch = 960;
+            int dw = 0; int dh = 0;
+            int depthDataType = 4;
+            int isMjpeg = 0;
+
+            printf("Choose YUYV:0 MJPEG:1 \n");
+            scanf("%d", &isMjpeg);
+            printf("Sensor output Color image width IVY4 is 3200:\n");
+            scanf("%d", &cw);
+            printf("Sensor output Color image height IVY4 is 1200:\n");
+            scanf("%d", &ch);
+            printf("Choose FPS:\n");
+            scanf("%d", &fps);
+            printf("Choose Depth data type \nColor Only L+R=0\n");
+            scanf("%d", &depthDataType);
+            int sec = 30;
+            fprintf(stderr, "How many seconds?\n");
+            scanf("%d", &sec);
+
+            int ret = APC_Init(&cameraHandle, true);
+
+            if (!cameraHandle) {
+                fprintf(stderr, "Null handle reason %d\n", ret);
+                return 0;
+            }
+
+            APC_SetDepthDataType(cameraHandle, &devSelInfo, depthDataType);
+
+            APC_SetupBlock(cameraHandle, &devSelInfo, true);
+
+            ret = APC_OpenDevice2(cameraHandle, &devSelInfo, cw, ch, isMjpeg, dw, dh, DEPTH_IMG_NON_TRANSFER, false,
+                                  nullptr, &fps);
+            if (ret) {
+                fprintf(stderr, "Open failed reason %d\n", ret);
+                return 0;
+            }
+
+            bool isStreamOn = false;
+            bool isISPEnabled = true; /* Default the image pass ISP block */
+
+            std::map<uint16_t, uint16_t> mapBackupRegister;
+            mapBackupRegister[0xf1af] = 0x0;
+            mapBackupRegister[0xf1e0] = 0x0;
+
+            libeys3dsample::FrameCallbackHelper::Callback colorCallbackFn([&] (const libeys3dsample::Frame *f) {
+                fprintf(stderr, "Inside color callback frame.sn=%d status=%d save one image \n", f->sn, f->status);
+                isStreamOn = true;
+                if (isISPEnabled && f->sn == 30) {
+                    isISPEnabled = false;
+                    fprintf(stderr, "Step2 After frame.sn=%d ** ISP Disabled \n", f->sn);
+
+                    // P1_RAW_SEL set Bit1 as 1
+                    uint16_t p1RawSel = mapBackupRegister[0xf1af] | 0x02;
+                    p1RawSel &= ~0x08;
+                    ret = APC_SetHWRegister(cameraHandle, &devSelInfo, 0xf1af, p1RawSel,
+                                            FG_Address_2Byte | FG_Value_1Byte);
+                    if (ret) fprintf(stderr, "Can't set %x", 0xf1af);
+
+                    // RAW82_ENB set Bit0 as 1
+                    uint16_t raw82Enb = mapBackupRegister[0xf1e0] | 0x01;
+                    ret = APC_SetHWRegister(cameraHandle, &devSelInfo, 0xf1e0, raw82Enb,
+                                            FG_Address_2Byte | FG_Value_1Byte);
+                    if (ret) fprintf(stderr, "Can't set %x", 0xf1e0);
+
+                    uint16_t readValue = 0x0;
+                    for (auto item: mapBackupRegister) {
+                        ret = APC_GetHWRegister(cameraHandle, &devSelInfo, item.first, &readValue,
+                                                FG_Address_2Byte | FG_Value_1Byte);
+                        if (ret) fprintf(stderr, "Can't get %x", item.first);
+                        fprintf(stderr, "Step2 Case 98 check registers again %x %x\n", item.first, readValue);
+                    }
+                }
+
+                std::string fileName = SAVE_FILE_PATH;
+                fileName.append(std::to_string(f->sn));
+                saveRawFile(fileName.c_str(), (unsigned char*) f->dataVec.data(), f->dataVec.size());
+                fprintf(stderr, "Saved frame.sn=%d --\n", f->sn);
+
+                return f->status;
+            });
+
+            libeys3dsample::ColorCallbackHelper colorCallback(cameraHandle, devSelInfo, cw, ch, 2, colorCallbackFn);
+            colorCallback.start();
+
+            while (!isStreamOn) {
+                sleep(1);
+                fprintf(stderr, "Wait for stream on\n");
+            }
+
+            auto switchISPFunctions = [&] (bool isAEEnabled, bool isAWBEnabled) {
+                ret = APC_SetCTPropVal(cameraHandle, &devSelInfo, CT_PROPERTY_ID_AUTO_EXPOSURE_MODE_CTRL,
+                                       isAEEnabled ? AE_MOD_APERTURE_PRIORITY_MODE : AE_MOD_MANUAL_MODE);
+                if (ret) fprintf(stderr, "AE can't be switched %d\n", ret);
+
+                ret = APC_SetPUPropVal(cameraHandle, &devSelInfo, PU_PROPERTY_ID_WHITE_BALANCE_AUTO_CTRL,
+                                       isAWBEnabled ? PU_PROPERTY_ID_AWB_ENABLE : PU_PROPERTY_ID_AWB_DISABLE);
+                if (ret) fprintf(stderr, "AWB can't be switched %d\n", ret);
+            };
+
+            // Disable the AE AWB. These function will control ISP related registers in the firmware.
+            switchISPFunctions(false, false);
+
+            // Backup the values of ISP related registers.
+            for (auto item: mapBackupRegister) {
+                ret = APC_GetHWRegister(cameraHandle, &devSelInfo, item.first, &item.second,
+                                        FG_Address_2Byte | FG_Value_1Byte);
+                if (ret) fprintf(stderr, "Can't get %x", item.first);
+                fprintf(stderr, "Step1 Case 98 Backup registers %x %x\n", item.first, item.second);
+            }
+
+            sleep(sec);
+
+            // Restore the values of ISP related registers.
+            for (auto item: mapBackupRegister) {
+                ret = APC_SetHWRegister(cameraHandle, &devSelInfo, item.first, item.second,
+                                        FG_Address_2Byte | FG_Value_1Byte);
+            }
+
+            // Enable the AE AWB.
+            switchISPFunctions(true, true);
+
+            colorCallback.stop();
+
+            APC_CloseDevice(cameraHandle, &devSelInfo);
+            APC_Release(&cameraHandle);
+            break;
+        }
+        case 99 : {
+            // [IVY4 TOOL 1]
+            void* cameraHandle = nullptr;
+            DEVSELINFO devSelInfo;
+            devSelInfo.index = 0;
+
+            int fps = 15;
+            int cw = 1280; int ch = 960;
+            int dw = 0; int dh = 0;
+            int depthDataType = 4;
+            int isMjpeg = 0;
+            int i2cSelector = 0;
+            int i2cSlaveAddress = 0; /* Now we had 2 PCBs, and their addresses are different. */
+
+            printf("I2C slave address 0x6C:0 0x20:1\n");
+            scanf("%d", &i2cSelector);
+            i2cSlaveAddress = i2cSelector == 0 ? 0x6C : 0x20;
+            printf("Choose YUYV:0 MJPEG:1 \n");
+            scanf("%d", &isMjpeg);
+            printf("Color width:\n");
+            scanf("%d", &cw);
+            printf("Color height:\n");
+            scanf("%d", &ch);
+            printf("Choose FPS:\n");
+            scanf("%d", &fps);
+            printf("Choose Depth data type\nD(11Bits)=4\nZ(14Bits)=2\nColor Only L'+R'=5\nColor Only L+R=0\n");
+            scanf("%d", &depthDataType);
+            int sec = 30;
+            fprintf(stderr, "How many seconds?\n");
+            scanf("%d", &sec);
+
+            int ret = APC_Init(&cameraHandle, true);
+
+            if (!cameraHandle) {
+                fprintf(stderr, "Null handle reason %d\n", ret);
+                return 0;
+            }
+
+            APC_SetupBlock(cameraHandle, &devSelInfo, true);
+
+            gJsonFileSerializer = new JsonFileSerializer();
+            JsonFileSerializer::createFolder(JsonFileSerializer::makeStorePath(std::string(SAVE_FILE_PATH)));
+            /// case99_static
+            static uint16_t sValue320e = 0x0;
+            static uint16_t sValue320f = 0x0;
+            static int16_t sFPS = 0;
+            sFPS = fps;
+            auto metaDataCallbackFunc = [] (APC_META_DATA data) {
+                MetaDataPayloadParser::ProtoZeroData parsedData;
+
+                int ret = MetaDataPayloadParser::parseProtocolZeroData(&data, &parsedData);
+                if (ret) {
+                    fprintf(stderr, "[eys3d_meta] Meta data wrong %d\n", ret);
+                    return;
+                }
+
+                std::string fullPath;
+                fullPath.append(SAVE_FILE_PATH);
+                fullPath.append(std::to_string(parsedData.frameCount));
+                fullPath.append("_");
+                auto currentTime = std::chrono::system_clock::now().time_since_epoch();
+                auto unixTimeMillis = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime).count();
+                fullPath.append(std::to_string(unixTimeMillis));
+                fullPath.append(JsonFileSerializer::kJsonFileSuffix);
+
+                gJsonFileSerializer->cacheIn(JsonFileSerializer::kKeyFrameCount, parsedData.frameCount);
+
+                uint8_t analogGainValue = MetaDataPayloadParser::GetAnalogGainMappingValue(parsedData.analogGain);
+                gJsonFileSerializer->cacheIn(JsonFileSerializer::kKeyAnalogGain,analogGainValue);
+
+                double digitalGainValue = MetaDataPayloadParser::GetDigitalGainMappingValue(parsedData.digitalGain);
+                gJsonFileSerializer->cacheIn(JsonFileSerializer::kKeyDigitalGain,digitalGainValue);
+
+                /* 8051 not suitable for long division calculate in the application layer */
+                uint16_t frameLength = (sValue320e & 0x7Fu) << 8u;
+                frameLength |= sValue320f;
+                double exposureLineTimeMs = 1000.0 * (1.0 / (sFPS * frameLength));
+                auto exposureTimeMs = parsedData.exposureRows * exposureLineTimeMs;
+                if (!frameLength || !sFPS) {
+                    gJsonFileSerializer->cacheIn(JsonFileSerializer::kKeyExposureTimeMs, "NotReady");
+                } else {
+                    gJsonFileSerializer->cacheIn(JsonFileSerializer::kKeyExposureTimeMs, exposureTimeMs);
+                }
+
+                gJsonFileSerializer->cacheIn(JsonFileSerializer::kKeyLuminousMean, parsedData.yAverage);
+                gJsonFileSerializer->cacheIn(JsonFileSerializer::kKeyOtherData, parsedData.otherData);
+                gJsonFileSerializer->serializeToFile(fullPath);
+
+                fprintf(stderr, "[eys3d_meta_mapped] PV:%02x FC:%d AG:%dX DG:%fX EXP:%f yAVG:%d OT:%02x FPS:%d FL:%d\n",
+                        parsedData.protocolVersion, parsedData.frameCount, analogGainValue, digitalGainValue,
+                        exposureTimeMs, parsedData.yAverage, parsedData.otherData, sFPS, frameLength);
+                fprintf(stderr, "\n");
+            };
+
+            APC_MetaDataCallbackFn callback = metaDataCallbackFunc;
+            // Case 0: Normal callback
+            fprintf(stderr, "[Case99] Case0 ++\n");
+
+            APC_SetMetaDataEventState(cameraHandle, &devSelInfo, true, callback);
+
+            APC_SetDepthDataType(cameraHandle, &devSelInfo, depthDataType);
+
+            ret = APC_OpenDevice2(cameraHandle, &devSelInfo, cw, ch, isMjpeg, dw, dh, DEPTH_IMG_NON_TRANSFER, false,
+                                  nullptr, &fps);
+            if (ret) {
+                fprintf(stderr, "Open failed reason %d\n", ret);
+                return 0;
+            }
+
+            // case99_static
+            static bool sFirstFrame = false;
+            libeys3dsample::FrameCallbackHelper::Callback colorCallbackFn([&] (const libeys3dsample::Frame *f) {
+                int ret = APC_OK;
+                uint16_t value3e01 = 0x0;
+                uint16_t value3e02 = 0x0;
+                if (!sFirstFrame) {
+                    ret = APC_GetSensorRegister(cameraHandle, &devSelInfo, i2cSlaveAddress, 0x320e, &sValue320e,
+                                                FG_Address_2Byte | FG_Value_1Byte, SENSOR_BOTH);
+
+                    ret = APC_GetSensorRegister(cameraHandle, &devSelInfo, i2cSlaveAddress, 0x320f, &sValue320f,
+                                                FG_Address_2Byte | FG_Value_1Byte, SENSOR_BOTH);
+                    fprintf(stderr, "Frame Length %x %x = %d\n", sValue320e, sValue320f,
+                            ((sValue320e & 0x7Fu) << 8u) | sValue320f);
+                    sFirstFrame = true;
+                    uint16_t exposureRows = (value3e01 & 0xFFu) << 4u | (value3e02 & 0xF0u) >> 4u;
+                    fprintf(stderr, "Exposure Rows %02x %02x = %d\n", value3e01, value3e02, exposureRows);
+                }
+
+                uint16_t value3e07 = 0x0;
+                ret = APC_GetSensorRegister(cameraHandle, &devSelInfo, i2cSlaveAddress, 0x3e07, &value3e07,
+                                            FG_Address_2Byte | FG_Value_1Byte, SENSOR_BOTH);
+                if (ret) fprintf(stderr, "0x3e07 failed");
+
+                uint16_t value3e06 = 0x0;
+                ret = APC_GetSensorRegister(cameraHandle, &devSelInfo, i2cSlaveAddress, 0x3e06, &value3e06,
+                                            FG_Address_2Byte | FG_Value_1Byte, SENSOR_BOTH);
+                if (ret) fprintf(stderr, "0x3e06 failed");
+
+                uint16_t value3e09 = 0x0;
+                ret = APC_GetSensorRegister(cameraHandle, &devSelInfo, i2cSlaveAddress, 0x3e09, &value3e09,
+                                            FG_Address_2Byte | FG_Value_1Byte, SENSOR_BOTH);
+                if (ret) fprintf(stderr, "0x3e09 failed");
+
+                ret = APC_GetSensorRegister(cameraHandle, &devSelInfo, i2cSlaveAddress, 0x3e01, &value3e01,
+                                            FG_Address_2Byte | FG_Value_1Byte, SENSOR_BOTH);
+                if (ret) fprintf(stderr, "0x3e01 failed");
+
+                ret = APC_GetSensorRegister(cameraHandle, &devSelInfo, i2cSlaveAddress, 0x3e02, &value3e02,
+                                            FG_Address_2Byte | FG_Value_1Byte, SENSOR_BOTH);
+                if (ret) fprintf(stderr, "0x3e02 failed");
+
+                fprintf(stderr, "Inside callback f.sn=%d st=%d 3e06=%04x 3e07=%04x 3e09=%04x 320e=%04x 320f=%04x\n",
+                        f->sn, f->status, value3e06, value3e07, value3e09, sValue320e, sValue320f);
+
+                std::string fileName = SAVE_FILE_PATH;
+                fileName.append(std::to_string(f->sn));
+                saveRawFile(fileName.c_str(), (unsigned char*) f->dataVec.data(), f->dataVec.size());
+                fprintf(stderr, "Saved frame.sn=%d --\n", f->sn);
+
+                return f->status;
+            });
+
+            libeys3dsample::ColorCallbackHelper colorCallback(cameraHandle, devSelInfo, cw, ch, 2, colorCallbackFn);
+
+            colorCallback.start();
+            sleep(sec);
+            APC_SetMetaDataEventState(cameraHandle, &devSelInfo, false);
+            fprintf(stderr, "[Case99] Case0 --\n");
+            sleep(2);
+
+            // Case 1: Without callback function.
+            fprintf(stderr, "[Case99] Case1 ++\n");
+            APC_SetMetaDataEventState(cameraHandle, &devSelInfo, true, nullptr);
+            sleep(2);
+            APC_SetMetaDataEventState(cameraHandle, &devSelInfo, false);
+            fprintf(stderr, "[Case99] Case1 --\n");
+            sleep(2);
+
+            // Case 2 Switch fastly
+            fprintf(stderr, "[Case99] Case2 ++\n");
+            for (int i = 0; i < 1000; i++) {
+                long randomNum = random();
+                long randomSleepUs = (randomNum % 4) * (1000 * 1000 / fps);
+                fprintf(stderr, "[Case99] Case2 run %d sleep:%ldUs**\n", i, randomSleepUs);
+                APC_SetMetaDataEventState(cameraHandle, &devSelInfo, true, callback);
+                usleep(randomSleepUs);
+                APC_SetMetaDataEventState(cameraHandle, &devSelInfo, false);
+                fprintf(stderr, "[Case99] Case2 run %d .. \n", i);
+            }
+            fprintf(stderr, "[Case99] Case2 --\n");
+            sleep(2);
+            colorCallback.stop();
+
+            // Case 3: Double close
+            fprintf(stderr, "[Case99] Case3 ++\n");
+            APC_SetMetaDataEventState(cameraHandle, &devSelInfo, false);
+            colorCallback.start();
+            sleep(2);
+            APC_SetMetaDataEventState(cameraHandle, &devSelInfo, false);
+            fprintf(stderr, "[Case99] Case3 --\n");
+
+            // Case 4: Not call close and release camera.
+            fprintf(stderr, "[Case99] Case4 ++\n");
+            APC_SetMetaDataEventState(cameraHandle, &devSelInfo, true, callback);
+            sleep(2);
+            fprintf(stderr, "[Case99] Case4 --\n");
+            colorCallback.stop();
+
+            delete gJsonFileSerializer;
+            gJsonFileSerializer = nullptr;
+            // case99_static_clear
+            sFirstFrame = false;
+            sValue320e = 0x0;
+            sValue320f = 0x0;
+            sFPS = 0;
+
+            APC_CloseDevice(cameraHandle, &devSelInfo);
+            APC_Release(&cameraHandle);
+
+            /** $ rm -rf out_img/ *.json json/ jsonFolder/
+             * After the test delete the following folders & files.
+             */
             break;
         }
         case 100:
@@ -1846,18 +2739,23 @@ int main(void)
             exit(0);
             break;
         case 101:
-            //876 or 777 can use this
+            // IVY2 / IVY4 876 or 777 can use this
             init_device(true);
             //open_device();
             RegisterSettings::Batch_read_ASIC(EYSD,GetDevSelectIndexPtr(), g_pDevInfo[gsDevSelInfo.index].nChipID);
             break;
-        case 102:
-            //IVY2 876+777 camera please choose 777 for FW & Sensor Register, usually device index 1.
+        case 102: {
+            //IVY2 876+777 camera please choose 777 for FW & Sensor Register, device index will be 1 insert only 1 cam.
+            //IVY4 876 camera please choose FW & Sensor Register, usually device index 0 if you insert only 1 cam.
             init_device(true);
-            //open_device();
+
+            int pid = g_pDevInfo[gsDevSelInfo.index].wPID;
+            int SensorSlaveAddress = pid == APC_PID_IVY2_S ? 0x20 : pid == APC_PID_IVY4 ? 0x6C : 0x0;
+            if (!pid) CT_DEBUG("This case only apply in the IVY camera. Please choose another item.\n");
+
             RegisterSettings::Batch_read_ASIC(EYSD,GetDevSelectIndexPtr(), g_pDevInfo[gsDevSelInfo.index].nChipID);
-            #define SensorSlaveAddress 0x20
-            RegisterSettings::Batch_read_Sensor(EYSD,GetDevSelectIndexPtr(), SensorSlaveAddress,FG_Address_2Byte | FG_Value_1Byte);
+            RegisterSettings::Batch_read_Sensor(EYSD,GetDevSelectIndexPtr(), SensorSlaveAddress, FG_Address_2Byte|FG_Value_1Byte,
+                                                g_pDevInfo[gsDevSelInfo.index].wPID);
             RegisterSettings::Batch_read_FW(EYSD,GetDevSelectIndexPtr(), 1);
             RegisterSettings::Batch_read_FW(EYSD,GetDevSelectIndexPtr(), 2);
             RegisterSettings::Batch_read_FW(EYSD,GetDevSelectIndexPtr(), 3);
@@ -1865,14 +2763,229 @@ int main(void)
             RegisterSettings::Batch_read_FW(EYSD,GetDevSelectIndexPtr(), 5);
             RegisterSettings::Batch_read_FW(EYSD,GetDevSelectIndexPtr(), 6);
             break;
-        case 103: {
-            //Step 1 :QCS610 take picture ande send to windows calibration tool
-            //Step 2 :Send output bin file to QCS610 and run this case
+        }
+        case 103:
+             init_device(false);
+            for (int i = 0; i < APC_GetDeviceNumber(EYSD); i++)
+                CT_DEBUG("Device Count: %d, Device Index List: %d\n", APC_GetDeviceNumber(EYSD), i);
+            for (int i = 0; i < APC_GetSimpleDeviceNumber(EYSD); i++)
+                CT_DEBUG("Simple Device Count: %d, Simple Device Index List: %d\n", APC_GetSimpleDeviceNumber(EYSD), SIMPLE_DEV_START_IDX + i);
+            printf("Select Device Index (0...%d): ",
+                (APC_GetSimpleDeviceNumber(EYSD) > 0) ? (SIMPLE_DEV_START_IDX + APC_GetSimpleDeviceNumber(EYSD) - 1) : (APC_GetDeviceNumber(EYSD) - 1));
+            scanf("%d", &input_idx);
+            printf("Selected Deivce Index is = [%d]\n", input_idx);
+            SelectDevInx(input_idx);
+            ReadAllCalibrationData();
+            break;
+        case 104: {
+            //Step 1 :QCS610 or RK board take picture and send to windows calibration tool
+            //Step 2 :Send output bin file to QCS610 or RK board, and run this case
             init_device(true); //choose 876
             write_calibration_data(0);
             //for (int index = 0; index < APC_USER_SETTING_OFFSET; ++index) {
                 //write_calibration_data(index);
             //}
+            break;
+        }
+        case 105: {
+            // Stress Test from init to release.
+            // Init -> Open -> StreamOn -> Close -> Release
+            fprintf(stderr, "Case 105 Stress Test Start\n");
+            void* cameraHandle = nullptr;
+            DEVSELINFO devSelInfo;
+            devSelInfo.index = 0;
+
+            int fps = 30;
+            int cw = 1280, ch = 720;
+            int dw = 1280, dh = 720;
+            int isMjpeg = 0;
+            int depthDataType = APC_DEPTH_DATA_11_BITS;
+            int frameNumber = 0;
+            int run = 0;
+            int irIntensity = 0;
+
+            printf("\nPlease input how many times to run open/close device test : \n");
+            scanf("%d", &run);
+            printf("\nPlease input how many received frames to close device each run : \n");
+            scanf("%d", &frameNumber);
+            printf("Choose YUYV:0 MJPEG:1 \n");
+            scanf("%d", &isMjpeg);
+            printf("Color width:\n");
+            scanf("%d", &cw);
+            printf("Color height:\n");
+            scanf("%d", &ch);
+            printf("Depth width:\n");
+            scanf("%d", &dw);
+            printf("Depth height:\n");
+            scanf("%d", &dh);
+            printf("Choose FPS:\n");
+            scanf("%d", &fps);
+            printf("Choose Depth data type\nD(11Bits)=4\nZ(14Bits)=2\nColor Only L'+R'=5\nColor Only L+R=0\n");
+            scanf("%d", &depthDataType);
+            printf("IR Intensity 0 - 6\n");
+            scanf("%d", &irIntensity);
+
+            std::size_t runCount = 0;
+            while (runCount < run) {
+                runCount++;
+                fprintf(stderr, "Run %zu\n", runCount);
+                int ret = APC_Init(&cameraHandle, true);
+
+                fprintf(stderr, "(01) Init device (%d)\n", ret);
+
+                if (!cameraHandle) {
+                    fprintf(stderr, "Null handle reason %d\n", ret);
+                    return 0;
+                }
+
+                ret = APC_SetDepthDataType(cameraHandle, &devSelInfo, depthDataType);
+
+                ret = APC_SetCurrentIRValue(cameraHandle, &devSelInfo, irIntensity);
+
+                ret = APC_SetupBlock(cameraHandle, &devSelInfo, true);
+
+                ret = APC_OpenDevice2(cameraHandle, &devSelInfo, cw, ch, isMjpeg, dw, dh, DEPTH_IMG_NON_TRANSFER, false,
+                                      nullptr, &fps);
+
+                fprintf(stderr, "(02) Open device (%d)\n", ret);
+
+                if (ret) {
+                    fprintf(stderr, "Open device failed \n");
+                    return 0;
+                }
+
+                fprintf(stderr, "(03) Frame number each run = (%d)\n", frameNumber);
+
+                std::size_t dropColor = 0;
+                std::size_t dropDepth = 0;
+                std::size_t countColor = 0;
+                std::size_t countDepth = 0;
+
+                static int64_t lastColorTimeUs;
+                lastColorTimeUs = 0;
+                libeys3dsample::FrameCallbackHelper::Callback colorCallbackFn([&] (const libeys3dsample::Frame *f) {
+                    static int lastSN = 0;
+                    int64_t curTimeUs = f->ts_s * 1000000 + f->ts_us;
+                    if (lastColorTimeUs && f->sn - lastSN > 1) {
+                        fprintf(stderr, "Inside color callback frame.sn=%d lastSN=%d status=%d diffMs=%f \n",
+                                f->sn, lastSN, f->status, (curTimeUs - lastColorTimeUs) / 1000.0f);
+                        dropColor++;
+                    }
+                    fprintf(stderr, "+");
+                    lastColorTimeUs = curTimeUs;
+                    lastSN = f->sn;
+                    countColor++;
+                    return f->status;
+                });
+
+                static int64_t lastDepthTimeUs;
+                lastDepthTimeUs = 0;
+                libeys3dsample::FrameCallbackHelper::Callback depthCallbackFn([&] (const libeys3dsample::Frame *f) {
+                    static int lastSN = 0;
+                    int64_t curTimeUs = f->ts_s * 1000000 + f->ts_us;
+                    if (lastDepthTimeUs && f->sn - lastSN > 1) {
+                        fprintf(stderr, "Inside depth callback frame.sn=%d lastSN=%d status=%d diffMs=%f \n",
+                                f->sn, lastSN, f->status, (curTimeUs - lastDepthTimeUs) / 1000.0f);
+                        dropDepth++;
+                    }
+                    fprintf(stderr, ".");
+                    lastDepthTimeUs = curTimeUs;
+                    lastSN = f->sn;
+                    countDepth++;
+                    return f->status;
+                });
+
+                libeys3dsample::ColorCallbackHelper colorCallback(cameraHandle, devSelInfo, cw, ch, 2, colorCallbackFn);
+                libeys3dsample::DepthCallbackHelper depthCallback(cameraHandle, devSelInfo, dw, dh, 2, depthCallbackFn);
+
+                colorCallback.start();
+                depthCallback.start();
+
+                while (1) {
+                    bool colorEnd = cw == 0 ? true : countColor > frameNumber;
+                    bool depthEnd = dw == 0 ? true : countDepth > frameNumber;
+                    if (colorEnd && depthEnd)
+                        break;
+                    usleep(10 * 1000);
+                }
+
+                fprintf(stderr, "Stopping Streams !!\n");
+
+                depthCallback.stop();
+                colorCallback.stop();
+
+                fprintf(stderr, "[Result] Last Color SN %d Last Depth SN %d / DropColor: %lu DropDepth: %lu\n",
+                        colorCallback.mFrame->sn, depthCallback.mFrame->sn, dropColor, dropDepth);
+
+                fprintf(stderr, "(04) Get image done\n");
+
+                ret = APC_CloseDevice(cameraHandle, &devSelInfo);
+                fprintf(stderr, "(05) Close device ret=%d) !!\n", ret);
+
+                APC_Release(&cameraHandle);
+                fprintf(stderr, "(06) Release device\n");
+            }
+
+            break;
+        }
+        case 106: {
+            void* cameraHandle = nullptr;
+            DEVSELINFO devSelInfo;
+            devSelInfo.index = 0;
+            int cw = 1280, ch = 720;
+            int run = 2000;
+
+            printf("\nPlease input run to profile the API : \n");
+            scanf("%d", &run);
+            printf("Color width:\n");
+            scanf("%d", &cw);
+            printf("Color height:\n");
+            scanf("%d", &ch);
+            int ret = APC_Init(&cameraHandle, false);
+            if (ret || !run) {
+                printf("\nPlease plugin 1 camera or valid run > 0 !! \n");
+                break;
+            }
+
+            const std::size_t imageSize = cw * ch * 2;
+            auto randomImage = new unsigned char[imageSize];
+            auto decodedImage = new unsigned char[imageSize/2 * 3];
+
+            auto generateTestPattern = [] (unsigned char* buffer, int width, int height) {
+                for (int y = 0; y < height; ++y) {
+                    for (int x = 0; x < width; x += 2) {
+                        int index = y * width * 2 + x * 2;
+                        // Y1 U Y2 V
+                        buffer[index] = static_cast<unsigned char>((x + y) % 256);
+                        buffer[index + 1] = static_cast<unsigned char>((x * y) % 256);
+                        buffer[index + 2] = static_cast<unsigned char>((x + y + 1) % 256);
+                        buffer[index + 3] = static_cast<unsigned char>((x * y + 128) % 256);
+                    }
+                }
+            };
+
+            // Generate test pattern
+            generateTestPattern(randomImage, cw, ch);
+
+            size_t durationUs = 0;
+            for (int i = 0; i < run; ++i) {
+                auto start = std::chrono::high_resolution_clock::now();
+
+                ret = APC_ColorFormat_to_RGB24(cameraHandle, &devSelInfo, decodedImage, randomImage, imageSize,
+                                               cw, ch, APCImageType::Value::COLOR_YUY2);
+                auto end = std::chrono::high_resolution_clock::now();
+                durationUs += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+            }
+
+            auto averageFrameProcessTimeUs = (double) durationUs / run;
+
+            fprintf(stderr, "[eys3d_case_106] Resolution %dx%d Average Ms: %f for %d frames\n", cw, ch,
+                    averageFrameProcessTimeUs / 1000, run);
+
+            delete randomImage;
+            delete decodedImage;
+
+            APC_Release(&cameraHandle);
             break;
         }
         case 255:
@@ -1886,6 +2999,249 @@ int main(void)
     } while(1);
 
     return 0;
+}
+
+static void ReadAllCalibrationData(void)
+{
+    int index = 0;
+    int nxybfferLength  = APC_Y_OFFSET_FILE_SIZE;
+    int nrecbfferLength = APC_RECTIFY_FILE_SIZE;
+    int nzdbfferLength  = APC_ZD_TABLE_FILE_SIZE_11_BITS;
+    int nlogbfferLength = APC_CALIB_LOG_FILE_SIZE;
+
+    int pxyActualLength  = 0;
+    int precActualLength = 0;
+    int pzdActualLength  = 0;
+    int plogActualLength = 0;
+
+    ZDTABLEINFO zdTableInfo;
+    zdTableInfo.nDataType = APC_DEPTH_DATA_11_BITS;
+
+    BYTE *xydata = new BYTE[nxybfferLength];
+    memset(xydata, 0x0, nxybfferLength);
+    BYTE *recdata = new BYTE[nrecbfferLength];
+    memset(recdata, 0x0, nrecbfferLength);
+    BYTE *zddata = new BYTE[nzdbfferLength];
+    memset(zddata, 0x0, nzdbfferLength);
+    BYTE *logdata = new BYTE[nlogbfferLength];
+    memset(logdata, 0x0, nlogbfferLength);
+
+    int group = 1;
+    int CheckSupportFP = APC_GetFlashProtectionSupported(EYSD, GetDevSelectIndexPtr());
+    if (CheckSupportFP == APC_OK){
+        printf("\nThis camera support FW protection, which group do you want to read? \n");
+        printf("1 is Protection area(Factory), 2 is User area \n");
+        printf("Please enter Group: 1 or 2\n");
+        scanf("%d", &group);
+        printf("group is %d\n\n",group);
+        if (group < 1 || group > 2)
+        {
+            printf("Wrong number, Please enter Group: 1 or 2\n");
+            return;
+        }
+    }
+    else if (CheckSupportFP == APC_NotSupport){
+        printf("This camera not support FW protection, read group1 data \n");
+    }
+    else{
+        printf("CheckSupportFP fail\n");
+        return;
+    }
+
+    if (group == 2)
+    {
+            if (APC_OK == APC_GetYOffset(EYSD, GetDevSelectIndexPtr(), xydata, nxybfferLength, &pxyActualLength, index + FW_FID_GROUP_OFFSET))
+            {
+                printf("Read3%d XY offset Success\n", index + FW_FID_GROUP_OFFSET);
+                for (int i = 0; i < nxybfferLength; i++)
+                {
+                    printf("%02x ", xydata[i]);
+                }
+                printf("\n");
+                char xyoffsetfileName[256] = {0};
+                printf("read_file name, index number still 0, because need feed to K tool\n\n");
+                sprintf(xyoffsetfileName, "calibrationdata/read/read_fileio_buffer_xyoffset_%d.bin", index);
+                std::ofstream file(xyoffsetfileName, std::ios::binary);
+                if (file.is_open()) {
+                    file.write(reinterpret_cast<char*>(xydata), nxybfferLength);
+                    file.close();
+                }
+            }
+            else
+            {
+                printf("Read3%d XY offset Fail!\n", index + FW_FID_GROUP_OFFSET);
+                printf("Note that a 'fail' might occur if the camera doesn't require the data area for the calibration. \n\n");
+            }
+
+            if (APC_OK == APC_GetRectifyTable(EYSD, GetDevSelectIndexPtr(), recdata, nrecbfferLength, &precActualLength, index + FW_FID_GROUP_OFFSET))
+            {
+                printf("Read4%d Rectify Success\n", index + FW_FID_GROUP_OFFSET);
+                for (int i = 0; i < nrecbfferLength; i++)
+                {
+                    printf("%02x ", recdata[i]);
+                }
+                printf("\n");
+                char recyifyfileName[256] = {0};
+                printf("read_file name, index number still 0, because need feed to K tool\n\n");
+                sprintf(recyifyfileName, "calibrationdata/read/read_fileio_buffer_rectify_%d.bin", index);
+                std::ofstream file(recyifyfileName, std::ios::binary);
+                if (file.is_open()) {
+                    file.write(reinterpret_cast<char*>(recdata), nrecbfferLength);
+                    file.close();
+                }
+            }
+            else
+            {
+                printf("Read4%d Rectify Fail!\n", index + FW_FID_GROUP_OFFSET);
+                printf("Note that a 'fail' might occur if the camera doesn't require the data area for the calibration. \n\n");
+            }
+
+            zdTableInfo.nIndex = index + FW_FID_GROUP_OFFSET;
+
+            if (APC_OK == APC_GetZDTable(EYSD, GetDevSelectIndexPtr(), zddata, nzdbfferLength, &pzdActualLength, &zdTableInfo))
+            {
+                printf("Read5%d ZD Success\n", index + FW_FID_GROUP_OFFSET);
+                for (int i = 0; i < nzdbfferLength; i++)
+                {
+                    printf("%02x ", zddata[i]);
+                }
+                printf("\n");
+                char zdtablefileName[256] = {0};
+                printf("read_file name, index number still 0, because need feed to K tool\n\n");
+                sprintf(zdtablefileName, "calibrationdata/read/read_fileio_buffer_zdtable_%d.bin", index);
+                std::ofstream file(zdtablefileName, std::ios::binary);
+                if (file.is_open()) {
+                    file.write(reinterpret_cast<char*>(zddata), nzdbfferLength);
+                    file.close();
+                }
+            }
+            else
+            {
+                printf("Read5%d ZD Fail!\n", index + FW_FID_GROUP_OFFSET);
+                printf("Note that a 'fail' might occur if the camera doesn't require the data area for the calibration. \n\n");
+            }
+
+            if (APC_OK == APC_GetLogData(EYSD, GetDevSelectIndexPtr(), logdata, nlogbfferLength, &plogActualLength, index + FW_FID_GROUP_OFFSET, ALL_LOG))
+            {
+                printf("Read24%d ALL_LOG Success\n", index + FW_FID_GROUP_OFFSET);
+                for (int i = 0; i < nlogbfferLength; i++)
+                {
+                    printf("%02x ", logdata[i]);
+                }
+                printf("\n");
+                char logfileName[256] = {0};
+                printf("read_file name, index number still 0, because need feed to K tool\n\n");
+                sprintf(logfileName, "calibrationdata/read/read_fileio_buffer_log_%d.bin", index);
+                std::ofstream file(logfileName, std::ios::binary);
+                if (file.is_open()) {
+                    file.write(reinterpret_cast<char*>(logdata), nlogbfferLength);
+                    file.close();
+                }
+            }
+            else
+            {
+                printf("Read24%d ALL_LOG Fail!\n", index + FW_FID_GROUP_OFFSET);
+                printf("Note that a 'fail' might occur if the camera doesn't require the data area for the calibration. \n\n");
+            }
+    }
+    else if (group == 1)
+    {
+            if (APC_OK == APC_GetYOffset(EYSD, GetDevSelectIndexPtr(), xydata, nxybfferLength, &pxyActualLength, index))
+            {
+                printf("Read3%d XY offset Success\n", index);
+                for (int i = 0; i < nxybfferLength; i++)
+                {
+                    printf("%02x ", xydata[i]);
+                }
+                printf("\n");
+                char xyoffsetfileName[256] = {0};
+                printf("\n");
+                sprintf(xyoffsetfileName, "calibrationdata/read/read_fileio_buffer_xyoffset_%d.bin", index);
+                std::ofstream file(xyoffsetfileName, std::ios::binary);
+                if (file.is_open()) {
+                    file.write(reinterpret_cast<char*>(xydata), nxybfferLength);
+                    file.close();
+                }
+            }
+            else
+            {
+                printf("Read3%d XY offset Fail!\n", index);
+                printf("Note that a 'fail' might occur if the camera doesn't require the data area for the calibration. \n\n");
+            }
+
+            if (APC_OK == APC_GetRectifyTable(EYSD, GetDevSelectIndexPtr(), recdata, nrecbfferLength, &precActualLength, index))
+            {
+                printf("Read4%d Rectify Success\n", index);
+                for (int i = 0; i < nrecbfferLength; i++)
+                {
+                    printf("%02x ", recdata[i]);
+                }
+                printf("\n");
+                char recyifyfileName[256] = {0};
+                printf("\n");
+                sprintf(recyifyfileName, "calibrationdata/read/read_fileio_buffer_rectify_%d.bin", index);
+                std::ofstream file(recyifyfileName, std::ios::binary);
+                if (file.is_open()) {
+                    file.write(reinterpret_cast<char*>(recdata), nrecbfferLength);
+                    file.close();
+                }
+            }
+            else
+            {
+                printf("Read4%d Rectify Fail!\n", index);
+                printf("Note that a 'fail' might occur if the camera doesn't require the data area for the calibration. \n\n");
+            }
+
+            zdTableInfo.nIndex = index;
+            if (APC_OK == APC_GetZDTable(EYSD, GetDevSelectIndexPtr(), zddata, nzdbfferLength, &pzdActualLength, &zdTableInfo))
+            {
+                printf("Read5%d ZD success\n", index);
+                for (int i = 0; i < nzdbfferLength; i++)
+                {
+                    printf("%02x ", zddata[i]);
+                }
+                printf("\n");
+                char zdtablefileName[256] = {0};
+                printf("\n");
+                sprintf(zdtablefileName, "calibrationdata/read/read_fileio_buffer_zdtable_%d.bin", index);
+                std::ofstream file(zdtablefileName, std::ios::binary);
+                if (file.is_open()) {
+                    file.write(reinterpret_cast<char*>(zddata), nzdbfferLength);
+                    file.close();
+                }
+            }
+            else
+            {
+                printf("Read5%d ZD Fail!\n", index);
+                printf("Note that a 'fail' might occur if the camera doesn't require the data area for the calibration. \n\n");
+            }
+
+            if (APC_OK == APC_GetLogData(EYSD, GetDevSelectIndexPtr(), logdata, nlogbfferLength, &plogActualLength, index, ALL_LOG))
+            {
+                printf("Read24%d ALL_LOG success\n", index);
+                for (int i = 0; i < nlogbfferLength; i++)
+                {
+                    printf("%02x ", logdata[i]);
+                }
+                printf("\n");
+                char logfileName[256] = {0};
+                sprintf(logfileName, "calibrationdata/read/read_fileio_buffer_log_%d.bin", index);
+                std::ofstream file(logfileName, std::ios::binary);
+                if (file.is_open()) {
+                    file.write(reinterpret_cast<char*>(logdata), nlogbfferLength);
+                    file.close();
+                }
+            }
+            else
+            {
+                printf("Read24%d ALL_LOG Fail!\n", index);
+                printf("Note that a 'fail' might occur if the camera doesn't require the data area for the calibration. \n\n");
+            }
+    }
+    delete[] xydata;
+    delete[] recdata;
+    delete[] zddata;
+    delete[] logdata;
 }
 
 int load_file_data_to_buffer(uint8_t* p_buffer, int size, const char* filename) {
@@ -1912,18 +3268,32 @@ static void write_calibration_data(int fileIndex) {
     if (fileIndex > APC_USER_SETTING_OFFSET) return;
     auto devSelInfo = &gsDevSelInfo;
 
+    int final_fileIndex = 0;
+    int CheckSupportFP = APC_GetFlashProtectionSupported(EYSD, devSelInfo);
+    if (CheckSupportFP == APC_OK){
+        final_fileIndex = fileIndex + FW_FID_GROUP_OFFSET;
+        CT_DEBUG("This camera support FW protection, write data to group2 because group1 is Protection Area \n");
+    }
+    else if (CheckSupportFP == APC_NotSupport){
+        final_fileIndex = fileIndex;
+        CT_DEBUG("This camera not support FW protection, write data to group1 \n");
+    }
+    else{
+        CT_DEBUG("CheckSupportFP fail\n");
+        return;
+    }
     //xy offset
     CT_DEBUG("Start write XY offset file ID 3%d \n",fileIndex);
     int xyactualLength = 0;
     uint8_t* xy_buffer_r = new uint8_t[APC_Y_OFFSET_FILE_SIZE];
-    memset(xy_buffer_r, 0, sizeof(APC_Y_OFFSET_FILE_SIZE));
+    memset(xy_buffer_r, 0, APC_Y_OFFSET_FILE_SIZE);
     char xyfileName[256] = {0};
-    sprintf(xyfileName, "calibrationdata/write_fileio_buffer_xyoffset_%d.bin", fileIndex);
+    sprintf(xyfileName, "calibrationdata/write/write_fileio_buffer_xyoffset_%d.bin", fileIndex);
 
     if (load_file_data_to_buffer(xy_buffer_r, APC_Y_OFFSET_FILE_SIZE, xyfileName) < 0) {
         CT_DEBUG("Load XY offset file fail \n");
     } else {
-        if (APC_SetYOffset(EYSD, devSelInfo, xy_buffer_r, APC_Y_OFFSET_FILE_SIZE, &xyactualLength,fileIndex) < 0) {
+        if (APC_SetYOffset(EYSD, devSelInfo, xy_buffer_r, APC_Y_OFFSET_FILE_SIZE, &xyactualLength,final_fileIndex) < 0) {
             CT_DEBUG("APC_SetYOffset fail\n");
             return;
         }
@@ -1937,14 +3307,14 @@ static void write_calibration_data(int fileIndex) {
     CT_DEBUG("Start write Rectify file ID 4%d \n",fileIndex);
     int recactualLength = 0;
     uint8_t* rec_buffer_r = new uint8_t[APC_RECTIFY_FILE_SIZE];
-    memset(rec_buffer_r, 0, sizeof(APC_RECTIFY_FILE_SIZE));
+    memset(rec_buffer_r, 0, APC_RECTIFY_FILE_SIZE);
     char recfileName[256] = {0};
-    sprintf(recfileName, "calibrationdata/write_fileio_buffer_rectify_%d.bin", fileIndex);
+    sprintf(recfileName, "calibrationdata/write/write_fileio_buffer_rectify_%d.bin", fileIndex);
 
     if (load_file_data_to_buffer(rec_buffer_r, APC_RECTIFY_FILE_SIZE, recfileName) < 0) {
         CT_DEBUG("Load Rectify file fail \n");
     } else {
-        if (APC_SetRectifyTable(EYSD, devSelInfo, rec_buffer_r, APC_RECTIFY_FILE_SIZE, &recactualLength,fileIndex) < 0) {
+        if (APC_SetRectifyTable(EYSD, devSelInfo, rec_buffer_r, APC_RECTIFY_FILE_SIZE, &recactualLength,final_fileIndex) < 0) {
             CT_DEBUG("APC_SetRectifyTable fail \n");
             return;
         }
@@ -1958,15 +3328,15 @@ static void write_calibration_data(int fileIndex) {
     CT_DEBUG("Start write ZDtable file ID 5%d \n",fileIndex);
     int zdactualLength = 0;
     uint8_t* zd_buffer_r = new uint8_t[APC_ZD_TABLE_FILE_SIZE_11_BITS];
-    memset(zd_buffer_r, 0, sizeof(APC_ZD_TABLE_FILE_SIZE_11_BITS));
+    memset(zd_buffer_r, 0, APC_ZD_TABLE_FILE_SIZE_11_BITS);
     char zdfileName[256] = {0};
-    sprintf(zdfileName, "calibrationdata/write_fileio_buffer_zdtable_%d.bin", fileIndex);
+    sprintf(zdfileName, "calibrationdata/write/write_fileio_buffer_zdtable_%d.bin", fileIndex);
 
     if (load_file_data_to_buffer(zd_buffer_r, APC_ZD_TABLE_FILE_SIZE_11_BITS, zdfileName) < 0) {
         CT_DEBUG("Load ZDtable file fail \n");
     } else {
         ZDTABLEINFO ZDTableInfo;
-        ZDTableInfo.nIndex = fileIndex;
+        ZDTableInfo.nIndex = final_fileIndex;
         if (APC_SetZDTable(EYSD, devSelInfo, zd_buffer_r, APC_ZD_TABLE_FILE_SIZE_11_BITS, &zdactualLength, &ZDTableInfo) < 0) {
             CT_DEBUG("APC_SetZDTable fail \n");
             return;
@@ -1981,14 +3351,14 @@ static void write_calibration_data(int fileIndex) {
     CT_DEBUG("Start write log file ID 24%d \n",fileIndex);
     int logactualLength = 0;
     uint8_t* log_buffer_r = new uint8_t[APC_CALIB_LOG_FILE_SIZE];
-    memset(log_buffer_r, 0, sizeof(APC_CALIB_LOG_FILE_SIZE));
+    memset(log_buffer_r, 0, APC_CALIB_LOG_FILE_SIZE);
     char logfileName[256] = {0};
-    sprintf(logfileName, "calibrationdata/write_fileio_buffer_log_%d.bin", fileIndex);
+    sprintf(logfileName, "calibrationdata/write/write_fileio_buffer_log_%d.bin", fileIndex);
 
     if (load_file_data_to_buffer(log_buffer_r, APC_CALIB_LOG_FILE_SIZE, logfileName) < 0) {
         CT_DEBUG("Load log file fail \n");
     } else {
-        if (APC_SetLogData(EYSD, devSelInfo, log_buffer_r, APC_CALIB_LOG_FILE_SIZE, &logactualLength, fileIndex) < 0) {
+        if (APC_SetLogData(EYSD, devSelInfo, log_buffer_r, APC_CALIB_LOG_FILE_SIZE, &logactualLength, final_fileIndex) < 0) {
             CT_DEBUG("APC_SetLogData fail \n");
             return;
         }
@@ -3190,6 +4560,7 @@ static int open_device(void)
         printf("Set Depth stream resolution\n");
         printf("ex> 640 720 30 (640 x 720, 30(FPS))\n");
         printf("ex> 320 480 30 (320 x 480, 30(FPS))\n");
+        printf("ex> 0 0 30 (0 x 0, 30(FPS) if color only )\n");
 
         scanf("%d %d %d", &gDepthWidth, &gDepthHeight, &gActualFps);
 
@@ -3271,7 +4642,7 @@ static void *pfunc_thread_color(void *arg) {
         /* APC_GetColorImage */
         ret = APC_GetColorImage(EYSD, GetDevSelectIndexPtr(), (BYTE*)gColorImgBuf, &gColorImgSize, &gColorSerial);
         //CT_DEBUG("[%s][%d] %d, errno: %d(%s)(%d)\n", __func__, __LINE__,ret, errno, strerror(errno), gColorSerial);
-        if (ret == APC_OK && gColorSerial > 0) {
+        if (ret == APC_OK) {
             if (cnt_frme == 0 && mCount == 0) {
                 APC_SetCTPropVal(EYSD, GetDevSelectIndexPtr(), CT_PROPERTY_ID_AUTO_EXPOSURE_MODE_CTRL, AE_MOD_APERTURE_PRIORITY_MODE);
                 APC_SetPUPropVal(EYSD, GetDevSelectIndexPtr(), PU_PROPERTY_ID_WHITE_BALANCE_AUTO_CTRL, PU_PROPERTY_ID_AWB_ENABLE);
@@ -3334,7 +4705,7 @@ static void *pfunc_thread_color(void *arg) {
                     fps_total += fps_tmp;
             }
         } else {
-            CT_DEBUG("Failed to call APC_GetColorImage()!\n");
+            CT_DEBUG("APC_GetColorImage() ret = %d\n", ret);
             if (ret == APC_DEVICE_TIMEOUT) {
                 /*
                         When return the APC_DEVICE_TIMEOUT from SDK, this mean the device may busy state.
@@ -3608,7 +4979,7 @@ static void *pfunc_thread_mipi(void *arg) {
         if (ret == APC_OK) {
             if (cnt_frme == 0 && mCount == 0) {
                 APC_SetInterleaveMode(EYSD, GetDevSelectIndexPtr(), gInterleave);
-                APC_SetCTPropVal(EYSD, GetDevSelectIndexPtr(), CT_PROPERTY_ID_AUTO_EXPOSURE_MODE_CTRL, AE_MOD_APERTURE_PRIORITY_MODE);
+                APC_SetCTPropVal(EYSD, GetDevSelectIndexPtr(), CT_PROPERTY_ID_AUTO_EXPOSURE_MODE_CTRL, 1 << AE_MOD_APERTURE_PRIORITY_MODE);
                 APC_SetPUPropVal(EYSD, GetDevSelectIndexPtr(), PU_PROPERTY_ID_WHITE_BALANCE_AUTO_CTRL, PU_PROPERTY_ID_AWB_ENABLE);
                 setupIR(gSetupIRValue);
                 usleep(1 * 1000 * 1000);
@@ -3975,7 +5346,7 @@ static void get_point_cloud_8063(void) {
 
     std::thread t_pcl = std::thread([&]() {
         int ret = APC_Init_Fail;
-        ret = getPointCloudInfo(EYSD, &depthDeviceSelInf, &pointCloudInfo, gDepthDataType, gDepthWidth);
+        ret = getPointCloudInfo(EYSD, &depthDeviceSelInf, &pointCloudInfo, gDepthDataType, gDepthHeight);
         APC_GetPointCloud(EYSD, &depthDeviceSelInf, rgbBuffer, gColorWidth, gColorHeight, gDepthImgBuf, gDepthWidth, gDepthHeight,
                           &pointCloudInfo, pPointCloudRGB, pPointCloudXYZ, fNear, fFar);
         CT_DEBUG("+++++++++++%d APC_GetPointCloud ret=[%d]\n", t_pcl.get_id(), ret);
@@ -4059,6 +5430,16 @@ static int getPointCloudInfo(void *pHandleEYSD, DEVSELINFO *pDevSelInfo, PointCl
         pointCloudInfo->centerY = -1.0f * pRectifyLogData->ReProjectMat[7] * ratio_Mat;
         pointCloudInfo->focalLength = pRectifyLogData->ReProjectMat[11] * ratio_Mat;
         pointCloudInfo->bIsMIPISplit = gSplitImage;
+
+        pointCloudInfo->fx1 = pRectifyLogData->NewCamMat1[0];
+        pointCloudInfo->fy1 = pRectifyLogData->NewCamMat1[5];
+        pointCloudInfo->fx2 = pRectifyLogData->NewCamMat2[0];
+        pointCloudInfo->fy2 = pRectifyLogData->NewCamMat2[5];
+        pointCloudInfo->cx1 = pRectifyLogData->NewCamMat1[2];
+        pointCloudInfo->cy1 = pRectifyLogData->NewCamMat1[6];
+        pointCloudInfo->cx2 = pRectifyLogData->NewCamMat2[2];
+        pointCloudInfo->cy2 = pRectifyLogData->NewCamMat2[6];
+        pointCloudInfo->Tx = -1 * baseline;
 
         switch (APCImageType::DepthDataTypeToDepthImageType(depthDataType)) {
             case APCImageType::DEPTH_14BITS: pointCloudInfo->disparity_len = 0; break;
@@ -4290,23 +5671,80 @@ static void Read3X(void)
     int pActualLength = 0;
     BYTE *data = new BYTE[nbfferLength];
     memset(data, 0x0, nbfferLength);
-    for (index = 0; index <= 9; index++)
-    {
-        if (APC_OK == APC_GetYOffset(EYSD, GetDevSelectIndexPtr(), data, nbfferLength, &pActualLength, index))
+    int group = 1;
+    int CheckSupportFP = APC_GetFlashProtectionSupported(EYSD, GetDevSelectIndexPtr());
+    if (CheckSupportFP == APC_OK){
+        printf("This camera support FW protection, which group you want to read? \n");
+        printf("Please enter Group: 1 or 2\n");
+        scanf("%d", &group);
+        printf("group is %d\n",group);
+        if (group < 1 || group > 2)
         {
-            printf("\n Read3%d\n", index);
-            for (int i = 0; i < nbfferLength; i++)
-            {
-                printf("%02x ", data[i]);
-            }
-            printf("\n");
-        }
-        else
-        {
-            printf("\n Read3%d Fail!\n", index);
+            printf("Wrong number, Please enter Group: 1 or 2\n");
+            return;
         }
     }
+    else if (CheckSupportFP == APC_NotSupport){
+        printf("This camera not support FW protection, read group1 data \n");
+    }
+    else{
+        printf("CheckSupportFP fail\n");
+        return;
+    }
 
+    if (group == 2)
+    {
+        for (index = 5; index <= 9; index++)
+        {
+            if (APC_OK == APC_GetYOffset(EYSD, GetDevSelectIndexPtr(), data, nbfferLength, &pActualLength, index))
+            {
+                printf("\n Read3%d\n", index);
+                for (int i = 0; i < nbfferLength; i++)
+                {
+                    printf("%02x ", data[i]);
+                }
+                printf("\n");
+                char xyoffsetfileName[256] = {0};
+                printf("read_file name still 0~4, because need feed to K tool\n");
+                sprintf(xyoffsetfileName, "calibrationdata/read/read_fileio_buffer_xyoffset_%d.bin", index - FW_FID_GROUP_OFFSET);
+                std::ofstream file(xyoffsetfileName, std::ios::binary);
+                if (file.is_open()) {
+                    file.write(reinterpret_cast<char*>(data), nbfferLength);
+                    file.close();
+                }
+            }
+            else
+            {
+                printf("\n Read3%d Fail!\n", index);
+            }
+        }
+    }
+    else if (group == 1)
+    {
+        for (index = 0; index <= 5; index++)
+        {
+            if (APC_OK == APC_GetYOffset(EYSD, GetDevSelectIndexPtr(), data, nbfferLength, &pActualLength, index))
+            {
+                printf("\n Read3%d\n", index);
+                for (int i = 0; i < nbfferLength; i++)
+                {
+                    printf("%02x ", data[i]);
+                }
+                printf("\n");
+                char xyoffsetfileName[256] = {0};
+                sprintf(xyoffsetfileName, "calibrationdata/read/read_fileio_buffer_xyoffset_%d.bin", index);
+                std::ofstream file(xyoffsetfileName, std::ios::binary);
+                if (file.is_open()) {
+                    file.write(reinterpret_cast<char*>(data), nbfferLength);
+                    file.close();
+                }
+            }
+            else
+            {
+                printf("\n Read3%d Fail!\n", index);
+            }
+        }
+    }
     delete[] data;
 }
 static void Write3X(void)
@@ -4340,20 +5778,77 @@ static void Read4X(void)
     int pActualLength = 0;
     BYTE *data = new BYTE[nbfferLength];
     memset(data, 0x0, nbfferLength);
-    for (index = 0; index <= 9; index++)
-    {
-        if (APC_OK == APC_GetRectifyTable(EYSD, GetDevSelectIndexPtr(), data, nbfferLength, &pActualLength, index))
+    int group = 1;
+    int CheckSupportFP = APC_GetFlashProtectionSupported(EYSD, GetDevSelectIndexPtr());
+    if (CheckSupportFP == APC_OK){
+        printf("This camera support FW protection, which group you want to read? \n");
+        printf("Please enter Group: 1 or 2\n");
+        scanf("%d", &group);
+        if (group < 1 || group >2)
         {
-            printf("\n Read4%d\n", index);
-            for (int i = 0; i < nbfferLength; i++)
-            {
-                printf("%02x ", data[i]);
-            }
-            printf("\n");
+            printf("Wrong number, Please enter Group: 1 or 2\n");
+            return;
         }
-        else
+    }
+    else if (CheckSupportFP == APC_NotSupport){
+        printf("This camera not support FW protection, read group1 data \n");
+    }
+    else{
+        printf("CheckSupportFP fail\n");
+        return;
+    }
+
+    if (group == 2)
+    {
+        for (index = 5; index <= 9; index++)
         {
-            printf("\n Read4%d Fail!\n", index);
+            if (APC_OK == APC_GetRectifyTable(EYSD, GetDevSelectIndexPtr(), data, nbfferLength, &pActualLength, index))
+            {
+                printf("\n Read4%d\n", index);
+                for (int i = 0; i < nbfferLength; i++)
+                {
+                    printf("%02x ", data[i]);
+                }
+                printf("\n");
+                char recyifyfileName[256] = {0};
+                printf("read_file name still 0~4, because need feed to K tool\n");
+                sprintf(recyifyfileName, "calibrationdata/read/read_fileio_buffer_rectify_%d.bin", index - FW_FID_GROUP_OFFSET);
+                std::ofstream file(recyifyfileName, std::ios::binary);
+                if (file.is_open()) {
+                    file.write(reinterpret_cast<char*>(data), nbfferLength);
+                    file.close();
+                }
+            }
+            else
+            {
+                printf("\n Read4%d Fail!\n", index);
+            }
+        }
+    }
+    else if (group == 1)
+    {
+        for (index = 0; index <= 5; index++)
+        {
+            if (APC_OK == APC_GetRectifyTable(EYSD, GetDevSelectIndexPtr(), data, nbfferLength, &pActualLength, index))
+            {
+                printf("\n Read4%d\n", index);
+                for (int i = 0; i < nbfferLength; i++)
+                {
+                    printf("%02x ", data[i]);
+                }
+                printf("\n");
+                char recyifyfileName[256] = {0};
+                sprintf(recyifyfileName, "calibrationdata/read/read_fileio_buffer_rectify_%d.bin", index);
+                std::ofstream file(recyifyfileName, std::ios::binary);
+                if (file.is_open()) {
+                    file.write(reinterpret_cast<char*>(data), nbfferLength);
+                    file.close();
+                }
+            }
+            else
+            {
+                printf("\n Read4%d Fail!\n", index);
+            }
         }
     }
     delete[] data;
@@ -4394,21 +5889,79 @@ static void Read5X(void)
 
     BYTE *data = new BYTE[nbfferLength];
     memset(data, 0x0, nbfferLength);
-    for (index = 0; index <= 9; index++)
-    {
-        zdTableInfo.nIndex = index;
-        if (APC_OK == APC_GetZDTable(EYSD, GetDevSelectIndexPtr(), data, nbfferLength, &pActualLength, &zdTableInfo))
+    int group = 1;
+    int CheckSupportFP = APC_GetFlashProtectionSupported(EYSD, GetDevSelectIndexPtr());
+    if (CheckSupportFP == APC_OK){
+        printf("This camera support FW protection, which group you want to read? \n");
+        printf("Please enter Group: 1 or 2\n");
+        scanf("%d", &group);
+        if (group < 1 || group > 2)
         {
-            printf("\n Read5%d\n", index);
-            for (int i = 0; i < nbfferLength; i++)
-            {
-                printf("%02x ", data[i]);
-            }
-            printf("\n");
+            printf("Wrong number, Please enter Group: 1 or 2\n");
+            return;
         }
-        else
+    }
+    else if (CheckSupportFP == APC_NotSupport){
+        printf("This camera not support FW protection, read group1 data \n");
+    }
+    else{
+        printf("CheckSupportFP fail\n");
+        return;
+    }
+
+    if (group == 2)
+    {
+        for (index = 5; index <= 9; index++)
         {
-            printf("\n Read5%d Fail!\n", index);
+            zdTableInfo.nIndex = index;
+            if (APC_OK == APC_GetZDTable(EYSD, GetDevSelectIndexPtr(), data, nbfferLength, &pActualLength, &zdTableInfo))
+            {
+                printf("\n Read5%d\n", index);
+                for (int i = 0; i < nbfferLength; i++)
+                {
+                    printf("%02x ", data[i]);
+                }
+                printf("\n");
+                char zdtablefileName[256] = {0};
+                printf("read_file name still 0~4, because need feed to K tool\n");
+                sprintf(zdtablefileName, "calibrationdata/read/read_fileio_buffer_zdtable_%d.bin", index - FW_FID_GROUP_OFFSET);
+                std::ofstream file(zdtablefileName, std::ios::binary);
+                if (file.is_open()) {
+                    file.write(reinterpret_cast<char*>(data), nbfferLength);
+                    file.close();
+                }
+            }
+            else
+            {
+                printf("\n Read5%d Fail!\n", index);
+            }
+        }
+    }
+    else if (group == 1)
+    {
+        for (index = 0; index <= 5; index++)
+        {
+            zdTableInfo.nIndex = index;
+            if (APC_OK == APC_GetZDTable(EYSD, GetDevSelectIndexPtr(), data, nbfferLength, &pActualLength, &zdTableInfo))
+            {
+                printf("\n Read5%d\n", index);
+                for (int i = 0; i < nbfferLength; i++)
+                {
+                    printf("%02x ", data[i]);
+                }
+                printf("\n");
+                char zdtablefileName[256] = {0};
+                sprintf(zdtablefileName, "calibrationdata/read/read_fileio_buffer_zdtable_%d.bin", index);
+                std::ofstream file(zdtablefileName, std::ios::binary);
+                if (file.is_open()) {
+                    file.write(reinterpret_cast<char*>(data), nbfferLength);
+                    file.close();
+                }
+            }
+            else
+            {
+                printf("\n Read5%d Fail!\n", index);
+            }
         }
     }
     delete[] data;
@@ -4452,21 +6005,77 @@ static void Read24X(void)
 
     BYTE *data = new BYTE[nbfferLength];
     memset(data, 0x0, nbfferLength);
-
-    for (index = 0; index <= 9; index++)
-    {
-        if (APC_OK == APC_GetLogData(EYSD, GetDevSelectIndexPtr(), data, nbfferLength, &pActualLength, index, ALL_LOG))
+    int group = 1;
+    int CheckSupportFP = APC_GetFlashProtectionSupported(EYSD, GetDevSelectIndexPtr());
+    if (CheckSupportFP == APC_OK){
+        printf("This camera support FW protection, which group you want to read? \n");
+        printf("Please enter Group: 1 or 2\n");
+        scanf("%d", &group);
+        if (group < 1 || group > 2)
         {
-            printf("\n Read24%d ALL_LOG\n", index);
-            for (int i = 0; i < nbfferLength; i++)
-            {
-                printf("%02x ", data[i]);
-            }
-            printf("\n");
+            printf("Wrong number, Please enter Group: 1 or 2\n");
+            return;
         }
-        else
+    }
+    else if (CheckSupportFP == APC_NotSupport){
+        printf("This camera not support FW protection, read group1 data \n");
+    }
+    else{
+        printf("CheckSupportFP fail\n");
+        return;
+    }
+
+    if (group == 2)
+    {
+        for (index = 5; index <= 9; index++)
         {
-            printf("\n Read24%d ALL_LOG Fail!\n", index);
+            if (APC_OK == APC_GetLogData(EYSD, GetDevSelectIndexPtr(), data, nbfferLength, &pActualLength, index, ALL_LOG))
+            {
+                printf("\n Read24%d ALL_LOG\n", index);
+                for (int i = 0; i < nbfferLength; i++)
+                {
+                    printf("%02x ", data[i]);
+                }
+                printf("\n");
+                char logfileName[256] = {0};
+                printf("read_file name still 0~4, because need feed to K tool\n");
+                sprintf(logfileName, "calibrationdata/read/read_fileio_buffer_log_%d.bin", index - FW_FID_GROUP_OFFSET);
+                std::ofstream file(logfileName, std::ios::binary);
+                if (file.is_open()) {
+                    file.write(reinterpret_cast<char*>(data), nbfferLength);
+                    file.close();
+                }
+            }
+            else
+            {
+                printf("\n Read24%d ALL_LOG Fail!\n", index);
+            }
+        }
+    }
+    else if (group == 1)
+    {
+        for (index = 0; index <= 5; index++)
+        {
+            if (APC_OK == APC_GetLogData(EYSD, GetDevSelectIndexPtr(), data, nbfferLength, &pActualLength, index, ALL_LOG))
+            {
+                printf("\n Read24%d ALL_LOG\n", index);
+                for (int i = 0; i < nbfferLength; i++)
+                {
+                    printf("%02x ", data[i]);
+                }
+                printf("\n");
+                char logfileName[256] = {0};
+                sprintf(logfileName, "calibrationdata/read/read_fileio_buffer_log_%d.bin", index);
+                std::ofstream file(logfileName, std::ios::binary);
+                if (file.is_open()) {
+                    file.write(reinterpret_cast<char*>(data), nbfferLength);
+                    file.close();
+                }
+            }
+            else
+            {
+                printf("\n Read24%d ALL_LOG Fail!\n", index);
+            }
         }
     }
     delete[] data;
