@@ -55,6 +55,7 @@ public:
 
     QMutex &GetDataMutex(){ return m_dataMutex; }
 
+    virtual std::vector<unsigned char> CropLeftCameraRGBImage();
 protected:
 
     CVideoDeviceController *m_pVideoDeviceController;
@@ -84,9 +85,11 @@ protected:
     void *m_pUserData;
 
     QMutex m_dataMutex;
+    QMutex m_rgbMutex;
     CTaskInfo *m_pDataTransformTask;
 
     bool m_mipi_split;
+    bool m_IsCropLeft = false;
 };
 
 class CImageDataModel_Color : public CImageDataModel
@@ -95,6 +98,7 @@ public:
     CImageDataModel_Color(CVideoDeviceModel::STREAM_TYPE streamType, CVideoDeviceController *pVideoDeviceController);
     virtual ~CImageDataModel_Color();
     virtual int TransformRawToRGB();
+    virtual std::vector<unsigned char> CropLeftCameraRGBImage() override;
 };
 
 #define UPDATE_DEPTH_VALUE_MS (1000 / 3)

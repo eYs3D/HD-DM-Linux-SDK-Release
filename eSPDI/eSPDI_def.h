@@ -12,6 +12,7 @@
  */
 #ifndef LIB_ESPDI_DEF_H
 #define LIB_ESPDI_DEF_H
+#include <cstring>
 
 #ifdef TINY_VERSION
 #define MAX_DEV_COUNT 6
@@ -307,6 +308,7 @@ typedef struct tagDEVINFORMATION {
 #define APC_PID_SALLY           0x0158
 #define APC_PID_HYPATIA         0x0160
 #define APC_PID_HYPATIA2        0x0173
+#define APC_PID_HYPATIA4        0x0204
 #define APC_PID_8062            0x0162
 #define APC_PID_8063            0x0164
 #define APC_PID_8063_K          0x0165
@@ -317,7 +319,9 @@ typedef struct tagDEVINFORMATION {
 #define APC_PID_IRIS            0x0184
 #define APC_PID_IVY             0x0177
 #define APC_PID_IVY2            0x0191
+#define APC_PID_IVY3            0x0192
 #define APC_PID_IVY2_S          0x0195
+#define APC_PID_IVY4            0x0198
 #define APC_PID_GRAP            0x0179
 #define APC_PID_GRAP_K          0x0000
 #define APC_PID_GRAP_SLAVE      0x0279
@@ -382,6 +386,59 @@ typedef enum {
   UNKNOWN_DEVICE_TYPE = 0xffff
 }DEVICE_TYPE;
 // for device type -
+
+class DEVINFORMATIONEX {
+public:
+    DEVINFORMATIONEX() = default;
+
+    DEVINFORMATIONEX &operator=(const DEVINFORMATIONEX &rhs) {
+        if (this == &rhs) { return *this; }
+        wPID = rhs.wPID;
+        wVID = rhs.wVID;
+        strcpy(strDevName, rhs.strDevName);
+        strcpy(strDevPath, rhs.strDevPath);
+        nChipID = rhs.nChipID;
+        nDevType = rhs.nDevType;
+        wUsbNode = rhs.wUsbNode;
+        return *this;
+    }
+
+    DEVINFORMATIONEX &operator=(const DEVINFORMATION &rhs) {
+        wPID = rhs.wPID;
+        wVID = rhs.wVID;
+        strcpy(strDevName, rhs.strDevName);
+        nChipID = rhs.nChipID;
+        nDevType = rhs.nDevType;
+        return *this;
+    }
+
+    DEVINFORMATIONEX(const DEVINFORMATIONEX &rhs) {
+        *this = rhs;
+    }
+
+    unsigned short wPID{ 0 };   /**< product ID */
+                                /**< <table>
+                                <caption id="multi_row">PID List</caption>
+                                <tr><th>Chip Name      <th>Chip ID             <th>PID
+                                <tr><td rowspan="5">AXES1 <td td rowspan="5">0x18 <td>0x0568
+                                <tr> <td>0x0668
+                                <tr> <td>0x0113
+                                <tr> <td>0x0115
+                                <tr> <td>0x0116
+                                <tr><td>KIWI <td>0x1C <td>0x0118
+                                <tr><td rowspan="2">PUMA <td td rowspan="2">0x15 <td>0x0112
+                                <tr> <td>0x0120
+                                </table>
+                                */
+    unsigned short wVID{ 0 };        /**< vender ID, 0x1E4E for ApcDI device */
+    char strDevName[512]{ '\0' };    /**< device name */
+    char strDevPath[512]{ '\0' };    /**< device path */
+    unsigned short nChipID{ 0 };     /**< chip ID, 0x18 for AXES1, 0x1C for KIWI, 0x15 for PUMA */
+    unsigned short nDevType{ 0 };    /**< chip enum value, see APC_DEVICE_TYPE */
+    unsigned short wUsbNode{ 0xffff };    /**< USB Node representing djb2_hash hashed port numbers.
+                                            * Developers compare its equality to judge if devices share the same port.
+                                            * */
+};
 
 // for total and fw+plugin read/write +
 typedef enum {	
@@ -466,6 +523,7 @@ typedef enum {
     APC_SENSOR_TYPE_OC0SA10 = 13,
     APC_SENSOR_TYPE_VD56G3  = 14,
     APC_SENSOR_TYPE_VD66GY  = 15,
+    APC_SENSOR_TYPE_SC2356  = 16,
     APC_SENSOR_TYPE_UNKOWN  = 0xffff
 } SENSOR_TYPE_NAME; 
 // for Sensor type name -
@@ -530,12 +588,17 @@ typedef enum
 #define AE_MOD_MANUAL_MODE							0x01
 #define AE_MOD_AUTO_MODE							0x02
 #define AE_MOD_SHUTTER_PRIORITY_MODE				0x04
-#define AE_MOD_APERTURE_PRIORITY_MODE				0x08
+#define AE_MOD_APERTURE_PRIORITY_MODE				0x03
 
 // White Balance Temperature, Auto Control
 #define PU_PROPERTY_ID_AWB_DISABLE 	    			0
 #define PU_PROPERTY_ID_AWB_ENABLE 	    			1
 // for Rectify Log +
+
+// define for windows mirror api
+#define FW_FID_GROUP_OFFSET      5
+#define CT_PROPERTY_ID_EXPOSURE  4
+// define for windows mirror api
 
 typedef struct eSPCtrl_RectLogData {
 	union {
@@ -596,6 +659,11 @@ typedef struct eSPCtrl_RectLogData {
 			unsigned short	nLineBuffers;/**< Linebuffer for Hardware limitation < 60 */
             float ReProjectMat[16];
             float ParameterRatio[2]; //Ratio for distortion K6
+            float LR_cam_K_temperature[2];
+            float LR_cam_thermal_variation_rate_of_focal[2];
+            float depth_comp_pars[2]; /** pars for compensating disparity value,
+                                        * Formula: new_disp_vaule = disp_value * depth_comp_pars[0] + depth_comp_pars[1]
+                                        **/
             long Date;
             char type;
             char version[4];
@@ -765,6 +833,26 @@ struct APCImageType
         return (type != IMAGE_UNKNOWN && !IsImageColor(type));
     }
 
+    static bool IsDepthDataTypeDisparity(WORD dataType) {
+        switch (dataType) {
+            case APC_DEPTH_DATA_11_BITS:
+            case APC_DEPTH_DATA_11_BITS_RAW:
+            case APC_DEPTH_DATA_11_BITS_COMBINED_RECTIFY:
+            case APC_DEPTH_DATA_ILM_11_BITS:
+            case APC_DEPTH_DATA_ILM_11_BITS_RAW:
+            case APC_DEPTH_DATA_ILM_11_BITS_COMBINED_RECTIFY:
+            case APC_DEPTH_DATA_SCALE_DOWN_11_BITS:
+            case APC_DEPTH_DATA_SCALE_DOWN_11_BITS_RAW:
+            case APC_DEPTH_DATA_SCALE_DOWN_11_BITS_COMBINED_RECTIFY:
+            case APC_DEPTH_DATA_SCALE_DOWN_ILM_11_BITS:
+            case APC_DEPTH_DATA_SCALE_DOWN_ILM_11_BITS_RAW:
+            case APC_DEPTH_DATA_SCALE_DOWN_ILM_11_BITS_COMBINED_RECTIFY:
+                return true;
+            default:
+                return false;
+        }
+    }
+
     static APCImageType::Value DepthDataTypeToDepthImageType(WORD dataType)
     {
         switch (dataType)
@@ -817,6 +905,9 @@ struct APCImageType
         }
     }
 };
+
+typedef void (*APC_ImgCallbackFn) (APCImageType::Value imgType, int imgId, unsigned char *imgBuf, int imgSizeByte,
+                                   int width, int height, int serialNumber, long long timestamp, void *pParameter);
 /**
  * @param M_dst input camera matrix of RGB-lens, including intrinsic parameters, such as RectifyLog-CamMat2 (M3).
  *              The buffer size is 9.
@@ -824,6 +915,8 @@ struct APCImageType
  *                     right side, such as RectifyLog-RotaMat (R31). The buffer size is 9.
  * @param T_dst_to_src  input translation matrix of dst-lens to src-lens, such as RectifyLog-TranMat (T13).
  *                     The buffer size is 3.
+ * @param depthScaleRatio Fill in scaled depth height divided by rectified image output height. This ratio is needed
+ * when developers invoke APC_DecimationFilter to resize image depth.
  */
 
 struct PointCloudInfo
@@ -831,10 +924,25 @@ struct PointCloudInfo
 //normal data
     float centerX;
     float centerY;
+//    float centerXP;
+//    float centerYP;
     float focalLength;
+//    float focalXP;
+//    float focalYP;
+//    float baseline;
     float disparityToW[ 2048 ];
     int   disparity_len;
     WORD  wDepthType;
+    float fx1;
+    float fy1;
+    float fx2;
+    float fy2;
+    float cx1;
+    float cy1;
+    float cx2;
+    float cy2;
+    float Tx;
+
     int depth_image_edian; //0: lillte-edian, 1: big-edia
     //multi-lens data
     float focalLength_K;
@@ -843,6 +951,7 @@ struct PointCloudInfo
     float slaveDeviceCamMat2[9];
     float slaveDeviceRotaMat[9];
     float slaveDeviceTranMat[3];
+    float depthScaleRatio;
     bool bIsMIPISplit;
 };
 #endif // LIB_ESPDI_DEF_H

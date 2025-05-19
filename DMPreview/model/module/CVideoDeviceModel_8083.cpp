@@ -15,6 +15,15 @@ int CVideoDeviceModel_8083::InitDeviceSelInfo() {
     DEVSELINFO *pDevSelfInfo = new DEVSELINFO;
     pDevSelfInfo->index = m_deviceSelInfo[0]->index + 1;
     m_deviceSelInfo.push_back(pDevSelfInfo);
+
+    return APC_OK;
+}
+
+int CVideoDeviceModel_8083::InitDeviceInformation() {
+    CVideoDeviceModel::InitDeviceInformation();
+    // Adding 2nd device eSP777
+    m_deviceInfo.push_back(GetDeviceInformation(m_deviceSelInfo[1]));
+    return APC_OK;
 }
 
 int CVideoDeviceModel_8083::AddCameraPropertyModels() {

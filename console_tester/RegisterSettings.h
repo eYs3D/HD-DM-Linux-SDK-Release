@@ -20,6 +20,6 @@ public:
     static int DM_Quality_Register_Setting_For6cm(void* hEYSD, PDEVSELINFO pDevSelInfo);
     static int DM_Quality_Register_Setting_For15cm(void* hEYSD, PDEVSELINFO pDevSelInfo);
     static int Batch_read_ASIC(void* hEYSD, PDEVSELINFO pDevSelInfo, unsigned short nChipID);
-    static int Batch_read_Sensor(void* hEYSD, PDEVSELINFO pDevSelInfo,int SensorSlaveAddress, int flag);
+    static int Batch_read_Sensor(void* hEYSD, PDEVSELINFO pDevSelInfo,int SensorSlaveAddress, int flag, int productId);
     static int Batch_read_FW(void* hEYSD, PDEVSELINFO pDevSelInfo,int Page);
 };

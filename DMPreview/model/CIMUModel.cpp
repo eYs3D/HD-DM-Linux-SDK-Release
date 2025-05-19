@@ -4,6 +4,7 @@
 #include <vector>
 #include "CVideoDeviceModel.h"
 #include <map>
+#include <cstdio>
 #include "CEYSDDeviceManager.h"
 #include "CIMUDeviceManager.h"
 
@@ -471,8 +472,8 @@ int CIMUModel::ReadIMUData(IMUData &imuData, bool bSync)
 
         if (IMU_9_AXIS == m_imuType){
             imuData.parsePacket_Quaternion(imuRawData);
-        } else if (ret <= 21) {
-            /* Wait for HID IMU Command document >= 1.6 release. Temporarily determine by byte counts. */
+        } else if (ret <= 22) {
+            // HID IMU Command document 1.10 release.
             imuData.parsePacket_STM_IMU(imuRawData);
         } else if (27 == nIMUDataByte){
             imuData.parsePacket(imuRawData, OFFSET_DATA != m_nCurrentIMUFormat);

@@ -1,5 +1,8 @@
 #pragma once
+using namespace std;
 #include <map>
+#include <cstdint>
+#include <cstdio>
 class IMUData
 {
 private:	
@@ -32,7 +35,8 @@ public:
         QUATERNION_1,
         QUATERNION_2,
         QUATERNION_3,
-		ACCURACY_FLAG
+		ACCURACY_FLAG,
+		TRIGGER_STATUS
 	};
 
 	static std::map<IMUPacketSymbol, size_t> sizeTable; 
@@ -70,6 +74,6 @@ public:
 	char _accuracy_FLAG;	// RAW:[N/A]		// DMP:[57]
 
     float _quaternion[4];   // 0:[7-10] 1:[11-14] 2:[15-18] 3:[19-22]
-
+    uint8_t _updateReason;  // RAW:[22] 1 Byte, used by IVY2 only
 };
 

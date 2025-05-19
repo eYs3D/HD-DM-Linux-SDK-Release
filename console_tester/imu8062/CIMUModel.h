@@ -1,6 +1,7 @@
 #ifndef CIMUMODEL_H
 #define CIMUMODEL_H
 
+using namespace std;
 #include "IMUData.h"
 #include <vector>
 #include "../eSPDI/eSPDI_def.h"
@@ -9,7 +10,8 @@
 #include "../hidapi.h"
 #include <functional>
 #include <thread>
-#include <cstring>
+#include <string>
+#include <cstdio>
 
 #ifndef RETRY_APC_API
 #define RETRY_COUNT (5)
@@ -75,12 +77,7 @@ public:
                     if(!m_pHandle) return APC_NullPtr;
 
                     int ret = hid_read(m_pHandle, imuRawData, sizeof(imuRawData));
-                    if (ret >= 21 /* Hard-code here due to IVY HID document not locked down yet */){
-                        fprintf(stderr, "Raw hex Data++");
-                        for (int i = 0; i < 21; ++i) {
-                            fprintf(stderr, "%02x ", imuRawData[i]);
-                        }
-                        fprintf(stderr,"\n--\n");
+                    if (ret >= 22 /* IVY HID document v1.10 now support 22th byte */){
                         mCallbackData.parsePacket_STM_IMU(imuRawData);
                         mCallback(&mCallbackData);
                     } else if (ret > 0 && IMU_9_AXIS == GetType()) {

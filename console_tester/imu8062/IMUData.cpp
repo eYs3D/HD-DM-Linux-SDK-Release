@@ -16,7 +16,9 @@ std::map<IMUData::IMUPacketSymbol, size_t> IMUData::sizeTable = {
 	{ GYROSCOPE_Z,2 },
 	{ COMPASS_X,2 },
 	{ COMPASS_Y,2 },
-	{ COMPASS_Z,2 } };
+	{ COMPASS_Z,2 },
+    { TRIGGER_STATUS, 1 }
+};
 
 std::map<IMUData::IMUPacketSymbol, size_t> IMUData::sizeTable_DMP = {
 	{ FRAME_COUNT, 2 },
@@ -107,6 +109,7 @@ void IMUData::parsePacket_STM_IMU(unsigned char *buf) {
     _gyroScopeX =	            (int16_t) parseBuff(buf, sizeTable[GYROSCOPE_X  ]); // 2
     _gyroScopeY =	            (int16_t) parseBuff(buf, sizeTable[GYROSCOPE_Y  ]); // 2
     _gyroScopeZ =	            (int16_t) parseBuff(buf, sizeTable[GYROSCOPE_Z  ]); // 2
+    _updateReason =	            (uint8_t) parseBuff(buf, sizeTable[TRIGGER_STATUS]); //1
 }
 
 void IMUData::parsePacket(unsigned char* buf, bool normalization)

@@ -5,7 +5,7 @@
 class CVideoDeviceModel_8083 : public CVideoDeviceModel_8073
 {
 public:
-    virtual int DefaultVideoMode(){ return 1; }
+    virtual int DefaultVideoMode(){ return 5; }
     virtual bool IsFloodIRSupportToggleMode() override { return false; }
     virtual int InitDeviceSelInfo();
     virtual int AddCameraPropertyModels();
@@ -17,6 +17,7 @@ public:
         };
     }
     virtual bool IMUSupport(){ return true; }
+    int InitDeviceInformation() override;
 protected:
     CVideoDeviceModel_8083(DEVSELINFO *pDeviceSelfInfo);
 };

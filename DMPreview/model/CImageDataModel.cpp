@@ -126,6 +126,10 @@ int CImageDataModel::SetUserData(void *pUserData)
     return APC_OK;
 }
 
+std::vector<unsigned char> CImageDataModel::CropLeftCameraRGBImage() {
+    qDebug() << "CropLeftCameraRGBImage empty implement in base. \n";
+    return std::move(std::vector<unsigned char>(0));
+}
 ///////////////////////////////////////////////////////////////////////
 CImageDataModel_Color::CImageDataModel_Color(CVideoDeviceModel::STREAM_TYPE streamType, CVideoDeviceController *pVideoDeviceController):
 CImageDataModel(streamType, COLOR, pVideoDeviceController)
@@ -145,6 +149,7 @@ int CImageDataModel_Color::TransformRawToRGB()
 		//+[Thermal device]
 		if (GetImageType() == APCImageType::COLOR_RGB24) {
 			if (m_streamType == CVideoDeviceModel::STREAM_THERMAL) {
+                QMutexLocker lockerRgb(&m_rgbMutex);
                 memcpy(&m_rgbData[0], &m_rawData[0], m_rawData.size());
                 ret = APC_OK;
             } else {
@@ -153,6 +158,7 @@ int CImageDataModel_Color::TransformRawToRGB()
 		} else {
 		//-[Thermal device]
             //DMpreview use rgb format to show
+            QMutexLocker lockerRgb(&m_rgbMutex);
             ret = APC_ColorFormat_to_BGR24(CEYSDDeviceManager::GetInstance()->GetEYSD(),
                                    m_pVideoDeviceController->GetVideoDeviceModel()->GetDeviceSelInfo()[0],
                                    &m_rgbData[0], &m_rawData[0],
@@ -165,6 +171,11 @@ int CImageDataModel_Color::TransformRawToRGB()
     }
 
     return ret;
+}
+
+std::vector<unsigned char> CImageDataModel_Color::CropLeftCameraRGBImage() {
+    QMutexLocker locker(&m_rgbMutex);
+    return utImageProcessingUtility::CropLeftImage(m_rgbData, GetWidth(), GetHeight(), 3);
 }
 
 ///////////////////////////////////////////////////////////////////////

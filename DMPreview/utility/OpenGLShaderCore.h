@@ -6,7 +6,7 @@
 #if defined(Q_PROCESSOR_ARM)
 #define GLSL_VERSION "300 es"
 #else
-#define GLSL_VERSION "440"
+#define GLSL_VERSION "330"
 #endif
 
 static const char *shaderVert = GLSL(

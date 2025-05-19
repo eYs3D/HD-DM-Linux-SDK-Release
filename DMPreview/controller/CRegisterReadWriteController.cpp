@@ -5,6 +5,8 @@
 #include "CEYSDDeviceManager.h"
 #include "CVideoDeviceModel.h"
 #include "eSPDI.h"
+#include <iostream>
+#include <sstream>
 #include <QMessageBox>
 
 CRegisterReadWriteController::CRegisterReadWriteController(CVideoDeviceModel *pVideoDeviceModel):
@@ -13,6 +15,35 @@ m_pRegisterTaskInfo(nullptr),
 m_SwapBytesOrder(false)
 {
     m_pRegisterReadWriteOptions = new RegisterReadWriteOptions();
+}
+
+int  CRegisterReadWriteController::GetCurrentCameraIndex() {
+    return m_pRegisterReadWriteOptions->GetCurrentDeviceIndex();
+}
+
+void CRegisterReadWriteController::SetCurrentCameraIndex(int nIndex) {
+    m_pRegisterReadWriteOptions->SetCurrentDeviceIndex(nIndex);
+}
+
+std::map<std::string, int> CRegisterReadWriteController::GetCurrentDeviceMap() {
+    auto deviceSelInfoList = GetVideoDeviceModel()->GetDeviceSelInfo();
+    auto deviceInfoList = GetVideoDeviceModel()->GetDeviceInformation();
+
+    std::map<std::string, int> deviceDescriptionMap;
+    for(int i = 0; i < deviceSelInfoList.size(); i++) {
+        std::stringstream pidString;
+        pidString << "PID_" << std::hex << std::uppercase << deviceInfoList[i].deviceInfomation.wPID;
+        std::string deviceDescriptionString = "";
+        deviceDescriptionString.append(pidString.str());
+        deviceDescriptionString.append("_");
+        deviceDescriptionString.append(deviceInfoList[i].sFWVersion);
+        deviceDescriptionString.append("_");
+        deviceDescriptionString.append(deviceInfoList[i].sSerialNumber);
+
+        deviceDescriptionMap[std::move(deviceDescriptionString)] = deviceSelInfoList[i]->index;
+    }
+
+    return std::move(deviceDescriptionMap);
 }
 
 CRegisterReadWriteController::~CRegisterReadWriteController()
@@ -155,12 +186,13 @@ int CRegisterReadWriteController::ReadRegister()
 
         void *pEYSDI = CEYSDDeviceManager::GetInstance()->GetEYSD();
         std::vector<DEVSELINFO *> deviceSelfInfo = m_pVideoDeviceModel->GetDeviceSelInfo();
+        DEVSELINFO *selectedDevSelInfo = deviceSelfInfo.at(GetCurrentCameraIndex());
         int ret;
         unsigned short value;
         switch (m_pRegisterReadWriteOptions->GetType()){
             case RegisterReadWriteOptions::IC2:
             {
-                ret = APC_GetSensorRegister( pEYSDI, deviceSelfInfo[0],
+                ret = APC_GetSensorRegister( pEYSDI, selectedDevSelInfo,
                                                  m_pRegisterReadWriteOptions->GetSlaveID(),
                                                  m_pRegisterReadWriteOptions->GetRequestAddress(i),
                                                  &value,
@@ -170,7 +202,7 @@ int CRegisterReadWriteController::ReadRegister()
             }
             case RegisterReadWriteOptions::ASIC:
             {
-                ret = APC_GetHWRegister( pEYSDI, deviceSelfInfo[0],
+                ret = APC_GetHWRegister( pEYSDI, selectedDevSelInfo,
                                              m_pRegisterReadWriteOptions->GetRequestAddress(i),
                                              &value,
                                              m_pRegisterReadWriteOptions->GetAddressSize() | m_pRegisterReadWriteOptions->GetValueSize());
@@ -178,7 +210,7 @@ int CRegisterReadWriteController::ReadRegister()
             }
             case RegisterReadWriteOptions::FW:
             {
-                ret = APC_GetFWRegister( pEYSDI, deviceSelfInfo[0],
+                ret = APC_GetFWRegister( pEYSDI, selectedDevSelInfo,
                                              m_pRegisterReadWriteOptions->GetRequestAddress(i),
                                              &value,
                                              m_pRegisterReadWriteOptions->GetAddressSize() | m_pRegisterReadWriteOptions->GetValueSize());

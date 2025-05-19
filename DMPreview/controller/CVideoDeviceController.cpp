@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <QMessageBox>
 #include <ModeConfig.h>
+#include <utImageProcessingUtility.h>
 
 #include "CFrameSyncManager.h"
 
@@ -355,11 +356,17 @@ int CVideoDeviceController::DoSnapShot(bool bAsync)
             depthData.depthRawBuffer[i] = 0x0;
         }
 
+        std::vector<unsigned char> rgbColorImage = colorRGBBuffer;
+        if (m_pVideoDeviceModel->GetIsConcatenatedColorImage()) {
+            rgbColorImage = utImageProcessingUtility::CropLeftImage(colorRGBBuffer, nColorWidth, nColorHeight, 3);
+            nColorWidth /= 2;
+        }
+
         std::vector<CloudPoint> cloudPoints = m_pVideoDeviceModel->GeneratePointCloud(
                                               depthData.depthType,
                                               depthData.depthRawBuffer,
                                               depthData.nDepthWidth, depthData.nDepthHeight,
-                                              colorRGBBuffer, nColorWidth, nColorHeight);
+                                              rgbColorImage, nColorWidth, nColorHeight);
 
         sprintf(pFilePath, "../out/image/cloud_%s_%d_%s.ply", depthName.toLocal8Bit().data(),
                                                         depthData.nDepthSerialNumber, timeStamp);
@@ -512,6 +519,9 @@ int CVideoDeviceController::SelectModeConfigIndex(int nIndex)
     } else {
         SetDepthDataBits(0, modeConfig.bRectifyMode);
     }
+
+    bool isConcatenateImage = "L+R+D" == modeConfig.csModeDesc || "L'+R'+D" == modeConfig.csModeDesc;
+    GetVideoDeviceModel()->SetIsConcatenatedColorImage(isConcatenateImage);
 
     bool isEnableYUY2ResizeOption = (GetPreviewOptions()->IsStreamEnable(CVideoDeviceModel::STREAM_COLOR) &&
                                      modeConfig.eDecodeType_L == ModeConfig::MODE_CONFIG::YUYV) ||

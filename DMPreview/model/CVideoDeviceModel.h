@@ -125,6 +125,8 @@ public:
     };
 
 public:
+    virtual bool GetIsConcatenatedColorImage () { return m_bIsLRConcatImage; }
+    virtual void SetIsConcatenatedColorImage (bool isLRConcatImage) { m_bIsLRConcatImage = isLRConcatImage; }
     virtual int CopyG1FileToG2(int fileIndex);
     virtual std::string CopyAllFileToG2();
     virtual std::string resultCodeToAlertString(int index, int copyResultCode);
@@ -384,6 +386,9 @@ protected:
     std::vector<APC_STREAM_INFO> m_streamInfo[STREAM_TYPE_COUNT];
     std::vector<CCameraPropertyModel *> m_cameraPropertyModel;
     USB_PORT_TYPE m_usbPortType;
+    bool m_bIsLRConcatImage = false;
+    bool m_bIsNeedCropLeftImage = false;
+
     ZDTableInfo m_zdTableInfo;
     unsigned short m_nIRMax, m_nIRMin, m_nIRValue;
     unsigned short m_depthDataType;

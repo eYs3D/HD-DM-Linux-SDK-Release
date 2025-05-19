@@ -124,6 +124,7 @@ private:
     void UpdateResizeWidgets();
     void UpdateComboBoxColorResize();
     void UpdateComboBoxDepthResize();
+    bool IsSupportResizeWidget();
 
 private:
     CVideoDeviceController *m_pVideoDeviceController;

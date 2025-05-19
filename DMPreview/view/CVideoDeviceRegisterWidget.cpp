@@ -54,12 +54,23 @@ m_pRegisterReadWriteController(pRegisterReadWriteController)
         });
     }
 
+    UpdateDevice();
     UpdateUI();
 }
 
 CVideoDeviceRegisterWidget::~CVideoDeviceRegisterWidget()
 {
     delete ui;
+}
+
+void CVideoDeviceRegisterWidget::UpdateDevice() {
+    m_mapDevDesc = m_pRegisterReadWriteController->GetCurrentDeviceMap();
+
+    for (const auto& kv : m_mapDevDesc) {
+        ui->comboBox_device_selector->addItem(kv.first.c_str());
+    }
+
+    ui->comboBox_device_selector->setCurrentIndex(m_pRegisterReadWriteController->GetCurrentCameraIndex());
 }
 
 void CVideoDeviceRegisterWidget::UpdateSelf()
@@ -309,4 +320,12 @@ void CVideoDeviceRegisterWidget::on_checkBox_swap_bytes_order_stateChanged(int a
     bool bIsChecked = Qt::Checked == arg1 ? true : false;
     m_pRegisterReadWriteController->SetSwapBytesOrderStatus(bIsChecked);
     qDebug() << "on_checkBox_swap_bytes_order_stateChanged " << bIsChecked;
+}
+
+void CVideoDeviceRegisterWidget::on_comboBox_device_selector_currentIndexChanged(int index)
+{
+    ui->comboBox_device_selector->blockSignals(true);
+    m_pRegisterReadWriteController->SetCurrentCameraIndex(index);
+    ui->comboBox_device_selector->setCurrentIndex(m_pRegisterReadWriteController->GetCurrentCameraIndex());
+    ui->comboBox_device_selector->blockSignals(false);
 }

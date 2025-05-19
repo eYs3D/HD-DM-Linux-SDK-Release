@@ -620,11 +620,28 @@ void CVideoDevicePreviewWidget::UpdateDepthROI()
     depthROIText.sprintf("%d / %d", nDepthROIValue, ui->horizontalSlider_depth_roi->maximum() * 10);
     ui->label_depth_roi_value->setText(depthROIText);
 }
+
+bool CVideoDevicePreviewWidget::IsSupportResizeWidget() {
+    auto model = m_pVideoDeviceController->GetVideoDeviceModel();
+    auto isConcatenatedColorImage = m_pVideoDeviceController->GetVideoDeviceModel()->GetIsConcatenatedColorImage();
+
+    bool isSupportImageResize = model->GetUsbType() != MIPI_PORT_TYPE && !isConcatenatedColorImage;
+
+    return isSupportImageResize;
+}
+
 void CVideoDevicePreviewWidget::UpdateResizeWidgets() {
-    if (m_pVideoDeviceController->GetVideoDeviceModel()->GetUsbType() == MIPI_PORT_TYPE) {
+    if (!IsSupportResizeWidget()) {
         ui->widget_resize_settings->hide();
-        return;
+        constexpr int resetIndex = 0;
+        m_pVideoDeviceController->GetPreviewOptions()->SetDepthResizeOptionIndex(resetIndex);
+        m_pVideoDeviceController->GetPreviewOptions()->SetColorResizeOptionIndex(resetIndex);
+        ui->comboBox_color_resize_rate->setCurrentIndex(resetIndex);
+        ui->comboBox_color_resize_rate->setCurrentIndex(resetIndex);
+    } else {
+        ui->widget_resize_settings->show();
     }
+
     UpdateComboBoxColorResize();
     UpdateComboBoxDepthResize();
 }

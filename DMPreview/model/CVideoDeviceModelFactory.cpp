@@ -25,6 +25,8 @@
 #include "CVideoDeviceModel_8063.h"
 #include "CVideoDeviceModel_8076_8077.h"
 #include "CVideoDeviceModel_Iris.h"
+#include "CVideoDeviceModel_IVY3.h"
+#include "CVideoDeviceModel_IVY4.h"
 
 CVideoDeviceModel *CVideoDeviceModelFactory::CreateVideoDeviceModel(DEVSELINFO *pDeviceSelfInfo)
 {
@@ -65,6 +67,10 @@ CVideoDeviceModel *CVideoDeviceModelFactory::CreateVideoDeviceModel(DEVSELINFO *
             pModel = new CVideoDeviceModel_8073(pDeviceSelfInfo); break;
         case APC_PID_IVY2:
             pModel = new CVideoDeviceModel_8083(pDeviceSelfInfo); break;
+        case APC_PID_IVY3:
+            pModel = new CVideoDeviceModel_IVY3(pDeviceSelfInfo); break;
+        case APC_PID_IVY4:
+            pModel = new CVideoDeviceModel_IVY4(pDeviceSelfInfo); break;
         case APC_PID_GRAP:
             pModel = new CVideoDeviceModel_Grap(pDeviceSelfInfo); break;
         case APC_PID_HYPATIA:
@@ -72,6 +78,7 @@ CVideoDeviceModel *CVideoDeviceModelFactory::CreateVideoDeviceModel(DEVSELINFO *
         case APC_PID_8081:
             pModel = new CVideoDeviceModel_8081(pDeviceSelfInfo); break;
         case APC_PID_HYPATIA2:
+        case APC_PID_HYPATIA4:
             pModel = new CVideoDeviceModel_Hypatia2(pDeviceSelfInfo); break;
         case APC_PID_NORA:
             pModel = new CVideoDeviceModel_Nora(pDeviceSelfInfo); break;

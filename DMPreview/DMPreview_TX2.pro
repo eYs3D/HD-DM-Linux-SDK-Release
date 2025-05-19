@@ -107,6 +107,8 @@ HEADERS += \
     model/module/CVideoDeviceModel_ColorWithDepth.h \
     model/module/CVideoDeviceModel_Kolor.h \
     model/module/CVideoDeviceModel_Iris.h \
+    model/module/CVideoDeviceModel_IVY3.h \
+    model/module/CVideoDeviceModel_IVY4.h \
     model/module/CVideoDeviceModel_Hypatia.h \
     model/module/CVideoDeviceModel_Hypatia2.h \
     model/module/CVideoDeviceModel_Nora.h \
@@ -206,6 +208,8 @@ SOURCES += \
     model/module/CVideoDeviceModel_ColorWithDepth.cpp \
     model/module/CVideoDeviceModel_Kolor.cpp \
     model/module/CVideoDeviceModel_Iris.cpp \
+    model/module/CVideoDeviceModel_IVY3.cpp \
+    model/module/CVideoDeviceModel_IVY4.cpp \
     model/module/CVideoDeviceModel_Hypatia.cpp \
     model/module/CVideoDeviceModel_Hypatia2.cpp \
     model/module/CVideoDeviceModel_Nora.cpp \
